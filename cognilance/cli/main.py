@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.table import Table
 
 from cognilance.config import DEFAULT_REGISTRY_PORT, Config
-from cognilance.core.agent import CognilanceAgent
+from cognilance.core.runtime import CognilanceDelegator, CognilanceWorker
 from cognilance.registry.client import RegistryClient, RegistryError
 from cognilance.registry.local import ensure_local_registry
 from cognilance.registry.server import create_registry_app
@@ -27,7 +27,10 @@ app = typer.Typer(
 console = Console()
 
 
-def _load_agent_from_file(path: Path) -> CognilanceAgent:
+RuntimeInstance = CognilanceWorker | CognilanceDelegator
+
+
+def _load_agent_from_file(path: Path) -> RuntimeInstance:
     spec = importlib.util.spec_from_file_location("cognilance_agent_module", path)
     if spec is None or spec.loader is None:
         raise typer.BadParameter(f"Cannot load agent from {path}")
@@ -41,12 +44,12 @@ def _load_agent_from_file(path: Path) -> CognilanceAgent:
 
     for attr in dir(module):
         obj = getattr(module, attr)
-        if isinstance(obj, CognilanceAgent):
+        if isinstance(obj, (CognilanceWorker, CognilanceDelegator)):
             return obj
 
     raise typer.BadParameter(
-        f"No CognilanceAgent instance found in {path}. "
-        "Define `agent = CognilanceAgent(...)` in the file."
+        f"No CognilanceWorker or CognilanceDelegator instance found in {path}. "
+        "Define `worker = CognilanceWorker(...)` or `delegator = CognilanceDelegator(...)`."
     )
 
 

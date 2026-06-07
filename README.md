@@ -2,17 +2,24 @@
 
 **The Marketplace of Minds** — a Python SDK for building, registering, discovering, and hiring AI agents over the [A2A protocol](https://google.github.io/A2A/).
 
-The SDK is framework-agnostic. Drop `CognilanceManager` into LangChain, CrewAI, FastAPI, a script, or a notebook. Use `CognilanceAgent` when you also want your code to *be* hired by others.
+Three classes, three roles. Pick the one that matches what your code does.
+
+| Class | Role |
+|-------|------|
+| **`CognilanceManager`** | Discovers and hires — never listed on the registry |
+| **`CognilanceWorker`** | Gets hired and delivers work — leaf node, no hiring |
+| **`CognilanceDelegator`** | Gets hired *and* discovers/hires others — coordinator |
 
 ---
 
 ## Table of contents
 
+- [Pick your role](#pick-your-role)
 - [Quick start](#quick-start)
 - [Architecture](#architecture)
-- [Agent roles](#agent-roles)
 - [CognilanceManager](#cognilancemanager)
-- [CognilanceAgent](#cognilanceagent)
+- [CognilanceWorker](#cognilanceworker)
+- [CognilanceDelegator](#cognilancedelegator)
 - [Framework integration](#framework-integration)
 - [A2A protocol](#a2a-protocol)
 - [Registry API](#registry-api)
@@ -21,6 +28,24 @@ The SDK is framework-agnostic. Drop `CognilanceManager` into LangChain, CrewAI, 
 - [Environment variables](#environment-variables)
 - [Project layout](#project-layout)
 - [License](#license)
+
+---
+
+## Pick your role
+
+```
+Do I only hire others?              → CognilanceManager
+Do I only do work when hired?       → CognilanceWorker
+Do I get hired AND hire others?     → CognilanceDelegator
+```
+
+| | Manager | Worker | Delegator |
+|---|---------|--------|-----------|
+| On registry | No | Yes | Yes |
+| A2A server | No | Yes | Yes |
+| Discovers agents | Yes | No | Yes |
+| Gets hired | No | Yes | Yes |
+| Handler signature | — | `handle(task)` | `handle(task, manager)` |
 
 ---
 
@@ -34,12 +59,6 @@ cd cognilance
 pip install -e .
 ```
 
-Or, once published:
-
-```bash
-pip install cognilance
-```
-
 ### Configure
 
 Create a `.env` file in the project root (already gitignored):
@@ -49,22 +68,19 @@ COGNILANCE_API_KEY=ck-your-key-here
 COGNILANCE_REGISTRY_URL=http://127.0.0.1:8080
 ```
 
-### Run a specialist agent
+### Run a worker
 
 ```bash
 # Terminal 1 — local registry
 cognilance registry
 
-# Terminal 2 — example specialist
-cognilance chat examples/specialist.py
+# Terminal 2 — example worker
+cognilance chat examples/worker.py
 ```
 
-Type a prompt at the `Echo Specialist>` prompt. Type `agents` to list the registry, `exit` to quit.
-
-### Hire from a script
+### Hire from a manager script
 
 ```bash
-# With at least one agent registered in the registry
 python examples/orchestrator.py
 ```
 
@@ -80,50 +96,26 @@ python examples/orchestrator.py
          │                                                 │
          │ POST /a2a/tasks                                 │ heartbeat
          ▼                                                 │
-┌─────────────────┐                               ┌────────┴─────────┐
-│ Specialist agent │ ◄─────────────────────────── │ CognilanceAgent  │
-│ (any framework)  │   registers on startup       │ (A2A server)     │
-└─────────────────┘                               └──────────────────┘
+┌─────────────────┐     registers on startup    ┌─────────┴──────────┐
+│ Worker/Delegator │ ◄────────────────────────── │ CognilanceWorker   │
+│ (your logic)     │                             │ CognilanceDelegator│
+└─────────────────┘                             └────────────────────┘
 ```
 
-| Component | Role |
-|-----------|------|
-| **Registry** | Central catalog — agents register their URL and skills; managers search and filter |
-| **A2A transport** | HTTP layer for sending tasks between agents (`POST /a2a/tasks`) |
-| **CognilanceManager** | Client SDK — discover, hire, register (no server required) |
-| **CognilanceAgent** | Server SDK — exposes A2A endpoints, auto-registers, sends heartbeats |
+**Managers never need a server.** `CognilanceManager.hire()` sends HTTP directly to a worker or delegator URL. Only workers and delegators call `run()` or `chat()`.
 
-**Hiring does not require the manager to run a server.** `CognilanceManager.hire()` sends an HTTP request directly to the specialist's URL. Only agents that want to *receive* work need `CognilanceAgent.run()` or `agent.chat()`.
+**Typical hire chains:**
 
----
-
-## Agent roles
-
-| Role | Classes | Gets hired? | Hires others? |
-|------|---------|-------------|---------------|
-| **Manager** | `CognilanceManager` only | No | Yes |
-| **Specialist** | `CognilanceAgent` | Yes | No |
-| **Delegator** | `CognilanceAgent` + `CognilanceManager` in handler | Yes | Yes |
-
-A **delegator** receives a task via A2A, then uses the `manager` argument in its handler to discover and hire other agents:
-
-```python
-@agent.on_task
-async def handle(task, manager):
-    helpers = await manager.discover(skills=["summarization"])
-    if helpers:
-        result = await manager.hire(helpers[0], input_text=task.input.text)
-        return task.complete(text=result.output.text)
-    return task.complete(text=task.input.text)
 ```
-
-The `manager` parameter in task handlers is a `CognilanceManager` instance (also aliased as `TaskContext`).
+Manager ──hires──► Delegator ──hires──► Worker
+Manager ──hires──► Worker (direct)
+```
 
 ---
 
 ## CognilanceManager
 
-Use when your code orchestrates work but does not need to be listed on the marketplace.
+Orchestrator that discovers and hires agents. Not listed on the registry.
 
 ```python
 from cognilance import CognilanceManager
@@ -141,61 +133,41 @@ async def run(query: str) -> str:
 
 | Method | Description |
 |--------|-------------|
-| `from_env()` | Create a manager from `COGNILANCE_API_KEY` and `COGNILANCE_REGISTRY_URL` |
+| `from_env()` | Create from `COGNILANCE_API_KEY` and `COGNILANCE_REGISTRY_URL` |
 | `discover(skills, tags, limit)` | Search the registry; returns `list[AgentCard]` |
 | `hire(agent, input_text, input_data)` | Send a task to an agent; returns `TaskResult` |
 | `discover_and_hire(skills, input_text, fallback_fn)` | Discover best match and hire, or run a local fallback |
 | `register(name, url, skills, ...)` | List an externally-hosted agent on the registry |
 | `get_agent(agent_id)` | Fetch a single agent card by ID |
 
-### Constructor options
-
-```python
-CognilanceManager(
-    api_key="ck-...",           # or from env
-    registry_url="http://...",  # or from env
-    agent_id="...",             # exclude self from discover results
-)
-```
-
-Always close the manager when done, or use `async with`:
-
-```python
-async with CognilanceManager.from_env() as manager:
-    ...
-# connections closed automatically
-```
-
 ---
 
-## CognilanceAgent
+## CognilanceWorker
 
-Use when your agent should be discoverable and receive tasks over A2A.
+Leaf worker — registers on the marketplace and delivers work when hired. Does not hire others.
 
 ```python
-from cognilance import CognilanceAgent
+from cognilance import CognilanceWorker
 
-agent = CognilanceAgent(
+worker = CognilanceWorker(
     name="Code Reviewer",
     skills=["code-review", "python"],
     description="Reviews code for bugs and style.",
     port=8003,
-    tags=["dev"],
 )
 
 
-@agent.on_task
-async def handle(task, manager):
-    # Your logic here — call an LLM, run tools, hire helpers, etc.
+@worker.on_task
+async def handle(task):
     return task.complete(text=f"Reviewed: {task.input.text}")
 
 
 if __name__ == "__main__":
-    agent.chat()   # interactive CLI + background A2A server
-    # agent.run()  # blocking server only (no CLI)
+    worker.chat()   # interactive CLI + background A2A server
+    # worker.run()  # blocking server only (no CLI)
 ```
 
-### `CognilanceAgent` parameters
+### Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -204,89 +176,104 @@ if __name__ == "__main__":
 | `description` | `""` | Human-readable description |
 | `tags` | `[]` | Additional registry tags |
 | `visibility` | `"public"` | `"public"`, `"private"`, or `"unlisted"` |
-| `version` | `"0.1.0"` | Agent version in the agent card |
-| `host` | `"0.0.0.0"` | Bind address for the A2A server |
 | `port` | `8000` | Port (overridable via `COGNILANCE_PORT`) |
 
 ### Task handler
 
-Decorate exactly one async function with `@agent.on_task`:
-
 ```python
-@agent.on_task
-async def handle(task, manager) -> Task:
-    text = task.input.text          # user's prompt
-    data = task.input.data          # optional structured input
-
-    return task.complete(
-        text="Done",
-        data={"hired": "Other Agent"},  # optional metadata
-    )
+@worker.on_task
+async def handle(task) -> Task:
+    text = task.input.text
+    data = task.input.data
+    return task.complete(text="Done", data={})
     # or: return task.fail(message="Something went wrong")
 ```
 
-### Running modes
+---
 
-| Method | Behavior |
-|--------|----------|
-| `agent.run(register=True)` | Start A2A server, register with registry, send heartbeats |
-| `agent.chat(register=True)` | Same as `run()`, plus an interactive CLI prompt loop |
-| `agent.register_external(url)` | Register an agent hosted elsewhere (no local server) |
+## CognilanceDelegator
 
-On startup with `register=True`, the agent:
+Coordinator — gets hired and can discover/hire other agents. Handler receives a `CognilanceManager` as its second argument (also aliased as `TaskContext`).
 
-1. Binds an A2A server on `http://localhost:{port}`
-2. Registers its URL and skills with the registry
-3. Sends a heartbeat every 30 seconds to stay marked online
+```python
+from cognilance import CognilanceDelegator
+
+delegator = CognilanceDelegator(
+    name="Task Router",
+    skills=["routing", "general"],
+    port=8002,
+)
+
+
+@delegator.on_task
+async def handle(task, manager):
+    helpers = await manager.discover(skills=["summarization"])
+    if helpers:
+        result = await manager.hire(helpers[0], input_text=task.input.text)
+        return task.complete(text=result.output.text, data={"hired": helpers[0].name})
+    return task.complete(text=task.input.text)
+
+
+if __name__ == "__main__":
+    delegator.chat()
+```
+
+### When to use Worker vs Delegator
+
+- **Worker** — your agent does all the work itself (translate, summarize, review code).
+- **Delegator** — your agent receives a task and subcontracts parts of it to specialists on the marketplace.
 
 ---
 
 ## Framework integration
 
-The SDK does not depend on LangChain, CrewAI, or any LLM provider. Wire your framework inside the task handler.
+The SDK has no LLM dependency. Wire your framework inside the handler.
 
-### LangChain
+### LangChain + Worker
 
 ```python
 from langchain_openai import ChatOpenAI
-from cognilance import CognilanceAgent, CognilanceManager
+from cognilance import CognilanceWorker
 
 llm = ChatOpenAI(model="gpt-4o")
 
-agent = CognilanceAgent(name="Research Bot", skills=["research"], port=8000)
+worker = CognilanceWorker(name="Research Bot", skills=["research"], port=8000)
 
 
-@agent.on_task
-async def handle(task, manager: CognilanceManager):
+@worker.on_task
+async def handle(task):
     answer = await llm.ainvoke(task.input.text)
-
-    helpers = await manager.discover(skills=["summarization"])
-    if helpers:
-        result = await manager.hire(helpers[0], input_text=answer.content)
-        return task.complete(text=result.output.text)
-
     return task.complete(text=answer.content)
 ```
 
-### CrewAI / custom async code
-
-Any async callable works inside `@agent.on_task`. Use `manager` to delegate subtasks to specialists on the marketplace.
-
-### FastAPI (external hosting)
-
-Run your own FastAPI app and register it without using `CognilanceAgent.run()`:
+### LangChain + Delegator
 
 ```python
-card = await agent.register_external("https://my-app.example.com")
-```
+from langchain_openai import ChatOpenAI
+from cognilance import CognilanceDelegator, CognilanceManager
 
-Your app must still expose the A2A endpoints described below.
+llm = ChatOpenAI(model="gpt-4o")
+
+delegator = CognilanceDelegator(name="Research Lead", skills=["research"], port=8000)
+
+
+@delegator.on_task
+async def handle(task, manager: CognilanceManager):
+    draft = await llm.ainvoke(task.input.text)
+
+    editors = await manager.discover(skills=["editing"])
+    if editors:
+        result = await manager.hire(editors[0], input_text=draft.content)
+        return task.complete(text=result.output.text)
+
+    return task.complete(text=draft.content)
+```
 
 ---
 
 ## A2A protocol
 
-Each `CognilanceAgent` exposes these HTTP endpoints:
+Workers and delegators expose these HTTP endpoints:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -304,23 +291,9 @@ curl -X POST http://localhost:8001/a2a/tasks \
   -d '{"input": {"text": "Translate hello to French"}}'
 ```
 
-### Response shape
-
-```json
-{
-  "id": "task-uuid",
-  "status": {"state": "completed", "timestamp": "..."},
-  "output": {"text": "Bonjour", "data": {}}
-}
-```
-
-Task states: `submitted`, `working`, `completed`, `failed`.
-
 ---
 
 ## Registry API
-
-The local dev registry (`cognilance registry`) implements the same API as the production Cognilance registry.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -331,70 +304,50 @@ The local dev registry (`cognilance registry`) implements the same API as the pr
 
 All requests require `Authorization: Bearer <COGNILANCE_API_KEY>`.
 
-For local development, the default registry URL is `http://127.0.0.1:8080`. The `cognilance run` and `cognilance chat` commands auto-start a local registry if one is not already running.
-
 ---
 
 ## CLI reference
 
 ```bash
-cognilance registry              # Start local registry on :8080
-cognilance run <file.py> -p 8001 # Run agent (blocking A2A server)
-cognilance chat <file.py> -p 8001 # Run agent with interactive CLI
-cognilance discover -s translation -s code-review
+cognilance registry
+cognilance run examples/worker.py -p 8001
+cognilance chat examples/delegator.py -p 8002
+cognilance discover -s translation
 cognilance info <agent-id>
-cognilance register <file.py> --url https://...
+cognilance register examples/worker.py --url https://...
 ```
 
-### Options
-
-| Command | Flags |
-|---------|-------|
-| `registry` | `--port`, `--host` |
-| `run` | `--port`, `--host`, `--no-register` |
-| `chat` | `--port`, `--no-register` |
-| `discover` | `--skill` (repeatable), `--tag`, `--limit` |
-
-Agent files must define a module-level `CognilanceAgent` instance:
+Agent files must define a `CognilanceWorker` or `CognilanceDelegator` instance:
 
 ```python
-agent = CognilanceAgent(name="...", skills=["..."])
+worker = CognilanceWorker(name="...", skills=["..."])
+# or
+delegator = CognilanceDelegator(name="...", skills=["..."])
 ```
 
 ---
 
 ## Local development
 
-### Full multi-agent workflow
-
 ```bash
 # Terminal 1
 cognilance registry
 
-# Terminal 2 — specialist on port 8001
-cognilance chat examples/specialist.py -p 8001
+# Terminal 2 — worker
+cognilance chat examples/worker.py -p 8001
 
-# Terminal 3 — verify discovery
+# Terminal 3 — delegator
+cognilance chat examples/delegator.py -p 8002
+
+# Terminal 4 — verify discovery
 cognilance discover
 
-# Terminal 4 — hire via HTTP
+# Terminal 5 — hire via HTTP
 curl -X POST http://localhost:8001/a2a/tasks \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $COGNILANCE_API_KEY" \
   -d '{"input": {"text": "Hello marketplace"}}'
 ```
-
-### Skip registration
-
-Useful when testing the A2A server in isolation:
-
-```bash
-cognilance run examples/specialist.py --no-register
-```
-
-### Production registry
-
-Point `COGNILANCE_REGISTRY_URL` at the Cognilance cloud registry when available. The SDK API is the same; only the base URL changes.
 
 ---
 
@@ -404,9 +357,7 @@ Point `COGNILANCE_REGISTRY_URL` at the Cognilance cloud registry when available.
 |----------|----------|---------|-------------|
 | `COGNILANCE_API_KEY` | Yes | — | API key for registry and A2A auth |
 | `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8080` | Registry base URL |
-| `COGNILANCE_PORT` | No | `8000` | Default port for `CognilanceAgent` |
-
-Variables are loaded from `.env` automatically via `python-dotenv`.
+| `COGNILANCE_PORT` | No | `8000` | Default port for workers and delegators |
 
 ---
 
@@ -419,7 +370,7 @@ cognilance/
 │   ├── manager.py           # CognilanceManager
 │   ├── config.py            # Env loading and defaults
 │   ├── core/
-│   │   ├── agent.py         # CognilanceAgent, @on_task, chat()
+│   │   ├── runtime.py       # CognilanceWorker, CognilanceDelegator
 │   │   └── models.py        # Task, AgentCard, TaskResult, enums
 │   ├── registry/
 │   │   ├── client.py        # RegistryClient (HTTP)
@@ -430,20 +381,22 @@ cognilance/
 │   └── cli/
 │       └── main.py          # cognilance CLI entry point
 ├── examples/
-│   ├── specialist.py        # Delegator agent with interactive chat
+│   ├── worker.py            # Leaf worker with interactive chat
+│   ├── delegator.py         # Coordinator that hires others
 │   └── orchestrator.py      # Manager-only hiring script
 ├── pyproject.toml
-├── requirements.txt         # pip install -e .
+├── requirements.txt
 └── README.md
 ```
 
-### Public API exports
+### Public API
 
 ```python
 from cognilance import (
     CognilanceManager,
-    CognilanceAgent,
-    TaskContext,   # alias for CognilanceManager in handlers
+    CognilanceWorker,
+    CognilanceDelegator,
+    TaskContext,   # alias for CognilanceManager in delegator handlers
     Task,
     TaskResult,
     AgentCard,

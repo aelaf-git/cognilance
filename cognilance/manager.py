@@ -17,7 +17,8 @@ class CognilanceManager:
     Hire and discover agents on the Cognilance marketplace.
 
     Drop this into any existing project — LangChain, CrewAI, FastAPI, a script.
-    No server required unless you also want to *be* hired (use CognilanceAgent for that).
+    No server or registry listing required. Use CognilanceWorker or CognilanceDelegator
+    when you also want to be hired.
 
         async with CognilanceManager.from_env() as manager:
             agents = await manager.discover(skills=["translation"])

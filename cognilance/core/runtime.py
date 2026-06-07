@@ -1,4 +1,4 @@
-"""CognilanceAgent and TaskContext — the agent runtime."""
+"""CognilanceWorker, CognilanceDelegator, and shared A2A runtime."""
 
 from __future__ import annotations
 
@@ -6,7 +6,9 @@ import asyncio
 import logging
 import threading
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
+
 import httpx
 import uvicorn
 
@@ -25,12 +27,13 @@ from cognilance.transport.a2a import A2AServer
 
 logger = logging.getLogger(__name__)
 
-TaskContext = CognilanceManager  # handlers receive a CognilanceManager as `manager` or `ctx`
-TaskHandlerFn = Callable[[Task, CognilanceManager], Awaitable[Task]]
+TaskContext = CognilanceManager  # delegator handlers receive this as `manager` or `ctx`
+WorkerHandlerFn = Callable[[Task], Awaitable[Task]]
+DelegatorHandlerFn = Callable[[Task, CognilanceManager], Awaitable[Task]]
 
 
-class CognilanceAgent:
-    """Build, register, and run an agent on the Cognilance platform."""
+class _CognilanceRuntime(ABC):
+    """Shared A2A server, registry registration, and heartbeats."""
 
     def __init__(
         self,
@@ -56,15 +59,13 @@ class CognilanceAgent:
         self.host = host
         self._config = config or Config.from_env(port=port)
         self._port = port or self._config.port
-        self._handler: TaskHandlerFn | None = None
         self._agent_id: str | None = None
         self._agent_card: AgentCard | None = None
         self._heartbeat_task: asyncio.Task[None] | None = None
 
-    def on_task(self, fn: TaskHandlerFn) -> TaskHandlerFn:
-        """Decorator to register the task handler."""
-        self._handler = fn
-        return fn
+    @abstractmethod
+    async def _handle_task(self, task: Task) -> Task:
+        ...
 
     def _build_agent_card(self, url: str) -> AgentCard:
         return AgentCard(
@@ -88,22 +89,8 @@ class CognilanceAgent:
                 logger.warning("Heartbeat failed", exc_info=True)
             await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
-    async def _handle_task(self, task: Task) -> Task:
-        if not self._handler:
-            return task.fail(message="No task handler registered. Use @agent.on_task.")
-
-        async with CognilanceManager(config=self._config, agent_id=self._agent_id) as ctx:
-            task.status.state = TaskState.WORKING
-            result = await self._handler(task, ctx)
-            if result.output is None and result.status.state == TaskState.WORKING:
-                return result.complete(text="")
-            return result
-
     def run(self, *, register: bool = True) -> None:
         """Start the A2A listener, register with the registry, and serve tasks."""
-        if not self._handler:
-            raise RuntimeError("No task handler registered. Decorate a function with @agent.on_task")
-
         api_key = self._config.require_api_key()
         agent_url = f"http://{self._get_public_host()}:{self._port}"
         self._agent_card = self._build_agent_card(agent_url)
@@ -178,7 +165,7 @@ class CognilanceAgent:
         time.sleep(1.5)  # allow registry registration to finish
 
         print(f"\n{self.name} is live on port {self._port}")
-        print("Type your prompt below. Other agents can discover and hire me via A2A.")
+        print("Type your prompt below. Managers can discover and hire me via A2A.")
         print("Commands: 'agents' to list registry, 'exit' to quit.\n")
 
         while True:
@@ -206,8 +193,6 @@ class CognilanceAgent:
                 print(f"\n{result.output.text}\n")
                 if result.output.data.get("hired"):
                     print(f"  ↳ hired: {result.output.data['hired']}\n")
-                if result.output.data.get("registry_count"):
-                    print(f"  ↳ saw {result.output.data['registry_count']} agents in registry\n")
             elif result.status.message:
                 print(f"\nError: {result.status.message}\n")
 
@@ -253,3 +238,73 @@ class CognilanceAgent:
         if self.host not in ("0.0.0.0", "::"):
             return self.host
         return "localhost"
+
+    def _finalize_result(self, task: Task, result: Task) -> Task:
+        if result.output is None and result.status.state == TaskState.WORKING:
+            return result.complete(text="")
+        return result
+
+
+class CognilanceWorker(_CognilanceRuntime):
+    """
+    Leaf worker — registers on the marketplace and delivers work when hired.
+
+    Does not discover or hire other agents. Use CognilanceDelegator for that.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._handler: WorkerHandlerFn | None = None
+
+    def on_task(self, fn: WorkerHandlerFn) -> WorkerHandlerFn:
+        """Decorator to register the task handler: `async def handle(task)`."""
+        self._handler = fn
+        return fn
+
+    async def _handle_task(self, task: Task) -> Task:
+        if not self._handler:
+            return task.fail(message="No task handler registered. Use @worker.on_task.")
+
+        task.status.state = TaskState.WORKING
+        result = await self._handler(task)
+        return self._finalize_result(task, result)
+
+    def run(self, *, register: bool = True) -> None:
+        if not self._handler:
+            raise RuntimeError(
+                "No task handler registered. Decorate a function with @worker.on_task"
+            )
+        super().run(register=register)
+
+
+class CognilanceDelegator(_CognilanceRuntime):
+    """
+    Coordinator — gets hired and can discover/hire other agents.
+
+    The task handler receives a CognilanceManager as its second argument.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._handler: DelegatorHandlerFn | None = None
+
+    def on_task(self, fn: DelegatorHandlerFn) -> DelegatorHandlerFn:
+        """Decorator to register the task handler: `async def handle(task, manager)`."""
+        self._handler = fn
+        return fn
+
+    async def _handle_task(self, task: Task) -> Task:
+        if not self._handler:
+            return task.fail(message="No task handler registered. Use @delegator.on_task.")
+
+        async with CognilanceManager(config=self._config, agent_id=self._agent_id) as manager:
+            task.status.state = TaskState.WORKING
+            result = await self._handler(task, manager)
+            return self._finalize_result(task, result)
+
+    def run(self, *, register: bool = True) -> None:
+        if not self._handler:
+            raise RuntimeError(
+                "No task handler registered. Decorate a function with @delegator.on_task"
+            )
+        super().run(register=register)
