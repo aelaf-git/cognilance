@@ -308,22 +308,147 @@ All requests require `Authorization: Bearer <COGNILANCE_API_KEY>`.
 
 ## CLI reference
 
+After `pip install -e .`, the `cognilance` command is available. Run `cognilance` with no arguments to print built-in help.
+
+The CLI is for **local development and operations** — starting the registry, running workers/delegators, and inspecting the marketplace. `CognilanceManager` has no CLI command; use a Python script (see `examples/orchestrator.py`).
+
+### Command overview
+
+| Command | Purpose |
+|---------|---------|
+| `registry` | Start the local in-memory registry server (dev catalog) |
+| `run` | Start a worker or delegator as a blocking A2A server |
+| `chat` | Start a worker or delegator with an interactive prompt loop |
+| `discover` | List agents currently registered in the marketplace |
+| `info` | Show full details for one agent by ID |
+| `register` | List an externally-hosted worker/delegator on the registry |
+
+---
+
+### `cognilance registry`
+
+**Purpose:** Start the local development registry so workers and delegators can register and be discovered.
+
+Use this in its own terminal during local dev. Point `COGNILANCE_REGISTRY_URL` at it (default: `http://127.0.0.1:8080`).
+
 ```bash
 cognilance registry
-cognilance run examples/worker.py -p 8001
-cognilance chat examples/delegator.py -p 8002
-cognilance discover -s translation
-cognilance info <agent-id>
-cognilance register examples/worker.py --url https://...
+cognilance registry --port 9090
+cognilance registry --host 0.0.0.0 --port 8080
 ```
 
-Agent files must define a `CognilanceWorker` or `CognilanceDelegator` instance:
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--port`, `-p` | `8080` | Port to listen on |
+| `--host` | `127.0.0.1` | Host to bind to |
+
+---
+
+### `cognilance run`
+
+**Purpose:** Run a `CognilanceWorker` or `CognilanceDelegator` as a production-style A2A server. Blocks until stopped. Other agents and managers hire it via HTTP (`POST /a2a/tasks`).
+
+Auto-starts the local registry if it is not already running (unless `--no-register` is passed).
+
+```bash
+cognilance run examples/worker.py
+cognilance run examples/delegator.py --port 8002
+cognilance run examples/worker.py --host 0.0.0.0 --port 8001 --no-register
+```
+
+| Argument / option | Default | Description |
+|-------------------|---------|-------------|
+| `agent_file` | required | Path to a `.py` file containing a worker or delegator instance |
+| `--port`, `-p` | `8000` | Port for the A2A server |
+| `--host` | `0.0.0.0` | Host to bind to |
+| `--no-register` | off | Skip registry registration (A2A server only) |
+
+The file must define a module-level instance:
 
 ```python
 worker = CognilanceWorker(name="...", skills=["..."])
 # or
 delegator = CognilanceDelegator(name="...", skills=["..."])
 ```
+
+---
+
+### `cognilance chat`
+
+**Purpose:** Run a worker or delegator in **interactive mode** for quick local testing. Starts the A2A server in a background thread, then opens a prompt loop so you can type tasks directly.
+
+Useful while developing handlers without writing a separate client or curl commands.
+
+```bash
+cognilance chat examples/worker.py
+cognilance chat examples/delegator.py --port 8002
+cognilance chat examples/worker.py --no-register
+```
+
+| Argument / option | Default | Description |
+|-------------------|---------|-------------|
+| `agent_file` | required | Path to a `.py` file containing a worker or delegator instance |
+| `--port`, `-p` | from env / `8000` | Port override for the A2A server |
+| `--no-register` | off | Skip registry registration |
+
+**Interactive commands** (inside the prompt):
+
+| Input | Action |
+|-------|--------|
+| any text | Sent as a task to your handler |
+| `agents` | List all agents in the registry |
+| `exit` or `quit` | Stop the session |
+
+---
+
+### `cognilance discover`
+
+**Purpose:** Search the registry from the terminal. Same data a `CognilanceManager.discover()` call returns, formatted as a table.
+
+```bash
+cognilance discover
+cognilance discover --skill translation --skill code-review
+cognilance discover --tag dev --limit 20
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--skill`, `-s` | — | Filter by skill (repeatable) |
+| `--tag`, `-t` | — | Filter by tag (repeatable) |
+| `--limit`, `-n` | `10` | Maximum number of results |
+
+---
+
+### `cognilance info`
+
+**Purpose:** Look up a single agent by registry ID — name, description, URL, visibility, online status, and skills.
+
+```bash
+cognilance info abc123-agent-id
+```
+
+| Argument | Description |
+|----------|-------------|
+| `agent_id` | Registry ID returned when an agent registers |
+
+---
+
+### `cognilance register`
+
+**Purpose:** Register a worker or delegator that is **hosted elsewhere** (your own FastAPI app, a cloud deployment, etc.) without running `worker.run()` locally.
+
+Loads metadata (name, skills, description) from the Python file and posts the given public URL to the registry.
+
+```bash
+cognilance register examples/worker.py --url https://my-agent.example.com
+```
+
+| Argument / option | Description |
+|-------------------|-------------|
+| `agent_file` | Path to the `.py` file defining the worker or delegator |
+| `--url` | Public base URL where the agent's A2A endpoints are reachable |
+
+The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
 
 ---
 
