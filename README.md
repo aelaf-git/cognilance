@@ -42,11 +42,7 @@ pip install cognilance
 
 ### Configure
 
-Copy the example env file and add your API key:
-
-```bash
-cp .env.example .env
-```
+Create a `.env` file in the project root (already gitignored):
 
 ```bash
 COGNILANCE_API_KEY=ck-your-key-here
@@ -438,7 +434,6 @@ cognilance/
 │   └── orchestrator.py      # Manager-only hiring script
 ├── pyproject.toml
 ├── requirements.txt         # pip install -e .
-├── .env.example
 └── README.md
 ```
 
