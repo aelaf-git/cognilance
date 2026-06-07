@@ -19,14 +19,14 @@ from cognilance.core.models import (
     TaskInput,
     TaskState,
 )
-from cognilance.client import Cognilance
+from cognilance.manager import CognilanceManager
 from cognilance.registry.client import RegistryClient
 from cognilance.transport.a2a import A2AServer
 
 logger = logging.getLogger(__name__)
 
-TaskContext = Cognilance  # alias — handlers receive a Cognilance client as `ctx`
-TaskHandlerFn = Callable[[Task, Cognilance], Awaitable[Task]]
+TaskContext = CognilanceManager  # handlers receive a CognilanceManager as `manager` or `ctx`
+TaskHandlerFn = Callable[[Task, CognilanceManager], Awaitable[Task]]
 
 
 class CognilanceAgent:
@@ -92,7 +92,7 @@ class CognilanceAgent:
         if not self._handler:
             return task.fail(message="No task handler registered. Use @agent.on_task.")
 
-        async with Cognilance(config=self._config, agent_id=self._agent_id) as ctx:
+        async with CognilanceManager(config=self._config, agent_id=self._agent_id) as ctx:
             task.status.state = TaskState.WORKING
             result = await self._handler(task, ctx)
             if result.output is None and result.status.state == TaskState.WORKING:

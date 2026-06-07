@@ -1,4 +1,4 @@
-"""Minimal Cognilance client — registry + hiring for any agent framework."""
+"""CognilanceManager — discover and hire agents from any framework."""
 
 from __future__ import annotations
 
@@ -12,12 +12,16 @@ from cognilance.registry.client import RegistryClient
 from cognilance.transport.a2a import A2AClient
 
 
-class Cognilance:
+class CognilanceManager:
     """
-    Thin SDK client. Gives any agent framework access to:
-    - discover() — search the registry
-    - hire() — send A2A tasks to other agents
-    - register() — list yourself on the marketplace
+    Hire and discover agents on the Cognilance marketplace.
+
+    Drop this into any existing project — LangChain, CrewAI, FastAPI, a script.
+    No server required unless you also want to *be* hired (use CognilanceAgent for that).
+
+        async with CognilanceManager.from_env() as manager:
+            agents = await manager.discover(skills=["translation"])
+            result = await manager.hire(agents[0], input_text="Hello")
     """
 
     def __init__(
@@ -35,11 +39,16 @@ class Cognilance:
         self._registry = RegistryClient(registry_url=self._registry_url, api_key=self._api_key)
         self._a2a = A2AClient(api_key=self._api_key)
 
+    @classmethod
+    def from_env(cls, *, agent_id: str | None = None) -> CognilanceManager:
+        """Create a manager using COGNILANCE_API_KEY and COGNILANCE_REGISTRY_URL from .env."""
+        return cls(agent_id=agent_id)
+
     async def close(self) -> None:
         await self._registry.close()
         await self._a2a.close()
 
-    async def __aenter__(self) -> Cognilance:
+    async def __aenter__(self) -> CognilanceManager:
         return self
 
     async def __aexit__(self, *_) -> None:
@@ -52,6 +61,7 @@ class Cognilance:
         tags: list[str] | None = None,
         limit: int = 10,
     ) -> list[AgentCard]:
+        """Search the registry for agents with matching skills."""
         return await self._registry.discover(
             skills=skills,
             tags=tags,
@@ -66,6 +76,7 @@ class Cognilance:
         input_text: str = "",
         input_data: dict[str, Any] | None = None,
     ) -> TaskResult:
+        """Send a task to another agent and await the result."""
         result = await self._a2a.send_task(
             agent.url,
             input_text=input_text,
@@ -86,6 +97,7 @@ class Cognilance:
         tags: list[str] | None = None,
         limit: int = 5,
     ) -> TaskResult | str:
+        """Find the best matching agent and hire them, or run a local fallback."""
         agents = await self.discover(skills=skills, tags=tags, limit=limit)
         if agents:
             return await self.hire(agents[0], input_text=input_text)
@@ -106,6 +118,7 @@ class Cognilance:
         visibility: AgentVisibility | str = AgentVisibility.PUBLIC,
         tags: list[str] | None = None,
     ) -> AgentCard:
+        """List your agent on the marketplace (you still need a server at `url`)."""
         vis = AgentVisibility(visibility) if isinstance(visibility, str) else visibility
         card = await self._registry.register(
             name=name,
@@ -119,4 +132,5 @@ class Cognilance:
         return card
 
     async def get_agent(self, agent_id: str) -> AgentCard:
+        """Look up a single agent by ID."""
         return await self._registry.get_agent(agent_id)
