@@ -34,6 +34,9 @@ def _load_agent_from_file(path: Path) -> CognilanceAgent:
 
     module = importlib.util.module_from_spec(spec)
     sys.modules["cognilance_agent_module"] = module
+    agent_dir = str(path.resolve().parent)
+    if agent_dir not in sys.path:
+        sys.path.insert(0, agent_dir)
     spec.loader.exec_module(module)
 
     for attr in dir(module):
@@ -59,6 +62,26 @@ def registry(
         f"[bold green]Registry[/bold green] listening on [cyan]http://{host}:{port}[/cyan]"
     )
     uvicorn.run(create_registry_app(), host=host, port=port)
+
+
+@app.command()
+def chat(
+    agent_file: Annotated[Path, typer.Argument(help="Path to the agent Python file")],
+    port: Annotated[int | None, typer.Option("--port", "-p", help="Port override")] = None,
+    no_register: Annotated[
+        bool, typer.Option("--no-register", help="Skip registry registration")
+    ] = False,
+) -> None:
+    """Run an agent with an interactive CLI prompt loop."""
+    if not agent_file.exists():
+        raise typer.BadParameter(f"File not found: {agent_file}")
+
+    agent = _load_agent_from_file(agent_file)
+    if port:
+        agent._port = port
+        agent._config = Config.from_env(port=port)
+
+    agent.chat(register=not no_register)
 
 
 @app.command()

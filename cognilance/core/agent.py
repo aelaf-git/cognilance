@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -16,6 +18,7 @@ from cognilance.core.models import (
     AgentVisibility,
     Skill,
     Task,
+    TaskInput,
     TaskResult,
     TaskState,
 )
@@ -234,6 +237,84 @@ class CognilanceAgent:
 
         logger.info("Starting %s on %s:%d", self.name, self.host, self._port)
         uvicorn.run(server.app, host=self.host, port=self._port)
+
+    def chat(self, *, register: bool = True) -> None:
+        """Start the A2A server and run an interactive CLI prompt loop."""
+        from cognilance.registry.local import ensure_local_registry
+
+        if register:
+            ensure_local_registry(self._config.registry_url)
+
+        thread = threading.Thread(
+            target=lambda: self.run(register=register),
+            daemon=True,
+            name=f"cognilance-{self.name}",
+        )
+        thread.start()
+
+        health_url = f"http://127.0.0.1:{self._port}/health"
+        for _ in range(60):
+            try:
+                if httpx.get(health_url, timeout=0.5).status_code == 200:
+                    break
+            except httpx.HTTPError:
+                time.sleep(0.25)
+        else:
+            raise RuntimeError(f"{self.name} failed to start on port {self._port}")
+
+        time.sleep(1.5)  # allow registry registration to finish
+
+        print(f"\n{self.name} is live on port {self._port}")
+        print("Type your prompt below. Other agents can discover and hire me via A2A.")
+        print("Commands: 'agents' to list registry, 'exit' to quit.\n")
+
+        while True:
+            try:
+                prompt = input(f"{self.name}> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+
+            if not prompt or prompt.lower() in {"exit", "quit"}:
+                break
+
+            if prompt.lower() == "agents":
+                asyncio.run(self._print_registry())
+                continue
+
+            task = Task(input=TaskInput(text=prompt))
+            try:
+                result = asyncio.run(self._handle_task(task))
+            except Exception as exc:
+                print(f"\nError: {exc}\n")
+                continue
+
+            if result.output:
+                print(f"\n{result.output.text}\n")
+                if result.output.data.get("hired"):
+                    print(f"  ↳ hired: {result.output.data['hired']}\n")
+                if result.output.data.get("registry_count"):
+                    print(f"  ↳ saw {result.output.data['registry_count']} agents in registry\n")
+            elif result.status.message:
+                print(f"\nError: {result.status.message}\n")
+
+    async def _print_registry(self) -> None:
+        registry = RegistryClient(
+            registry_url=self._config.registry_url,
+            api_key=self._config.require_api_key(),
+        )
+        try:
+            agents = await registry.discover(limit=50, exclude_id=self._agent_id)
+            if not agents:
+                print("\nNo agents in registry.\n")
+                return
+            print()
+            for a in agents:
+                skills = ", ".join(s.name for s in a.skills)
+                print(f"  • {a.name} ({skills}) — {a.url}")
+            print()
+        finally:
+            await registry.close()
 
     async def register_external(self, url: str) -> AgentCard:
         """Register an externally-hosted agent with the registry."""
