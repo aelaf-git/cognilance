@@ -7,8 +7,6 @@ import logging
 import threading
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
-
 import httpx
 import uvicorn
 
@@ -19,86 +17,16 @@ from cognilance.core.models import (
     Skill,
     Task,
     TaskInput,
-    TaskResult,
     TaskState,
 )
+from cognilance.client import Cognilance
 from cognilance.registry.client import RegistryClient
-from cognilance.transport.a2a import A2AClient, A2AServer
+from cognilance.transport.a2a import A2AServer
 
 logger = logging.getLogger(__name__)
 
-TaskHandlerFn = Callable[[Task, "TaskContext"], Awaitable[Task]]
-
-
-class TaskContext:
-    """Context passed to every task handler — discover and hire other agents."""
-
-    def __init__(
-        self,
-        *,
-        registry: RegistryClient,
-        a2a: A2AClient,
-        self_agent_id: str | None,
-        api_key: str | None,
-    ) -> None:
-        self._registry = registry
-        self._a2a = a2a
-        self._self_agent_id = self_agent_id
-        self._api_key = api_key
-
-    async def discover(
-        self,
-        *,
-        skills: list[str] | None = None,
-        tags: list[str] | None = None,
-        limit: int = 10,
-    ) -> list[AgentCard]:
-        return await self._registry.discover(
-            skills=skills,
-            tags=tags,
-            limit=limit,
-            exclude_id=self._self_agent_id,
-        )
-
-    async def hire(
-        self,
-        agent: AgentCard,
-        *,
-        input_text: str = "",
-        input_data: dict[str, Any] | None = None,
-    ) -> TaskResult:
-        result = await self._a2a.send_task(
-            agent.url,
-            input_text=input_text,
-            input_data=input_data,
-        )
-        if result.status.state == TaskState.FAILED:
-            raise RuntimeError(
-                f"Agent {agent.name} failed: {result.status.message or 'unknown error'}"
-            )
-        return result
-
-    async def discover_and_hire(
-        self,
-        *,
-        skills: list[str],
-        input_text: str,
-        fallback_fn: Callable[[str], str] | Callable[[str], Awaitable[str]] | None = None,
-        tags: list[str] | None = None,
-        limit: int = 5,
-    ) -> TaskResult | str:
-        agents = await self.discover(skills=skills, tags=tags, limit=limit)
-
-        if agents:
-            return await self.hire(agents[0], input_text=input_text)
-
-        if fallback_fn is None:
-            raise RuntimeError(f"No agents found with skills {skills} and no fallback provided")
-
-        result = fallback_fn(input_text)
-        if asyncio.iscoroutine(result):
-            return await result
-        return result
+TaskContext = Cognilance  # alias — handlers receive a Cognilance client as `ctx`
+TaskHandlerFn = Callable[[Task, Cognilance], Awaitable[Task]]
 
 
 class CognilanceAgent:
@@ -164,27 +92,12 @@ class CognilanceAgent:
         if not self._handler:
             return task.fail(message="No task handler registered. Use @agent.on_task.")
 
-        registry = RegistryClient(
-            registry_url=self._config.registry_url,
-            api_key=self._config.require_api_key(),
-        )
-        a2a = A2AClient(api_key=self._config.api_key)
-        ctx = TaskContext(
-            registry=registry,
-            a2a=a2a,
-            self_agent_id=self._agent_id,
-            api_key=self._config.api_key,
-        )
-
-        try:
+        async with Cognilance(config=self._config, agent_id=self._agent_id) as ctx:
             task.status.state = TaskState.WORKING
             result = await self._handler(task, ctx)
             if result.output is None and result.status.state == TaskState.WORKING:
                 return result.complete(text="")
             return result
-        finally:
-            await registry.close()
-            await a2a.close()
 
     def run(self, *, register: bool = True) -> None:
         """Start the A2A listener, register with the registry, and serve tasks."""
