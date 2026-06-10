@@ -1,0 +1,3 @@
+# From project root: pip install -e . && pip install -r examples/requirements.txt
+langchain-groq>=0.2.0
+langchain-core>=0.3.0

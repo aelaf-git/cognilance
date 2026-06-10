@@ -95,16 +95,19 @@ class A2AClient:
         *,
         input_text: str = "",
         input_data: dict[str, Any] | None = None,
+        trace: dict[str, Any] | None = None,
         poll_interval: float = 0.5,
         max_polls: int = 240,
     ) -> TaskResult:
         base = agent_url.rstrip("/")
-        payload = {
+        payload: dict[str, Any] = {
             "input": {
                 "text": input_text,
                 "data": input_data or {},
             }
         }
+        if trace:
+            payload["trace"] = trace
 
         response = await self._client.post(f"{base}/a2a/tasks", json=payload)
         if response.status_code >= 400:

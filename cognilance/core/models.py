@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 class AgentVisibility(str, Enum):
@@ -69,6 +69,37 @@ class AgentCard(BaseModel):
         }
 
 
+class TraceContext(BaseModel):
+    """Propagated through A2A payloads to correlate an entire hire chain."""
+
+    trace_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    parent_task_id: str | None = None
+    depth: int = 0
+
+    def child(self, parent_task_id: str) -> TraceContext:
+        """Trace context for an agent hired from within this context."""
+        return TraceContext(
+            trace_id=self.trace_id,
+            parent_task_id=parent_task_id,
+            depth=self.depth + 1,
+        )
+
+
+class TraceEvent(BaseModel):
+    """A single observable step in a hire chain (thought, hire, completion, ...)."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    trace_id: str
+    task_id: str
+    parent_task_id: str | None = None
+    depth: int = 0
+    agent_name: str = ""
+    type: str  # task_received | think | discover | hire_started | hire_completed | hire_failed | task_completed | task_failed
+    text: str = ""
+    data: dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class TaskInput(BaseModel):
     text: str = ""
     data: dict[str, Any] = Field(default_factory=dict)
@@ -94,12 +125,37 @@ class Task(BaseModel):
     )
     input: TaskInput = Field(default_factory=TaskInput)
     output: TaskOutput | None = None
+    trace: TraceContext = Field(default_factory=TraceContext)
+
+    _emitter: Any = PrivateAttr(default=None)
+    _agent_name: str = PrivateAttr(default="")
+
+    def think(self, text: str, **data: Any) -> None:
+        """Record a reasoning step, visible on the Cognilance dashboard."""
+        if self._emitter is not None:
+            self._emitter.emit_nowait(
+                trace_id=self.trace.trace_id,
+                task_id=self.id,
+                parent_task_id=self.trace.parent_task_id,
+                depth=self.trace.depth,
+                agent_name=self._agent_name,
+                type="think",
+                text=text,
+                data=data,
+            )
 
     @classmethod
     def from_a2a_payload(cls, payload: dict[str, Any]) -> Task:
         task_id = payload.get("id", str(uuid.uuid4()))
         status_data = payload.get("status", {})
         state = TaskState(status_data.get("state", TaskState.SUBMITTED))
+
+        trace_data = payload.get("trace") or {}
+        trace = TraceContext(
+            trace_id=trace_data.get("trace_id") or str(uuid.uuid4()),
+            parent_task_id=trace_data.get("parent_task_id"),
+            depth=int(trace_data.get("depth", 0)),
+        )
 
         raw_input = payload.get("input", {})
         if "message" in raw_input:
@@ -126,6 +182,7 @@ class Task(BaseModel):
             id=task_id,
             status=TaskStatus(state=state),
             input=task_input,
+            trace=trace,
         )
 
     def complete(self, *, text: str = "", data: dict[str, Any] | None = None) -> Task:

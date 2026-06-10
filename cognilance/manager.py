@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import time
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from cognilance.config import Config
-from cognilance.core.models import AgentCard, AgentVisibility, TaskResult, TaskState
+from cognilance.core.models import AgentCard, AgentVisibility, TaskResult, TaskState, TraceContext
+from cognilance.core.tracing import TraceEmitter
 from cognilance.registry.client import RegistryClient
 from cognilance.transport.a2a import A2AClient
 
@@ -32,6 +35,9 @@ class CognilanceManager:
         registry_url: str | None = None,
         agent_id: str | None = None,
         config: Config | None = None,
+        trace: TraceContext | None = None,
+        task_id: str | None = None,
+        agent_name: str = "Manager",
     ) -> None:
         cfg = config or Config.from_env()
         self._api_key = api_key or cfg.require_api_key()
@@ -39,6 +45,29 @@ class CognilanceManager:
         self._agent_id = agent_id
         self._registry = RegistryClient(registry_url=self._registry_url, api_key=self._api_key)
         self._a2a = A2AClient(api_key=self._api_key)
+        # Trace context: inherited when running inside a delegator handler,
+        # otherwise this manager is the root of a new hire chain.
+        self._trace = trace or TraceContext()
+        self._task_id = task_id or f"manager-{uuid.uuid4().hex[:12]}"
+        self._agent_name = agent_name
+        self._emitter = TraceEmitter(registry_url=self._registry_url, api_key=self._api_key)
+
+    @property
+    def trace_id(self) -> str:
+        """ID correlating every event in this hire chain (visible on the dashboard)."""
+        return self._trace.trace_id
+
+    async def _emit(self, type: str, text: str = "", **data: Any) -> None:
+        await self._emitter.emit(
+            trace_id=self._trace.trace_id,
+            task_id=self._task_id,
+            parent_task_id=self._trace.parent_task_id,
+            depth=self._trace.depth,
+            agent_name=self._agent_name,
+            type=type,
+            text=text,
+            data=data,
+        )
 
     @classmethod
     def from_env(cls, *, agent_id: str | None = None) -> CognilanceManager:
@@ -48,6 +77,7 @@ class CognilanceManager:
     async def close(self) -> None:
         await self._registry.close()
         await self._a2a.close()
+        await self._emitter.close()
 
     async def __aenter__(self) -> CognilanceManager:
         return self
@@ -63,12 +93,21 @@ class CognilanceManager:
         limit: int = 10,
     ) -> list[AgentCard]:
         """Search the registry for agents with matching skills."""
-        return await self._registry.discover(
+        agents = await self._registry.discover(
             skills=skills,
             tags=tags,
             limit=limit,
             exclude_id=self._agent_id,
         )
+        await self._emit(
+            "discover",
+            text=f"Searched marketplace (skills={skills or 'any'}) — {len(agents)} found",
+            skills=skills or [],
+            tags=tags or [],
+            found=len(agents),
+            names=[a.name for a in agents],
+        )
+        return agents
 
     async def hire(
         self,
@@ -78,15 +117,47 @@ class CognilanceManager:
         input_data: dict[str, Any] | None = None,
     ) -> TaskResult:
         """Send a task to another agent and await the result."""
-        result = await self._a2a.send_task(
-            agent.url,
+        child_trace = self._trace.child(self._task_id)
+        await self._emit(
+            "hire_started",
+            text=f"Hiring {agent.name}",
+            agent=agent.name,
+            agent_url=agent.url,
             input_text=input_text,
-            input_data=input_data,
         )
+        started = time.monotonic()
+        try:
+            result = await self._a2a.send_task(
+                agent.url,
+                input_text=input_text,
+                input_data=input_data,
+                trace=child_trace.model_dump(),
+            )
+        except Exception as exc:
+            await self._emit(
+                "hire_failed",
+                text=f"{agent.name} unreachable: {exc}",
+                agent=agent.name,
+            )
+            raise
+        duration_ms = int((time.monotonic() - started) * 1000)
         if result.status.state == TaskState.FAILED:
+            await self._emit(
+                "hire_failed",
+                text=f"{agent.name} failed: {result.status.message or 'unknown error'}",
+                agent=agent.name,
+                duration_ms=duration_ms,
+            )
             raise RuntimeError(
                 f"Agent {agent.name} failed: {result.status.message or 'unknown error'}"
             )
+        await self._emit(
+            "hire_completed",
+            text=f"{agent.name} delivered in {duration_ms / 1000:.1f}s",
+            agent=agent.name,
+            duration_ms=duration_ms,
+            output_text=result.output.text,
+        )
         return result
 
     async def discover_and_hire(

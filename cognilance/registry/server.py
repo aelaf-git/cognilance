@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-from cognilance.core.models import AgentVisibility
+from cognilance.core.models import AgentVisibility, TraceEvent
+from cognilance.registry.dashboard import DASHBOARD_HTML
 
 
 class RegisterAgentRequest(BaseModel):
@@ -105,5 +108,77 @@ def create_registry_app() -> FastAPI:
         if not record:
             raise HTTPException(status_code=404, detail="Agent not found")
         return _to_response(record)
+
+    # ------------------------------------------------------------------
+    # Trace collector + live dashboard
+    # ------------------------------------------------------------------
+
+    traces: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    trace_order: list[str] = []  # most recent trace_ids last
+    websockets: set[WebSocket] = set()
+
+    async def _broadcast(message: dict[str, Any]) -> None:
+        dead: list[WebSocket] = []
+        for ws in websockets:
+            try:
+                await ws.send_json(message)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            websockets.discard(ws)
+
+    @app.post("/v1/traces/events")
+    async def collect_event(event: TraceEvent) -> dict[str, str]:
+        if event.trace_id not in traces:
+            trace_order.append(event.trace_id)
+        traces[event.trace_id].append(event.model_dump(mode="json"))
+        await _broadcast({"kind": "event", "event": event.model_dump(mode="json")})
+        return {"status": "ok"}
+
+    def _trace_summary(trace_id: str) -> dict[str, Any]:
+        events = traces[trace_id]
+        root = next(
+            (e for e in events if e["type"] in ("task_received", "hire_started")), events[0]
+        )
+        failed = any(e["type"] in ("task_failed", "hire_failed") for e in events)
+        completed = any(
+            e["type"] == "task_completed" and e["depth"] == 0 for e in events
+        ) or any(e["type"] == "hire_completed" and e["depth"] == 0 for e in events)
+        return {
+            "trace_id": trace_id,
+            "started_at": events[0]["timestamp"],
+            "last_at": events[-1]["timestamp"],
+            "root_text": root.get("text", ""),
+            "root_agent": root.get("agent_name", ""),
+            "event_count": len(events),
+            "agents": sorted({e["agent_name"] for e in events if e["agent_name"]}),
+            "status": "failed" if failed else ("completed" if completed else "working"),
+        }
+
+    @app.get("/v1/traces")
+    async def list_traces(limit: int = Query(default=50, ge=1)) -> dict[str, Any]:
+        recent = list(reversed(trace_order[-limit:]))
+        return {"traces": [_trace_summary(t) for t in recent]}
+
+    @app.get("/v1/traces/{trace_id}")
+    async def get_trace(trace_id: str) -> dict[str, Any]:
+        if trace_id not in traces:
+            raise HTTPException(status_code=404, detail="Trace not found")
+        return {"trace_id": trace_id, "events": traces[trace_id]}
+
+    @app.websocket("/v1/traces/ws")
+    async def trace_ws(ws: WebSocket) -> None:
+        await ws.accept()
+        websockets.add(ws)
+        try:
+            while True:
+                # Block until the client disconnects; clients never send data.
+                await ws.receive_text()
+        except (WebSocketDisconnect, Exception):
+            websockets.discard(ws)
+
+    @app.get("/dashboard", response_class=HTMLResponse)
+    async def dashboard() -> str:
+        return DASHBOARD_HTML
 
     return app

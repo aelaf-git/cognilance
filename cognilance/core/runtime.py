@@ -21,6 +21,7 @@ from cognilance.core.models import (
     TaskInput,
     TaskState,
 )
+from cognilance.core.tracing import TraceEmitter
 from cognilance.manager import CognilanceManager
 from cognilance.registry.client import RegistryClient
 from cognilance.transport.a2a import A2AServer
@@ -62,10 +63,54 @@ class _CognilanceRuntime(ABC):
         self._agent_id: str | None = None
         self._agent_card: AgentCard | None = None
         self._heartbeat_task: asyncio.Task[None] | None = None
+        self._emitter: TraceEmitter | None = None
 
     @abstractmethod
-    async def _handle_task(self, task: Task) -> Task:
+    async def _run_handler(self, task: Task) -> Task:
         ...
+
+    def _get_emitter(self) -> TraceEmitter:
+        if self._emitter is None:
+            self._emitter = TraceEmitter(
+                registry_url=self._config.registry_url,
+                api_key=self._config.api_key,
+            )
+        return self._emitter
+
+    async def _emit(self, task: Task, type: str, text: str = "", **data) -> None:
+        await self._get_emitter().emit(
+            trace_id=task.trace.trace_id,
+            task_id=task.id,
+            parent_task_id=task.trace.parent_task_id,
+            depth=task.trace.depth,
+            agent_name=self.name,
+            type=type,
+            text=text,
+            data=data,
+        )
+
+    async def _handle_task(self, task: Task) -> Task:
+        task._emitter = self._get_emitter()
+        task._agent_name = self.name
+        await self._emit(task, "task_received", text=task.input.text)
+
+        task.status.state = TaskState.WORKING
+        try:
+            result = await self._run_handler(task)
+        except Exception as exc:
+            await self._emit(task, "task_failed", text=str(exc))
+            raise
+
+        result = self._finalize_result(task, result)
+        if result.status.state == TaskState.FAILED:
+            await self._emit(task, "task_failed", text=result.status.message or "failed")
+        else:
+            await self._emit(
+                task,
+                "task_completed",
+                text=result.output.text if result.output else "",
+            )
+        return result
 
     def _build_agent_card(self, url: str) -> AgentCard:
         return AgentCard(
@@ -261,13 +306,10 @@ class CognilanceWorker(_CognilanceRuntime):
         self._handler = fn
         return fn
 
-    async def _handle_task(self, task: Task) -> Task:
+    async def _run_handler(self, task: Task) -> Task:
         if not self._handler:
             return task.fail(message="No task handler registered. Use @worker.on_task.")
-
-        task.status.state = TaskState.WORKING
-        result = await self._handler(task)
-        return self._finalize_result(task, result)
+        return await self._handler(task)
 
     def run(self, *, register: bool = True) -> None:
         if not self._handler:
@@ -293,14 +335,18 @@ class CognilanceDelegator(_CognilanceRuntime):
         self._handler = fn
         return fn
 
-    async def _handle_task(self, task: Task) -> Task:
+    async def _run_handler(self, task: Task) -> Task:
         if not self._handler:
             return task.fail(message="No task handler registered. Use @delegator.on_task.")
 
-        async with CognilanceManager(config=self._config, agent_id=self._agent_id) as manager:
-            task.status.state = TaskState.WORKING
-            result = await self._handler(task, manager)
-            return self._finalize_result(task, result)
+        async with CognilanceManager(
+            config=self._config,
+            agent_id=self._agent_id,
+            trace=task.trace,
+            task_id=task.id,
+            agent_name=self.name,
+        ) as manager:
+            return await self._handler(task, manager)
 
     def run(self, *, register: bool = True) -> None:
         if not self._handler:
