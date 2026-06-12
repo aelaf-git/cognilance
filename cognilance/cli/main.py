@@ -9,15 +9,12 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-import uvicorn
 from rich.console import Console
 from rich.table import Table
 
-from cognilance.config import DEFAULT_REGISTRY_PORT, Config
+from cognilance.config import Config
 from cognilance.core.runtime import CognilanceDelegator, CognilanceWorker
 from cognilance.registry.client import RegistryClient, RegistryError
-from cognilance.registry.local import ensure_local_registry
-from cognilance.registry.server import create_registry_app
 
 app = typer.Typer(
     name="cognilance",
@@ -51,20 +48,6 @@ def _load_agent_from_file(path: Path) -> RuntimeInstance:
         f"No CognilanceWorker or CognilanceDelegator instance found in {path}. "
         "Define `worker = CognilanceWorker(...)` or `delegator = CognilanceDelegator(...)`."
     )
-
-
-@app.command()
-def registry(
-    port: Annotated[
-        int, typer.Option("--port", "-p", help="Port for the local registry")
-    ] = DEFAULT_REGISTRY_PORT,
-    host: Annotated[str, typer.Option("--host", help="Host to bind to")] = "127.0.0.1",
-) -> None:
-    """Start the local Cognilance registry (for development)."""
-    base = f"http://{host}:{port}"
-    console.print(f"[bold green]Registry[/bold green] listening on [cyan]{base}[/cyan]")
-    console.print(f"  Dashboard: [cyan]{base}/dashboard[/cyan]")
-    uvicorn.run(create_registry_app(), host=host, port=port)
 
 
 @app.command()
@@ -104,9 +87,6 @@ def run(
     agent.host = host
     agent._port = port
     agent._config = Config.from_env(port=port)
-
-    if not no_register:
-        ensure_local_registry(agent._config.registry_url)
 
     chat_url = f"http://{host if host not in ('0.0.0.0', '::') else '127.0.0.1'}:{port}/chat"
     console.print(f"[bold green]Running[/bold green] {agent.name} on port {port}")

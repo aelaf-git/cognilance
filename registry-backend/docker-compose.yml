@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cognilance
+      POSTGRES_PASSWORD: cognilance
+      POSTGRES_DB: cognilance
+    ports:
+      - "5433:5432"
+    volumes:
+      - registry_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognilance -d cognilance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    ports:
+      - "8088:8080"
+    environment:
+      DATABASE_URL: postgresql://cognilance:cognilance@db:5432/cognilance
+      HOST: 0.0.0.0
+      PORT: 8080
+      BOOTSTRAP_API_KEYS: ${BOOTSTRAP_API_KEYS:-ck-dev-bootstrap-key}
+      HEARTBEAT_TIMEOUT_SECONDS: 90
+      STALE_CHECK_INTERVAL_SECONDS: 30
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python -m prisma db push --skip-generate &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8080"
+
+volumes:
+  registry_pg_data:

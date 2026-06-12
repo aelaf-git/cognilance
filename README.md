@@ -69,17 +69,17 @@ Create a `.env` file in the project root (already gitignored):
 
 ```bash
 COGNILANCE_API_KEY=ck-your-key-here
-COGNILANCE_REGISTRY_URL=http://127.0.0.1:8080
+COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
 ```
 
 ### Run a worker
 
 ```bash
-# Terminal 1 — local registry
-cognilance registry
+# Terminal 1 — registry backend (PostgreSQL)
+cd registry-backend && docker compose up
 
 # Terminal 2 — example worker
-cognilance chat examples/worker.py
+python examples/worker_code_review.py
 ```
 
 ### Hire from a manager script
@@ -330,37 +330,28 @@ All requests require `Authorization: Bearer <COGNILANCE_API_KEY>`.
 
 After `pip install -e .`, the `cognilance` command is available. Run `cognilance` with no arguments to print built-in help.
 
-The CLI is for **local development and operations** — starting the registry, running workers/delegators, and inspecting the marketplace. `CognilanceManager` has no CLI command; use a Python script (see `examples/orchestrator.py`).
+The CLI is for **local development and operations** — running workers/delegators and inspecting the marketplace. Start the registry separately via **[`registry-backend/`](registry-backend/)**. `CognilanceManager` has no CLI command; use a Python script (see `examples/`).
 
 ### Command overview
 
 | Command | Purpose |
 |---------|---------|
-| `registry` | Start the local in-memory registry server (dev catalog) |
 | `run` | Start a worker or delegator as a blocking A2A server |
 | `chat` | Start a worker or delegator with an interactive prompt loop |
 | `discover` | List agents currently registered in the marketplace |
 | `info` | Show full details for one agent by ID |
 | `register` | List an externally-hosted worker/delegator on the registry |
 
----
+### Registry backend
 
-### `cognilance registry`
-
-**Purpose:** Start the local development registry so workers and delegators can register and be discovered.
-
-Use this in its own terminal during local dev. Point `COGNILANCE_REGISTRY_URL` at it (default: `http://127.0.0.1:8080`).
+The registry is a separate service (FastAPI + PostgreSQL). See **[`registry-backend/`](registry-backend/)**.
 
 ```bash
-cognilance registry
-cognilance registry --port 9090
-cognilance registry --host 0.0.0.0 --port 8080
+cd registry-backend && docker compose up
+# API: http://127.0.0.1:8088  ·  Dashboard: http://127.0.0.1:8088/dashboard
 ```
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--port`, `-p` | `8080` | Port to listen on |
-| `--host` | `127.0.0.1` | Host to bind to |
+Point `COGNILANCE_REGISTRY_URL` at it (default: `http://127.0.0.1:8088`).
 
 ---
 
@@ -368,7 +359,7 @@ cognilance registry --host 0.0.0.0 --port 8080
 
 **Purpose:** Run a `CognilanceWorker` or `CognilanceDelegator` as a production-style A2A server. Blocks until stopped. Other agents and managers hire it via HTTP (`POST /a2a/tasks`).
 
-Auto-starts the local registry if it is not already running (unless `--no-register` is passed).
+Requires the registry backend to be running (unless `--no-register` is passed).
 
 ```bash
 cognilance run examples/worker.py
@@ -475,23 +466,20 @@ The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
 ## Local development
 
 ```bash
-# Terminal 1
-cognilance registry
+# Terminal 1 — registry backend
+cd registry-backend && docker compose up
 
 # Terminal 2 — worker
-cognilance chat examples/worker.py -p 8001
+python examples/worker_code_review.py
 
 # Terminal 3 — delegator
-cognilance chat examples/delegator.py -p 8002
+python examples/delegator_router.py
 
 # Terminal 4 — verify discovery
 cognilance discover
 
-# Terminal 5 — hire via HTTP
-curl -X POST http://localhost:8001/a2a/tasks \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $COGNILANCE_API_KEY" \
-  -d '{"input": {"text": "Hello marketplace"}}'
+# Terminal 5 — manager
+python examples/manager_editorial.py
 ```
 
 ---
@@ -501,7 +489,7 @@ curl -X POST http://localhost:8001/a2a/tasks \
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `COGNILANCE_API_KEY` | Yes | — | API key for registry and A2A auth |
-| `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8080` | Registry base URL |
+| `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry backend URL |
 | `COGNILANCE_PORT` | No | `8000` | Default port for workers and delegators |
 
 ---
@@ -521,9 +509,7 @@ cognilance/
 │   │   ├── runtime.py       # CognilanceWorker, CognilanceDelegator
 │   │   └── models.py        # Task, AgentCard, TaskResult, enums
 │   ├── registry/
-│   │   ├── client.py        # RegistryClient (HTTP)
-│   │   ├── server.py        # Local in-memory dev registry
-│   │   └── local.py         # Auto-start local registry
+│   │   └── client.py        # RegistryClient (HTTP → registry-backend)
 │   ├── transport/
 │   │   └── a2a.py           # A2AServer + A2AClient
 │   └── cli/

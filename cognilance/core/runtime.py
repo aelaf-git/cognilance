@@ -180,9 +180,9 @@ class _CognilanceRuntime(ABC):
                 await registry.close()
                 raise RuntimeError(
                     f"Cannot reach registry at {self._config.registry_url}. "
-                    "For local dev, set COGNILANCE_REGISTRY_URL=http://127.0.0.1:8080 "
-                    "(auto-started by `cognilance run`), start `cognilance registry` manually, "
-                    "or use `--no-register`."
+                    "Start the registry backend (`cd registry-backend && docker compose up`) "
+                    "or set COGNILANCE_REGISTRY_URL to your hosted registry. "
+                    "Use `--no-register` to skip registration."
                 ) from exc
             except Exception:
                 await registry.close()
@@ -195,11 +195,6 @@ class _CognilanceRuntime(ABC):
     def chat(self, *, register: bool = True, open_ui: bool = False) -> None:
         """Start the A2A server, dev chat UI, and an interactive CLI prompt loop."""
         import webbrowser
-
-        from cognilance.registry.local import ensure_local_registry
-
-        if register:
-            ensure_local_registry(self._config.registry_url)
 
         thread = threading.Thread(
             target=lambda: self.run(register=register),

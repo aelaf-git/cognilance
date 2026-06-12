@@ -1,4 +1,4 @@
-"""Registry dashboard — agent list only."""
+"""Registry dashboard — agent list (SDK-compatible)."""
 
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">

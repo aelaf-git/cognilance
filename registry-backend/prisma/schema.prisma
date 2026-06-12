@@ -1,0 +1,84 @@
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ApiKey {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(128)
+  keyPrefix String   @map("key_prefix") @db.VarChar(16)
+  keyHash   String   @map("key_hash") @db.VarChar(128)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  agents       Agent[]
+  traceEvents  TraceEvent[]
+  traceIndices TraceIndex[]
+
+  @@index([keyPrefix])
+  @@map("api_keys")
+}
+
+model Agent {
+  id            String   @id @default(uuid()) @db.Uuid
+  ownerId       String   @map("owner_id") @db.Uuid
+  name          String   @db.VarChar(256)
+  url           String   @db.VarChar(2048)
+  description   String   @default("")
+  skills        Json     @default("[]")
+  visibility    String   @default("public") @db.VarChar(32)
+  tags          Json     @default("[]")
+  version       String   @default("0.1.0") @db.VarChar(32)
+  online        Boolean  @default(true)
+  lastHeartbeat DateTime @default(now()) @map("last_heartbeat") @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner ApiKey @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([visibility, online])
+  @@index([lastHeartbeat])
+  @@map("agents")
+}
+
+model TraceEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  ownerId      String?  @map("owner_id") @db.Uuid
+  traceId      String   @map("trace_id") @db.VarChar(64)
+  taskId       String   @map("task_id") @db.VarChar(64)
+  parentTaskId String?  @map("parent_task_id") @db.VarChar(64)
+  depth        Int      @default(0)
+  agentName    String   @default("") @map("agent_name") @db.VarChar(256)
+  eventType    String   @map("type") @db.VarChar(64)
+  text         String   @default("")
+  data         Json     @default("{}")
+  timestamp    DateTime @default(now()) @db.Timestamptz(6)
+
+  owner ApiKey? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([traceId])
+  @@index([ownerId])
+  @@index([traceId, timestamp])
+  @@map("trace_events")
+}
+
+model TraceIndex {
+  traceId      String   @id @map("trace_id") @db.VarChar(64)
+  ownerId      String?  @map("owner_id") @db.Uuid
+  firstEventAt DateTime @map("first_event_at") @db.Timestamptz(6)
+  lastEventAt  DateTime @map("last_event_at") @db.Timestamptz(6)
+  eventCount   Int      @default(1) @map("event_count")
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner ApiKey? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId])
+  @@map("trace_index")
+}

@@ -9,8 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_REGISTRY_URL = "http://127.0.0.1:8080"
-DEFAULT_REGISTRY_PORT = 8080
+DEFAULT_REGISTRY_URL = "http://127.0.0.1:8088"
 DEFAULT_PORT = 8000
 HEARTBEAT_INTERVAL_SECONDS = 30
 
