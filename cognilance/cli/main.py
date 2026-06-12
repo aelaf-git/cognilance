@@ -63,8 +63,7 @@ def registry(
     """Start the local Cognilance registry (for development)."""
     base = f"http://{host}:{port}"
     console.print(f"[bold green]Registry[/bold green] listening on [cyan]{base}[/cyan]")
-    console.print(f"  Dev chat UI: [cyan]{base}/dev/chat[/cyan]")
-    console.print(f"  Dashboard:   [cyan]{base}/dashboard[/cyan]")
+    console.print(f"  Dashboard: [cyan]{base}/dashboard[/cyan]")
     uvicorn.run(create_registry_app(), host=host, port=port)
 
 

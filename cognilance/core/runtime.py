@@ -36,6 +36,8 @@ DelegatorHandlerFn = Callable[[Task, CognilanceManager], Awaitable[Task]]
 class _CognilanceRuntime(ABC):
     """Shared A2A server, registry registration, and heartbeats."""
 
+    _role: str = ""
+
     def __init__(
         self,
         *,
@@ -112,6 +114,12 @@ class _CognilanceRuntime(ABC):
             )
         return result
 
+    def _registration_tags(self) -> list[str]:
+        tags = list(self.tags)
+        if self._role and self._role not in tags:
+            tags.append(self._role)
+        return tags
+
     def _build_agent_card(self, url: str) -> AgentCard:
         return AgentCard(
             id=self._agent_id,
@@ -121,7 +129,7 @@ class _CognilanceRuntime(ABC):
             version=self.version,
             skills=[Skill.from_name(s) for s in self.skill_names],
             visibility=self.visibility,
-            tags=self.tags,
+            tags=self._registration_tags(),
         )
 
     async def _heartbeat_loop(self, registry: RegistryClient) -> None:
@@ -161,7 +169,7 @@ class _CognilanceRuntime(ABC):
                     skills=self.skill_names,
                     description=self.description,
                     visibility=self.visibility,
-                    tags=self.tags,
+                    tags=self._registration_tags(),
                 )
                 self._agent_id = card.id
                 self._agent_card.id = card.id
@@ -212,9 +220,16 @@ class _CognilanceRuntime(ABC):
 
         time.sleep(1.5)  # allow registry registration to finish
 
+        dev_chat_url = f"http://127.0.0.1:{self._port}/dev/chat"
+        dashboard_url = f"{self._config.registry_url.rstrip('/')}/dashboard"
+
         print(f"\n{self.name} is live on port {self._port}")
-        print("Type your prompt below. Managers can discover and hire me via A2A.")
-        print("Commands: 'agents' to list registry, 'exit' to quit.\n")
+        print(f"Dev chat UI: {dev_chat_url}")
+        print(f"Dashboard:   {dashboard_url}")
+        print("Terminal below — or use the browser UI. Commands: 'agents', 'exit'.\n")
+
+        if open_ui:
+            webbrowser.open(dev_chat_url)
 
         while True:
             try:
@@ -275,7 +290,7 @@ class _CognilanceRuntime(ABC):
                 skills=self.skill_names,
                 description=self.description,
                 visibility=self.visibility,
-                tags=self.tags,
+                tags=self._registration_tags(),
             )
             self._agent_id = card.id
             return card
@@ -299,6 +314,8 @@ class CognilanceWorker(_CognilanceRuntime):
 
     Does not discover or hire other agents. Use CognilanceDelegator for that.
     """
+
+    _role = "worker"
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -328,6 +345,8 @@ class CognilanceDelegator(_CognilanceRuntime):
 
     The task handler receives a CognilanceManager as its second argument.
     """
+
+    _role = "delegator"
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="cognilance/assets/logo.png" alt="Cognilance" width="320">
+</p>
+
 # Cognilance SDK
 
 **The Marketplace of Minds** — a Python SDK for building, registering, discovering, and hiring AI agents over the [A2A protocol](https://google.github.io/A2A/).
@@ -492,6 +496,9 @@ curl -X POST http://localhost:8001/a2a/tasks \
 cognilance/
 ├── cognilance/              # SDK package
 │   ├── __init__.py          # Public exports
+│   ├── assets/
+│   │   ├── __init__.py      # LOGO_PATH — brand assets
+│   │   └── logo.png         # Cognilance logo
 │   ├── manager.py           # CognilanceManager
 │   ├── config.py            # Env loading and defaults
 │   ├── core/

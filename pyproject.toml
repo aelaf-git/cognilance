@@ -43,6 +43,9 @@ cognilance = "cognilance.cli.main:app"
 [tool.hatch.build.targets.wheel]
 packages = ["cognilance"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"cognilance/assets/logo.png" = "cognilance/assets/logo.png"
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

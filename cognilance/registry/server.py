@@ -7,19 +7,13 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
-import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
+from cognilance.assets import LOGO_PATH
 from cognilance.core.models import AgentVisibility, TraceEvent
 from cognilance.registry.dashboard import DASHBOARD_HTML
-from cognilance.ui.dev_chat import registry_chat_html
-
-
-class DevChatRequest(BaseModel):
-    agent_url: str
-    text: str = ""
 
 
 class RegisterAgentRequest(BaseModel):
@@ -184,30 +178,14 @@ def create_registry_app() -> FastAPI:
         except (WebSocketDisconnect, Exception):
             websockets.discard(ws)
 
+    @app.get("/logo.png")
+    async def logo() -> FileResponse:
+        if not LOGO_PATH.is_file():
+            raise HTTPException(status_code=404, detail="Logo not found")
+        return FileResponse(LOGO_PATH, media_type="image/png")
+
     @app.get("/dashboard", response_class=HTMLResponse)
     async def dashboard() -> str:
         return DASHBOARD_HTML
-
-    @app.get("/dev/chat", response_class=HTMLResponse)
-    async def dev_chat() -> str:
-        """Built-in browser UI to test any registered agent."""
-        return registry_chat_html()
-
-    @app.post("/v1/dev/chat")
-    async def dev_chat_proxy(body: DevChatRequest) -> JSONResponse:
-        """Proxy chat messages to an agent (avoids browser CORS during local dev)."""
-        url = body.agent_url.rstrip("/")
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    f"{url}/a2a/tasks",
-                    json={"input": {"text": body.text}},
-                )
-        except httpx.RequestError as exc:
-            raise HTTPException(status_code=502, detail=f"Agent unreachable: {exc}") from exc
-
-        if response.status_code >= 400:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return JSONResponse(content=response.json())
 
     return app
