@@ -13,8 +13,8 @@ Production backend for the [Cognilance](https://github.com/cognilance) AI agent 
                                                                          │
                                                                          ▼
                                                               ┌──────────────────────┐
-                                                              │  PostgreSQL          │
-                                                              │  schema: Prisma      │
+                                                              │  SQLite (dev) or     │
+                                                              │  PostgreSQL (prod)   │
                                                               └──────────────────────┘
 ```
 
@@ -22,7 +22,8 @@ Production backend for the [Cognilance](https://github.com/cognilance) AI agent 
 
 - **SDK-compatible HTTP API** — same contract as `RegistryClient` in the Python SDK
 - **Prisma schema** — `prisma/schema.prisma` defines all tables; type-safe async Python client
-- **PostgreSQL persistence** — agents, API keys, and trace events survive restarts
+- **SQLite for local dev** — zero setup, database file at `prisma/dev.db`
+- **PostgreSQL for production** — use `docker-compose.postgres.yml` when you need a real server
 - **API key authentication** — bcrypt-hashed keys; bootstrap keys for local dev
 - **Heartbeat + stale detection** — agents go offline after 90s without a heartbeat
 - **Trace collector** — `POST /v1/traces/events` with WebSocket broadcast
@@ -60,17 +61,16 @@ COGNILANCE_API_KEY=ck-...
 COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
 ```
 
-## Local development (without Docker)
+## Local development (SQLite — recommended)
 
-**Requirements:** Python 3.11+, PostgreSQL 16
+**Requirements:** Python 3.11+ only. No Postgres install needed.
 
 ```bash
 cd registry-backend
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Start Postgres (or: docker compose up db)
-cp .env.example .env
+cp .env.example .env   # DATABASE_URL=file:./prisma/dev.db
 
 python -m prisma generate
 python -m prisma db push
@@ -79,18 +79,31 @@ python scripts/seed.py my-project
 uvicorn app.main:app --reload --port 8080
 ```
 
+The database is a single file: **`prisma/dev.db`** (gitignored).
+
+### PostgreSQL (production / staging)
+
+When you're ready for Postgres:
+
+```bash
+cp prisma/schema.postgresql.prisma prisma/schema.prisma
+python -m prisma generate
+docker compose -f docker-compose.postgres.yml up --build
+```
+
+Or point `DATABASE_URL` at any Postgres instance after swapping the schema.
+
 ### Prisma workflow
 
 | Command | Purpose |
 |---------|---------|
 | `python -m prisma generate` | Generate the async Python client from `schema.prisma` |
-| `python -m prisma db push` | Apply schema to PostgreSQL (dev) |
-| `python -m prisma migrate dev` | Create a named migration (production) |
+| `python -m prisma db push` | Apply schema to SQLite/Postgres |
 | `python -m prisma studio` | Browse data in a web UI |
 
-Schema lives in **`prisma/schema.prisma`**. After editing it, run `prisma generate` and `prisma db push` (or `migrate dev`).
+Schema lives in **`prisma/schema.prisma`** (SQLite dev). Production variant: **`prisma/schema.postgresql.prisma`**.
 
-> **Note:** [Prisma Client Python](https://github.com/RobertCraigie/prisma-client-py) is the official Python binding for Prisma schemas. The upstream repo was archived in 2025 but remains stable for PostgreSQL-backed services.
+> **Note:** [Prisma Client Python](https://github.com/RobertCraigie/prisma-client-py) supports both SQLite and PostgreSQL from the same model definitions.
 
 ## API reference
 
@@ -114,7 +127,7 @@ All write endpoints require `Authorization: Bearer <api_key>`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://cognilance:cognilance@localhost:5433/cognilance` | Prisma connection URL |
+| `DATABASE_URL` | `file:./prisma/dev.db` | Prisma connection URL (SQLite dev) |
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `8080` | Listen port |
 | `BOOTSTRAP_API_KEYS` | — | Comma-separated dev keys (not stored in DB) |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -21,7 +22,15 @@ def _skill_objects(names: list[str]) -> list[dict[str, Any]]:
 
 
 def _as_list(value: Any) -> list:
-    return value if isinstance(value, list) else []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            return []
+    return []
 
 
 def agent_to_response(agent: Agent) -> AgentResponse:
@@ -52,13 +61,11 @@ async def register_agent(
             "name": body.name,
             "url": body.url.rstrip("/"),
             "description": body.description,
-            "skills": _skill_objects(body.skills),
+            "skills": json.dumps(_skill_objects(body.skills)),
             "visibility": body.visibility,
-            "tags": body.tags,
+            "tags": json.dumps(body.tags),
             "online": True,
             "lastHeartbeat": now,
-            "createdAt": now,
-            "updatedAt": now,
         }
     )
     return agent_to_response(agent)

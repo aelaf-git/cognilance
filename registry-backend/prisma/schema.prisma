@@ -5,17 +5,17 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
 model ApiKey {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String   @db.VarChar(128)
-  keyPrefix String   @map("key_prefix") @db.VarChar(16)
-  keyHash   String   @map("key_hash") @db.VarChar(128)
+  id        String   @id @default(uuid())
+  name      String
+  keyPrefix String   @map("key_prefix")
+  keyHash   String   @map("key_hash")
   isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at")
 
   agents       Agent[]
   traceEvents  TraceEvent[]
@@ -26,19 +26,19 @@ model ApiKey {
 }
 
 model Agent {
-  id            String   @id @default(uuid()) @db.Uuid
-  ownerId       String   @map("owner_id") @db.Uuid
-  name          String   @db.VarChar(256)
-  url           String   @db.VarChar(2048)
+  id            String   @id @default(uuid())
+  ownerId       String   @map("owner_id")
+  name          String
+  url           String
   description   String   @default("")
-  skills        Json     @default("[]")
-  visibility    String   @default("public") @db.VarChar(32)
-  tags          Json     @default("[]")
-  version       String   @default("0.1.0") @db.VarChar(32)
+  skills        String   @default("[]")
+  visibility    String   @default("public")
+  tags          String   @default("[]")
+  version       String   @default("0.1.0")
   online        Boolean  @default(true)
-  lastHeartbeat DateTime @default(now()) @map("last_heartbeat") @db.Timestamptz(6)
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lastHeartbeat DateTime @default(now()) @map("last_heartbeat")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   owner ApiKey @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
@@ -49,17 +49,17 @@ model Agent {
 }
 
 model TraceEvent {
-  id           String   @id @default(uuid()) @db.Uuid
-  ownerId      String?  @map("owner_id") @db.Uuid
-  traceId      String   @map("trace_id") @db.VarChar(64)
-  taskId       String   @map("task_id") @db.VarChar(64)
-  parentTaskId String?  @map("parent_task_id") @db.VarChar(64)
+  id           String   @id @default(uuid())
+  ownerId      String?  @map("owner_id")
+  traceId      String   @map("trace_id")
+  taskId       String   @map("task_id")
+  parentTaskId String?  @map("parent_task_id")
   depth        Int      @default(0)
-  agentName    String   @default("") @map("agent_name") @db.VarChar(256)
-  eventType    String   @map("type") @db.VarChar(64)
+  agentName    String   @default("") @map("agent_name")
+  eventType    String   @map("type")
   text         String   @default("")
-  data         Json     @default("{}")
-  timestamp    DateTime @default(now()) @db.Timestamptz(6)
+  data         String   @default("{}")
+  timestamp    DateTime @default(now())
 
   owner ApiKey? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
 
@@ -70,12 +70,12 @@ model TraceEvent {
 }
 
 model TraceIndex {
-  traceId      String   @id @map("trace_id") @db.VarChar(64)
-  ownerId      String?  @map("owner_id") @db.Uuid
-  firstEventAt DateTime @map("first_event_at") @db.Timestamptz(6)
-  lastEventAt  DateTime @map("last_event_at") @db.Timestamptz(6)
+  traceId      String   @id @map("trace_id")
+  ownerId      String?  @map("owner_id")
+  firstEventAt DateTime @map("first_event_at")
+  lastEventAt  DateTime @map("last_event_at")
   eventCount   Int      @default(1) @map("event_count")
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   owner ApiKey? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
 

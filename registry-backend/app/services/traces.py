@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -14,7 +15,15 @@ from app.schemas import TraceEventIn, TraceSummary
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
 
 
 def _event_to_dict(event: TraceEvent) -> dict[str, Any]:
@@ -42,34 +51,33 @@ async def ingest_event(
     ts = body.timestamp or now
     event_id = body.id if body.id else str(uuid.uuid4())
 
-    event = await db.traceevent.create(
-        data={
-            "id": event_id,
-            "ownerId": str(owner_id) if owner_id else None,
-            "traceId": body.trace_id,
-            "taskId": body.task_id,
-            "parentTaskId": body.parent_task_id,
-            "depth": body.depth,
-            "agentName": body.agent_name,
-            "eventType": body.type,
-            "text": body.text,
-            "data": body.data,
-            "timestamp": ts,
-        }
-    )
+    event_data: dict[str, Any] = {
+        "id": event_id,
+        "traceId": body.trace_id,
+        "taskId": body.task_id,
+        "parentTaskId": body.parent_task_id,
+        "depth": body.depth,
+        "agentName": body.agent_name,
+        "eventType": body.type,
+        "text": body.text,
+        "data": json.dumps(body.data),
+        "timestamp": ts,
+    }
+    if owner_id:
+        event_data["ownerId"] = str(owner_id)
+    event = await db.traceevent.create(data=event_data)
 
     index = await db.traceindex.find_unique(where={"traceId": body.trace_id})
     if index is None:
-        await db.traceindex.create(
-            data={
-                "traceId": body.trace_id,
-                "ownerId": str(owner_id) if owner_id else None,
-                "firstEventAt": ts,
-                "lastEventAt": ts,
-                "eventCount": 1,
-                "updatedAt": now,
-            }
-        )
+        index_data: dict[str, Any] = {
+            "traceId": body.trace_id,
+            "firstEventAt": ts,
+            "lastEventAt": ts,
+            "eventCount": 1,
+        }
+        if owner_id:
+            index_data["ownerId"] = str(owner_id)
+        await db.traceindex.create(data=index_data)
     else:
         await db.traceindex.update(
             where={"traceId": body.trace_id},
