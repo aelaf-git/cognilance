@@ -8,9 +8,10 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from cognilance.core.models import AgentCard, Task, TaskResult, TaskState
+from cognilance.ui.dev_chat import agent_chat_html
 
 
 class A2AError(Exception):
@@ -68,6 +69,16 @@ class A2AServer:
         @self.app.get("/health")
         async def health() -> dict[str, str]:
             return {"status": "ok"}
+
+        @self.app.get("/dev/chat", response_class=HTMLResponse)
+        async def dev_chat() -> str:
+            """Built-in browser UI for testing this agent during development."""
+            skills = [s.name for s in self._agent_card.skills]
+            return agent_chat_html(
+                name=self._agent_card.name,
+                description=self._agent_card.description,
+                skills=skills,
+            )
 
 
 class A2AClient:

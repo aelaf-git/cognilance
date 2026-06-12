@@ -61,9 +61,10 @@ def registry(
     host: Annotated[str, typer.Option("--host", help="Host to bind to")] = "127.0.0.1",
 ) -> None:
     """Start the local Cognilance registry (for development)."""
-    console.print(
-        f"[bold green]Registry[/bold green] listening on [cyan]http://{host}:{port}[/cyan]"
-    )
+    base = f"http://{host}:{port}"
+    console.print(f"[bold green]Registry[/bold green] listening on [cyan]{base}[/cyan]")
+    console.print(f"  Dev chat UI: [cyan]{base}/dev/chat[/cyan]")
+    console.print(f"  Dashboard:   [cyan]{base}/dashboard[/cyan]")
     uvicorn.run(create_registry_app(), host=host, port=port)
 
 
@@ -108,7 +109,9 @@ def run(
     if not no_register:
         ensure_local_registry(agent._config.registry_url)
 
+    dev_chat = f"http://{host if host not in ('0.0.0.0', '::') else '127.0.0.1'}:{port}/dev/chat"
     console.print(f"[bold green]Running[/bold green] {agent.name} on port {port}")
+    console.print(f"  Dev chat UI: [cyan]{dev_chat}[/cyan]")
     agent.run(register=not no_register)
 
 

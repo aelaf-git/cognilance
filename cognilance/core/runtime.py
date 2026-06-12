@@ -180,11 +180,14 @@ class _CognilanceRuntime(ABC):
                 await registry.close()
                 raise
 
-        logger.info("Starting %s on %s:%d", self.name, self.host, self._port)
+        dev_chat_url = f"http://{self._get_public_host()}:{self._port}/dev/chat"
+        logger.info("Starting %s on %s:%d (dev chat: %s)", self.name, self.host, self._port, dev_chat_url)
         uvicorn.run(server.app, host=self.host, port=self._port)
 
-    def chat(self, *, register: bool = True) -> None:
-        """Start the A2A server and run an interactive CLI prompt loop."""
+    def chat(self, *, register: bool = True, open_ui: bool = False) -> None:
+        """Start the A2A server, dev chat UI, and an interactive CLI prompt loop."""
+        import webbrowser
+
         from cognilance.registry.local import ensure_local_registry
 
         if register:
