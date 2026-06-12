@@ -1,10 +1,11 @@
-"""Forge — independent engineering manager (Cognilance + LangChain + Groq)."""
+"""Manager — Engineering Hiring (Cognilance + LangChain + Groq)."""
 
 from __future__ import annotations
 
 import asyncio
 import os
 import sys
+from pathlib import Path
 
 from cognilance import CognilanceManager
 from dotenv import load_dotenv
@@ -13,7 +14,8 @@ from langchain_groq import ChatGroq
 
 load_dotenv()
 
-TRIAGE_SYSTEM = """You are Forge, an engineering manager.
+MANAGER_NAME = "Manager — Engineering"
+TRIAGE_SYSTEM = """You are an engineering manager on the Cognilance marketplace.
 Classify the submission as: snippet, architecture, or incident.
 Reply with one word only."""
 
@@ -41,7 +43,7 @@ async def _print_agents(manager: CognilanceManager) -> None:
 
 
 async def _run(manager: CognilanceManager, submission: str) -> None:
-    print(f"\n[trace {manager.trace_id}] Forge triaging submission...\n")
+    print(f"\n[trace {manager.trace_id}] Triaging engineering submission...\n")
     kind = (await _groq(TRIAGE_SYSTEM, submission)).strip().lower()
     print(f"Classification: {kind}\n")
 
@@ -55,7 +57,7 @@ async def _run(manager: CognilanceManager, submission: str) -> None:
     coders = await manager.discover(skills=["code-review"], limit=5)
     if coders:
         target = coders[0]
-        print(f"→ Hiring engineer: {target.name}")
+        print(f"→ Hiring: {target.name}")
         result = await manager.hire(target, input_text=payload)
         print(f"\n{result.output.text}\n")
         return
@@ -63,25 +65,28 @@ async def _run(manager: CognilanceManager, submission: str) -> None:
     routers = await manager.discover(skills=["routing"], limit=3)
     if routers:
         target = routers[0]
-        print(f"→ Hiring router delegator: {target.name}")
+        print(f"→ Hiring: {target.name}")
         result = await manager.hire(target, input_text=payload)
         print(f"\n{result.output.text}\n")
         if result.output.data.get("hired"):
             print(f"  ↳ routed to: {result.output.data['hired']}")
         return
 
-    print("No engineering agents online. Start Byte or Nexus first.\n")
+    print("No code-review workers or router delegators online.\n")
 
 
 async def main() -> None:
-    print("Forge — Engineering Manager")
+    print(f"{MANAGER_NAME}")
+    print("Managers do NOT register on the registry.")
+    print("You appear on the dashboard Managers tab after you send a task.")
+    print("Start workers/delegators first (separate terminals) — they fill Workers/Delegators tabs.")
     print("Commands: agents | exit")
     print("Dashboard: http://127.0.0.1:8080/dashboard\n")
 
-    async with CognilanceManager.from_env() as manager:
+    async with CognilanceManager(agent_name=MANAGER_NAME) as manager:
         while True:
             try:
-                line = input("forge> ").strip()
+                line = input("manager-engineering> ").strip()
             except (EOFError, KeyboardInterrupt):
                 print()
                 break

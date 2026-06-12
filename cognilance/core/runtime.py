@@ -188,8 +188,8 @@ class _CognilanceRuntime(ABC):
                 await registry.close()
                 raise
 
-        dev_chat_url = f"http://{self._get_public_host()}:{self._port}/dev/chat"
-        logger.info("Starting %s on %s:%d (dev chat: %s)", self.name, self.host, self._port, dev_chat_url)
+        chat_url = f"http://{self._get_public_host()}:{self._port}/chat"
+        logger.info("Starting %s on %s:%d (chat: %s)", self.name, self.host, self._port, chat_url)
         uvicorn.run(server.app, host=self.host, port=self._port)
 
     def chat(self, *, register: bool = True, open_ui: bool = False) -> None:
@@ -220,16 +220,14 @@ class _CognilanceRuntime(ABC):
 
         time.sleep(1.5)  # allow registry registration to finish
 
-        dev_chat_url = f"http://127.0.0.1:{self._port}/dev/chat"
-        dashboard_url = f"{self._config.registry_url.rstrip('/')}/dashboard"
+        chat_url = f"http://127.0.0.1:{self._port}/chat"
 
         print(f"\n{self.name} is live on port {self._port}")
-        print(f"Dev chat UI: {dev_chat_url}")
-        print(f"Dashboard:   {dashboard_url}")
-        print("Terminal below — or use the browser UI. Commands: 'agents', 'exit'.\n")
+        print(f"Chat UI: {chat_url}")
+        print("Terminal below — or use the chat UI in your browser. Commands: 'agents', 'exit'.\n")
 
         if open_ui:
-            webbrowser.open(dev_chat_url)
+            webbrowser.open(chat_url)
 
         while True:
             try:

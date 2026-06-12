@@ -1,4 +1,4 @@
-"""Self-contained dev chat UI — served at GET /dev/chat on each worker/delegator."""
+"""Built-in chat UI — served at GET /chat on every Cognilance worker and delegator."""
 
 from __future__ import annotations
 
@@ -10,25 +10,25 @@ def _esc(value: str) -> str:
     return html.escape(value, quote=True)
 
 
-_SHARED_STYLES = r"""
+def _esc_js(value: str) -> str:
+    return json.dumps(value)
+
+
+_CHAT_STYLES = r"""
   :root {
-    --bg: #0b0e14;
-    --panel: #11151f;
-    --panel2: #161b28;
-    --border: #232a3b;
-    --text: #d7dce6;
-    --muted: #7d8699;
-    --accent: #5b8cff;
-    --user: #2a3550;
-    --agent: #1a2233;
-    --green: #3ecf8e;
-    --red: #ff6b6b;
+    --bg: #000000;
+    --surface: #0a0a0a;
+    --surface2: #111111;
+    --border: #222222;
+    --text: #ffffff;
+    --muted: #888888;
+    --dim: #555555;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: "Inter", system-ui, sans-serif;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
     height: 100vh;
     display: flex;
     flex-direction: column;
@@ -36,128 +36,188 @@ _SHARED_STYLES = r"""
   header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px 20px;
-    background: var(--panel);
+    gap: 16px;
+    padding: 20px 28px;
     border-bottom: 1px solid var(--border);
+    background: var(--bg);
   }
-  header h1 { font-size: 16px; font-weight: 600; }
-  header h1 span { color: var(--accent); }
-  header .sub { color: var(--muted); font-size: 12px; }
-  header .links { margin-left: auto; display: flex; gap: 12px; font-size: 12px; }
-  header a { color: var(--accent); text-decoration: none; }
-  header a:hover { text-decoration: underline; }
-  #toolbar {
-    padding: 10px 20px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
+  header img { height: 28px; width: auto; }
+  header .info { flex: 1; min-width: 0; }
+  header .name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  header .sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  header .role {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  #skills-bar {
     display: flex;
-    gap: 10px;
-    align-items: center;
     flex-wrap: wrap;
+    gap: 6px;
+    padding: 12px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
   }
-  #toolbar label { font-size: 12px; color: var(--muted); }
-  #toolbar select {
-    flex: 1;
-    min-width: 200px;
-    background: var(--panel2);
+  .skill {
+    font-size: 11px;
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-size: 13px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    background: var(--surface2);
   }
   #messages {
     flex: 1;
     overflow-y: auto;
-    padding: 20px;
+    padding: 24px 28px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
+    background: var(--bg);
   }
   .msg {
-    max-width: 85%;
-    padding: 12px 14px;
-    border-radius: 12px;
-    line-height: 1.5;
+    max-width: 78%;
+    padding: 12px 16px;
+    border-radius: 4px;
+    line-height: 1.55;
     font-size: 14px;
     white-space: pre-wrap;
     word-break: break-word;
+    border: 1px solid var(--border);
   }
-  .msg.user { align-self: flex-end; background: var(--user); border: 1px solid var(--border); }
-  .msg.agent { align-self: flex-start; background: var(--agent); border: 1px solid var(--border); }
-  .msg.system { align-self: center; color: var(--muted); font-size: 12px; background: transparent; padding: 4px; }
-  .msg.error { align-self: flex-start; background: rgba(255,107,107,0.12); border-color: var(--red); color: #ffb4b4; }
-  .meta { margin-top: 8px; font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--surface2);
+    color: var(--text);
+  }
+  .msg.agent {
+    align-self: flex-start;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .msg.system {
+    align-self: center;
+    color: var(--muted);
+    font-size: 12px;
+    background: transparent;
+    border: none;
+    padding: 4px;
+  }
+  .msg.error {
+    align-self: flex-start;
+    background: var(--surface);
+    color: var(--muted);
+    border-color: var(--dim);
+  }
+  .meta {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: ui-monospace, monospace;
+  }
+  .typing {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 0 28px 8px;
+    letter-spacing: 0.02em;
+  }
   #composer {
-    padding: 16px 20px;
-    background: var(--panel);
+    padding: 16px 28px 20px;
+    background: var(--surface);
     border-top: 1px solid var(--border);
     display: flex;
     gap: 10px;
   }
   #input {
     flex: 1;
-    background: var(--panel2);
+    background: var(--surface2);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 4px;
     padding: 12px 14px;
     font-size: 14px;
     resize: none;
-    min-height: 44px;
-    max-height: 120px;
+    min-height: 46px;
+    max-height: 140px;
     font-family: inherit;
   }
-  #input:focus { outline: none; border-color: var(--accent); }
+  #input:focus { outline: none; border-color: var(--muted); }
+  #input::placeholder { color: var(--dim); }
   #send {
-    background: var(--accent);
-    color: #fff;
+    background: var(--text);
+    color: var(--bg);
     border: none;
-    border-radius: 10px;
-    padding: 0 20px;
+    border-radius: 4px;
+    padding: 0 22px;
     font-weight: 600;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
+    letter-spacing: 0.02em;
   }
-  #send:disabled { opacity: 0.5; cursor: not-allowed; }
-  .typing { color: var(--muted); font-size: 12px; padding: 0 20px 8px; }
+  #send:disabled { opacity: 0.4; cursor: not-allowed; }
 """
 
 
-def agent_chat_html(*, name: str, description: str = "", skills: list[str] | None = None) -> str:
-    """Chat UI for a single running worker/delegator (same-origin A2A)."""
-    skill_text = ", ".join(skills or [])
-    desc = _esc(description or "Test your agent handler in the browser.")
+def agent_chat_html(
+    *,
+    name: str,
+    description: str = "",
+    skills: list[str] | None = None,
+    role: str = "agent",
+) -> str:
+    """Chat UI for a running worker or delegator."""
+    skill_list = skills or []
+    desc = _esc(description or "Built-in Cognilance chat.")
+    role_label = _esc(role)
+    skills_html = "".join(f'<span class="skill">{_esc(s)}</span>' for s in skill_list)
+    skills_bar = (
+        f'<div id="skills-bar">{skills_html}</div>' if skills_html else ""
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{_esc(name)} — Dev Chat</title>
-<style>{_SHARED_STYLES}</style>
+<title>{_esc(name)} — Cognilance</title>
+<style>{_CHAT_STYLES}</style>
 </head>
 <body>
 <header>
-  <div>
-    <h1><span>{_esc(name)}</span> — Dev Chat</h1>
+  <img src="/logo.png" alt="Cognilance">
+  <div class="info">
+    <div class="name">{_esc(name)}</div>
     <div class="sub">{desc}</div>
   </div>
-  <div class="links">
-    <a href="/a2a" target="_blank">Agent card</a>
-    <a href="/health" target="_blank">Health</a>
-  </div>
+  <span class="role">{role_label}</span>
 </header>
-<div id="toolbar" style="display:none"></div>
+{skills_bar}
 <div id="messages"></div>
-<div class="typing" id="typing" hidden>Agent is thinking…</div>
+<div class="typing" id="typing" hidden>Thinking…</div>
 <form id="composer" onsubmit="return sendMsg(event)">
   <textarea id="input" rows="1" placeholder="Message {_esc(name)}…" autofocus></textarea>
   <button type="submit" id="send">Send</button>
 </form>
 <script>
 const AGENT = {_esc_js(name)};
-const SKILLS = {_esc_js(skill_text)};
 
 function esc(s) {{
   return String(s ?? "").replace(/[&<>"']/g, c =>
@@ -197,7 +257,7 @@ async function sendMsg(e) {{
       const out = data.output?.text || "(empty response)";
       let meta = "";
       const d = data.output?.data || {{}};
-      if (d.hired) meta += "hired: " + d.hired;
+      if (d.hired) meta += "hired: " + (Array.isArray(d.hired) ? d.hired.join(" → ") : d.hired);
       if (d.routed_skill) meta += (meta ? " · " : "") + "skill: " + d.routed_skill;
       if (d.mode) meta += (meta ? " · " : "") + "mode: " + d.mode;
       addMsg("agent", out, meta || null);
@@ -212,14 +272,10 @@ async function sendMsg(e) {{
   return false;
 }}
 
-addMsg("system", "Connected to " + AGENT + (SKILLS ? " [" + SKILLS + "]" : "") + ". Same handler as the terminal.");
+addMsg("system", "Connected to " + AGENT);
 document.getElementById("input").addEventListener("keydown", (e) => {{
   if (e.key === "Enter" && !e.shiftKey) {{ e.preventDefault(); document.getElementById("composer").requestSubmit(); }}
 }});
 </script>
 </body>
 </html>"""
-
-
-def _esc_js(value: str) -> str:
-    return json.dumps(value)

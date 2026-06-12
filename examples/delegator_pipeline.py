@@ -1,26 +1,28 @@
-"""Prism — independent multi-hop pipeline delegator (Cognilance + LangChain + Groq)."""
+"""Delegator — Launch Pipeline (Cognilance + LangChain + Groq)."""
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from cognilance import CognilanceDelegator, CognilanceManager
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-PLANNER_SYSTEM = """You are Prism, a pipeline planner.
+PLANNER_SYSTEM = """You are a launch-pipeline delegator on the Cognilance marketplace.
 Decide if a task needs a TWO-STEP pipeline (technical review then marketing polish).
 Reply with exactly one word: pipeline or direct"""
 
-SYNTH_SYSTEM = """You are Prism. Merge technical notes and marketing copy into one cohesive deliverable."""
+SYNTH_SYSTEM = """You are a launch-pipeline delegator.
+Merge technical notes and marketing copy into one cohesive deliverable."""
 
 delegator = CognilanceDelegator(
-    name="Prism",
+    name="Delegator — Launch Pipeline",
     skills=["pipeline", "product-launch"],
-    description="Chains Byte then Spark for launch-ready tech+marketing output.",
+    description="Chains code-review and marketing workers for launch-ready output.",
     tags=["delegator", "langchain", "groq"],
     port=8011,
 )
@@ -38,22 +40,25 @@ async def _groq(system: str, user: str) -> str:
 
 @delegator.on_task
 async def handle(task, manager: CognilanceManager):
-    task.think("Prism deciding between pipeline vs direct hire")
+    task.think("Deciding between pipeline vs direct hire")
     plan = (await _groq(PLANNER_SYSTEM, task.input.text)).strip().lower()
     hired: list[str] = []
 
     if "pipeline" in plan:
-        task.think("Pipeline mode: hire Byte for technical pass")
+        task.think("Pipeline mode: hire code-review worker")
         coders = await manager.discover(skills=["code-review"], limit=3)
         if not coders:
-            return task.complete(text="Pipeline needs Byte (code-review) online.", data={"hired": []})
+            return task.complete(
+                text="Pipeline needs Worker — Code Review online.",
+                data={"hired": []},
+            )
 
         tech = await manager.hire(
             coders[0],
             input_text=f"Technical review for launch:\n{task.input.text}",
         )
         hired.append(coders[0].name)
-        task.think(f"Technical pass from {coders[0].name} — hiring Spark")
+        task.think(f"Technical pass from {coders[0].name} — hiring marketing worker")
 
         marketers = await manager.discover(skills=["marketing"], limit=3)
         if not marketers:
@@ -69,15 +74,15 @@ async def handle(task, manager: CognilanceManager):
         )
         return task.complete(text=final, data={"hired": hired, "mode": "pipeline"})
 
-    task.think("Direct mode: hire best marketing specialist")
+    task.think("Direct mode: hire marketing worker")
     marketers = await manager.discover(skills=["marketing"], limit=3)
     if marketers:
         result = await manager.hire(marketers[0], input_text=task.input.text)
         hired.append(marketers[0].name)
         return task.complete(text=result.output.text, data={"hired": hired, "mode": "direct"})
 
-    task.think("No marketers online — local Groq fallback")
-    answer = await _groq("You are Prism, a product communications lead.", task.input.text)
+    task.think("No workers online — local fallback")
+    answer = await _groq("You are a launch-pipeline delegator.", task.input.text)
     return task.complete(text=answer, data={"hired": hired, "mode": "fallback"})
 
 

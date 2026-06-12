@@ -513,9 +513,12 @@ cognilance/
 │   └── cli/
 │       └── main.py          # cognilance CLI entry point
 ├── examples/
-│   ├── worker.py            # Leaf worker with interactive chat
-│   ├── delegator.py         # Coordinator that hires others
-│   └── orchestrator.py      # Manager-only hiring script
+│   ├── worker_code_review.py    # Worker — Code Review
+│   ├── worker_marketing.py      # Worker — Marketing Copy
+│   ├── delegator_router.py      # Delegator — Task Router
+│   ├── delegator_pipeline.py    # Delegator — Launch Pipeline
+│   ├── manager_editorial.py     # Manager — Editorial Hiring
+│   └── manager_engineering.py   # Manager — Engineering Hiring
 ├── pyproject.toml
 ├── requirements.txt
 └── README.md

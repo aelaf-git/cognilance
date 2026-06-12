@@ -389,7 +389,7 @@ function renderRegisteredCard(a) {
       <div class="desc">${esc(a.description || "No description.")}</div>
       <div class="skills">${skills || '<span class="skill">—</span>'}</div>
       <div class="meta">
-        <a href="${esc(a.url)}/dev/chat" target="_blank">${esc(a.url)}</a>
+        <a href="${esc(a.url)}/chat" target="_blank">${esc(a.url)}</a>
         ${a.id ? " · " + esc(a.id.slice(0, 8)) : ""}
       </div>
     </div>`;

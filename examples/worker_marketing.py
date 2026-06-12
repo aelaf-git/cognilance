@@ -1,24 +1,25 @@
-"""Spark — independent marketing-copy worker (Cognilance + LangChain + Groq)."""
+"""Worker — Marketing Copy (Cognilance + LangChain + Groq)."""
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from cognilance import CognilanceWorker
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-SYSTEM = """You are Spark, a brand copywriter.
+SYSTEM = """You are a marketing-copy worker on the Cognilance marketplace.
 Write punchy marketing copy: headlines, taglines, social posts, and CTAs.
 Match the audience implied in the brief. Keep it vivid and concise."""
 
 worker = CognilanceWorker(
-    name="Spark",
+    name="Worker — Marketing Copy",
     skills=["marketing", "copywriting", "social-media"],
-    description="Creates marketing and social copy with Groq Llama 3.3.",
+    description="Writes marketing and social media copy.",
     tags=["worker", "langchain", "groq"],
     port=8002,
 )
@@ -39,7 +40,7 @@ async def handle(task):
     task.think("Parsing brief and audience tone")
     copy = await _groq(SYSTEM, task.input.text)
     task.think("Finalizing campaign copy")
-    return task.complete(text=copy, data={"worker": "Spark"})
+    return task.complete(text=copy, data={"role": "worker", "job": "marketing"})
 
 
 if __name__ == "__main__":

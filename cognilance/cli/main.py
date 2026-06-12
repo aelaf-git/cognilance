@@ -108,9 +108,9 @@ def run(
     if not no_register:
         ensure_local_registry(agent._config.registry_url)
 
-    dev_chat = f"http://{host if host not in ('0.0.0.0', '::') else '127.0.0.1'}:{port}/dev/chat"
+    chat_url = f"http://{host if host not in ('0.0.0.0', '::') else '127.0.0.1'}:{port}/chat"
     console.print(f"[bold green]Running[/bold green] {agent.name} on port {port}")
-    console.print(f"  Dev chat UI: [cyan]{dev_chat}[/cyan]")
+    console.print(f"  Chat UI: [cyan]{chat_url}[/cyan]")
     agent.run(register=not no_register)
 
 
