@@ -12,9 +12,10 @@ from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 MANAGER_NAME = "Manager — Engineering"
+PORT = 8021
 TRIAGE_SYSTEM = """You are an engineering manager on the Cognilance marketplace.
 Classify the submission as: snippet, architecture, or incident.
 Reply with one word only."""
@@ -30,22 +31,10 @@ async def _groq(system: str, user: str) -> str:
     return msg.content if isinstance(msg.content, str) else str(msg.content)
 
 
-async def _print_agents(manager: CognilanceManager) -> None:
-    agents = await manager.discover(limit=50)
-    if not agents:
-        print("\n(registry empty)\n")
-        return
-    print()
-    for a in agents:
-        skills = ", ".join(s.name for s in a.skills)
-        print(f"  • {a.name} [{skills}]")
-    print()
-
-
-async def _run(manager: CognilanceManager, submission: str) -> None:
-    print(f"\n[trace {manager.trace_id}] Triaging engineering submission...\n")
+async def handle(manager: CognilanceManager, submission: str) -> str:
+    lines = [f"[trace {manager.trace_id}] Triaging engineering submission…"]
     kind = (await _groq(TRIAGE_SYSTEM, submission)).strip().lower()
-    print(f"Classification: {kind}\n")
+    lines.append(f"Classification: {kind}")
 
     prompt_prefix = {
         "snippet": "Code snippet review:\n",
@@ -57,50 +46,33 @@ async def _run(manager: CognilanceManager, submission: str) -> None:
     coders = await manager.discover(skills=["code-review"], limit=5)
     if coders:
         target = coders[0]
-        print(f"→ Hiring: {target.name}")
+        lines.append(f"→ Hiring: {target.name}")
         result = await manager.hire(target, input_text=payload)
-        print(f"\n{result.output.text}\n")
-        return
+        lines.append(result.output.text)
+        return "\n\n".join(lines)
 
     routers = await manager.discover(skills=["routing"], limit=3)
     if routers:
         target = routers[0]
-        print(f"→ Hiring: {target.name}")
+        lines.append(f"→ Hiring: {target.name}")
         result = await manager.hire(target, input_text=payload)
-        print(f"\n{result.output.text}\n")
+        lines.append(result.output.text)
         if result.output.data.get("hired"):
-            print(f"  ↳ routed to: {result.output.data['hired']}")
-        return
+            lines.append(f"↳ routed to: {result.output.data['hired']}")
+        return "\n\n".join(lines)
 
-    print("No code-review workers or router delegators online.\n")
+    return "\n\n".join(lines + ["No code-review workers or router delegators online."])
 
 
 async def main() -> None:
-    print(f"{MANAGER_NAME}")
-    print("Managers do NOT register on the registry.")
-    print("You appear on the dashboard Managers tab after you send a task.")
-    print("Start workers/delegators first (separate terminals) — they fill Workers/Delegators tabs.")
-    print("Commands: agents | exit")
-    print("Dashboard: http://127.0.0.1:8080/dashboard\n")
-
+    open_ui = "--open" in sys.argv
     async with CognilanceManager(agent_name=MANAGER_NAME) as manager:
-        while True:
-            try:
-                line = input("manager-engineering> ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print()
-                break
-            if not line:
-                continue
-            if line.lower() in {"exit", "quit"}:
-                break
-            if line.lower() == "agents":
-                await _print_agents(manager)
-                continue
-            try:
-                await _run(manager, line)
-            except Exception as exc:
-                print(f"Error: {exc}\n", file=sys.stderr)
+        manager.chat(
+            handle,
+            description="Triages engineering work and hires code-review workers or routers.",
+            port=PORT,
+            open_ui=open_ui,
+        )
 
 
 if __name__ == "__main__":

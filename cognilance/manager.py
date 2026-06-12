@@ -8,7 +8,10 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from cognilance.config import Config
+import httpx
+import uvicorn
+
+from cognilance.config import Config, DEFAULT_PORT
 from cognilance.core.models import AgentCard, AgentVisibility, TaskResult, TaskState, TraceContext
 from cognilance.core.tracing import TraceEmitter
 from cognilance.registry.client import RegistryClient
@@ -56,6 +59,10 @@ class CognilanceManager:
     def trace_id(self) -> str:
         """ID correlating every event in this hire chain (visible on the dashboard)."""
         return self._trace.trace_id
+
+    @property
+    def agent_name(self) -> str:
+        return self._agent_name
 
     async def _emit(self, type: str, text: str = "", **data: Any) -> None:
         await self._emitter.emit(
@@ -206,3 +213,71 @@ class CognilanceManager:
     async def get_agent(self, agent_id: str) -> AgentCard:
         """Look up a single agent by ID."""
         return await self._registry.get_agent(agent_id)
+
+    def chat(
+        self,
+        handler: Callable[[CognilanceManager, str], Awaitable[str]],
+        *,
+        description: str = "",
+        host: str = "0.0.0.0",
+        port: int | None = None,
+        open_ui: bool = False,
+    ) -> None:
+        """
+        Start a local chat UI and optional terminal loop.
+
+        Managers are not listed on the registry — this only serves GET/POST /chat
+        on the given port. Pass an async handler: ``async def handle(manager, message) -> str``.
+        """
+        import threading
+        import time
+        import webbrowser
+
+        from cognilance.transport.manager_chat import ManagerChatServer
+
+        listen_port = port or DEFAULT_PORT
+        server = ManagerChatServer(
+            manager=self,
+            handler=handler,
+            description=description,
+        )
+
+        thread = threading.Thread(
+            target=lambda: uvicorn.run(server.app, host=host, port=listen_port),
+            daemon=True,
+            name=f"cognilance-manager-{self._agent_name}",
+        )
+        thread.start()
+
+        health_url = f"http://127.0.0.1:{listen_port}/health"
+        for _ in range(60):
+            try:
+                if httpx.get(health_url, timeout=0.5).status_code == 200:
+                    break
+            except httpx.HTTPError:
+                time.sleep(0.25)
+        else:
+            raise RuntimeError(f"{self._agent_name} failed to start on port {listen_port}")
+
+        chat_url = f"http://127.0.0.1:{listen_port}/chat"
+        print(f"\n{self._agent_name} chat UI: {chat_url}")
+        print("Terminal below — or use the chat UI in your browser. Commands: agents, exit.\n")
+
+        if open_ui:
+            webbrowser.open(chat_url)
+
+        while True:
+            try:
+                line = input(f"{self._agent_name}> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+            if not line:
+                continue
+            if line.lower() in {"exit", "quit"}:
+                break
+            try:
+                reply = asyncio.run(server._dispatch(line))
+                print(f"\n{reply}\n")
+            except Exception as exc:
+                print(f"Error: {exc}\n")

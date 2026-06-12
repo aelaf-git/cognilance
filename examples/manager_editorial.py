@@ -15,6 +15,7 @@ from langchain_groq import ChatGroq
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 MANAGER_NAME = "Manager — Editorial"
+PORT = 8020
 BRIEF_SYSTEM = """You are an editorial manager on the Cognilance marketplace.
 Rewrite the user's raw notes into a clear creative brief for a marketing worker.
 Output only the brief, max 120 words."""
@@ -30,70 +31,41 @@ async def _groq(system: str, user: str) -> str:
     return msg.content if isinstance(msg.content, str) else str(msg.content)
 
 
-async def _print_agents(manager: CognilanceManager) -> None:
-    agents = await manager.discover(limit=50)
-    if not agents:
-        print("\n(registry empty)\n")
-        return
-    print()
-    for a in agents:
-        skills = ", ".join(s.name for s in a.skills)
-        print(f"  • {a.name} [{skills}]")
-    print()
-
-
-async def _run(manager: CognilanceManager, notes: str) -> None:
-    print(f"\n[trace {manager.trace_id}] Shaping editorial brief...\n")
+async def handle(manager: CognilanceManager, notes: str) -> str:
+    lines = [f"[trace {manager.trace_id}] Shaping editorial brief…"]
     brief = await _groq(BRIEF_SYSTEM, notes)
-    print(f"Brief:\n{brief}\n")
+    lines.append(f"Brief:\n{brief}")
 
     marketers = await manager.discover(skills=["marketing"], limit=5)
     if marketers:
         target = marketers[0]
-        print(f"→ Hiring: {target.name}")
+        lines.append(f"→ Hiring: {target.name}")
         result = await manager.hire(target, input_text=brief)
-        print(f"\n{result.output.text}\n")
-        return
+        lines.append(result.output.text)
+        return "\n\n".join(lines)
 
     pipelines = await manager.discover(skills=["pipeline"], limit=3)
     if pipelines:
         target = pipelines[0]
-        print(f"→ Hiring: {target.name}")
+        lines.append(f"→ Hiring: {target.name}")
         result = await manager.hire(target, input_text=notes)
-        print(f"\n{result.output.text}\n")
+        lines.append(result.output.text)
         if result.output.data.get("hired"):
-            print(f"  ↳ chain: {result.output.data['hired']}")
-        return
+            lines.append(f"↳ chain: {result.output.data['hired']}")
+        return "\n\n".join(lines)
 
-    print("No marketing workers or pipeline delegators online.\n")
+    return "\n\n".join(lines + ["No marketing workers or pipeline delegators online."])
 
 
 async def main() -> None:
-    print(f"{MANAGER_NAME}")
-    print("Managers do NOT register on the registry.")
-    print("You appear on the dashboard Managers tab after you send a task.")
-    print("Start workers/delegators first (separate terminals) — they fill Workers/Delegators tabs.")
-    print("Commands: agents | exit")
-    print("Dashboard: http://127.0.0.1:8080/dashboard\n")
-
+    open_ui = "--open" in sys.argv
     async with CognilanceManager(agent_name=MANAGER_NAME) as manager:
-        while True:
-            try:
-                line = input("manager-editorial> ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print()
-                break
-            if not line:
-                continue
-            if line.lower() in {"exit", "quit"}:
-                break
-            if line.lower() == "agents":
-                await _print_agents(manager)
-                continue
-            try:
-                await _run(manager, line)
-            except Exception as exc:
-                print(f"Error: {exc}\n", file=sys.stderr)
+        manager.chat(
+            handle,
+            description="Shapes creative briefs and hires marketing workers or launch pipelines.",
+            port=PORT,
+            open_ui=open_ui,
+        )
 
 
 if __name__ == "__main__":

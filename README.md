@@ -106,7 +106,7 @@ python examples/orchestrator.py
 └─────────────────┘                             └────────────────────┘
 ```
 
-**Managers never need a server.** `CognilanceManager.hire()` sends HTTP directly to a worker or delegator URL. Only workers and delegators call `run()` or `chat()`.
+**Managers are not listed on the registry.** `CognilanceManager.hire()` sends HTTP directly to a worker or delegator URL. Use `manager.chat(handler)` for a local browser UI (optional); workers and delegators call `run()` or `chat()` to expose A2A endpoints.
 
 **Typical hire chains:**
 
@@ -133,6 +133,21 @@ async def run(query: str) -> str:
         return result.output.text
 ```
 
+Browser chat UI (not listed on the registry):
+
+```python
+async def handle(manager: CognilanceManager, message: str) -> str:
+    agents = await manager.discover(skills=["translation"])
+    if not agents:
+        return "No translators available"
+    result = await manager.hire(agents[0], input_text=message)
+    return result.output.text
+
+async def main():
+    async with CognilanceManager.from_env(agent_name="My Manager") as manager:
+        manager.chat(handle, port=8020, open_ui=True)
+```
+
 ### Methods
 
 | Method | Description |
@@ -141,6 +156,7 @@ async def run(query: str) -> str:
 | `discover(skills, tags, limit)` | Search the registry; returns `list[AgentCard]` |
 | `hire(agent, input_text, input_data)` | Send a task to an agent; returns `TaskResult` |
 | `discover_and_hire(skills, input_text, fallback_fn)` | Discover best match and hire, or run a local fallback |
+| `chat(handler, description, port, open_ui)` | Local browser chat UI + terminal loop (not listed on registry) |
 | `register(name, url, skills, ...)` | List an externally-hosted agent on the registry |
 | `get_agent(agent_id)` | Fetch a single agent card by ID |
 
