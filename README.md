@@ -76,8 +76,8 @@ COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
 ### Run a worker
 
 ```bash
-# Terminal 1 — registry (Docker, SQLite)
-cd registry && docker compose up
+# Terminal 1 — registry (Docker, SQLite, auto-reload on code changes)
+cd registry && docker compose watch
 
 # Terminal 2 — an agent (registers + serves over A2A)
 python agents/research_agent.py
@@ -345,6 +345,12 @@ The registry is a **separate service** from the Python SDK. Agents built with th
 
 ```bash
 cd registry
+docker compose watch
+```
+
+`docker compose watch` syncs `app/` into the container and restarts uvicorn on changes. For a one-off run without file watching:
+
+```bash
 docker compose up --build
 ```
 
@@ -411,7 +417,7 @@ Schema lives in **`prisma/schema.prisma`**.
 
 ```bash
 # Terminal 1 — registry
-cd registry && docker compose up
+cd registry && docker compose watch
 
 # Terminal 2 — agent
 export COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
@@ -492,7 +498,7 @@ The CLI is for **local development and operations** — running workers/delegato
 Start the registry separately — see [Registry](#registry) for Docker, SQLite, and API details.
 
 ```bash
-cd registry && docker compose up
+cd registry && docker compose watch
 # API: http://127.0.0.1:8088  ·  Dashboard: http://127.0.0.1:8088/dashboard
 ```
 
@@ -610,7 +616,7 @@ The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
 
 ```bash
 # Terminal 1 — registry
-cd registry && docker compose up
+cd registry && docker compose watch
 
 # Terminal 2-4 — agents
 python agents/research_agent.py
