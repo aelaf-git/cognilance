@@ -1,0 +1,17 @@
+{
+  "name": "cognilance-orchestrator-ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@langchain/langgraph-sdk": "^0.0.73",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^2.15.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "typescript": "~5.7.2"
+  }
+}

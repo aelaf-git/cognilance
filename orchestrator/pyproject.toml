@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cognilance-orchestrator"
+version = "0.1.0"
+description = "Generative-UI orchestrator that discovers and hires Cognilance agents"
+requires-python = ">=3.10"
+dependencies = [
+    "langgraph>=0.2.64",
+    "langchain-core>=0.3.0",
+    "langchain-groq>=0.2.0",
+    "python-dotenv>=1.0.0",
+    "cognilance",
+]
+
+[project.optional-dependencies]
+dev = [
+    "langgraph-cli[inmem]>=0.1.55",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orchestrator"]
+
+[tool.uv.sources]
+cognilance = { path = "..", editable = true }

@@ -27,6 +27,8 @@ Three classes, three roles. Pick the one that matches what your code does.
 - [Framework integration](#framework-integration)
 - [A2A protocol](#a2a-protocol)
 - [Registry](#registry)
+- [Agents](#agents)
+- [Orchestrator (generative UI)](#orchestrator-generative-ui)
 - [CLI reference](#cli-reference)
 - [Local development](#local-development)
 - [Environment variables](#environment-variables)
@@ -77,15 +79,17 @@ COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
 # Terminal 1 — registry (Docker, SQLite)
 cd registry && docker compose up
 
-# Terminal 2 — example worker
-python examples/worker_code_review.py
+# Terminal 2 — an agent (registers + serves over A2A)
+python agents/research_agent.py
 ```
 
-### Hire from a manager script
+### Hire from the orchestrator
 
 ```bash
-python examples/orchestrator.py
+cd orchestrator && langgraph dev
 ```
+
+See [Agents](#agents) and [Orchestrator (generative UI)](#orchestrator-generative-ui) for the full flow.
 
 ---
 
@@ -409,10 +413,61 @@ Schema lives in **`prisma/schema.prisma`**.
 # Terminal 1 — registry
 cd registry && docker compose up
 
-# Terminal 2 — worker
+# Terminal 2 — agent
 export COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
-python examples/worker_code_review.py
+python agents/research_agent.py
 ```
+
+---
+
+## Agents
+
+Reusable Python agents live in [`agents/`](agents/). Each one is a `CognilanceWorker` backed by [Groq](https://groq.com), registers itself on the registry on startup, and returns **structured `output.data`** that the orchestrator renders as generative UI.
+
+| Agent | Skill | Port | Output shape | UI component |
+|-------|-------|------|--------------|--------------|
+| `research_agent.py` | `research` | 8101 | `{ summary, sources[] }` | `research-sources` |
+| `data_analyst.py` | `data-analysis` | 8102 | `{ title, chartType, series[] }` | `data-chart` |
+| `code_reviewer.py` | `code-review` | 8103 | `{ summary, findings[] }` | `code-findings` |
+
+### Run the agents
+
+```bash
+cd agents
+pip install -r requirements.txt
+cp .env.example .env          # add your GROQ_API_KEY
+
+python research_agent.py      # :8101
+python data_analyst.py        # :8102  (separate terminal)
+python code_reviewer.py       # :8103  (separate terminal)
+```
+
+Each agent needs `GROQ_API_KEY` and a reachable registry (`COGNILANCE_REGISTRY_URL`, default `http://127.0.0.1:8088`).
+
+---
+
+## Orchestrator (generative UI)
+
+The [`orchestrator/`](orchestrator/) is a **Python LangGraph** supervisor that uses the Cognilance SDK to discover and hire agents, then renders their results with **generative UI** components (React/TSX, served by LangGraph).
+
+Flow per prompt:
+
+1. **router** node (Groq) picks a route: `research`, `dataAnalyst`, `codeReviewer`, or `general`.
+2. **hire** node opens a `CognilanceManager`, calls `discover(skills=[...])`, then `hire(agent, input_text=...)`.
+3. The hired agent's `output.data` is mapped to a UI component via `push_ui_message(...)`; if no matching agent is online, it falls back to a text answer.
+4. **general** node answers directly with Groq when no specialist fits.
+
+```bash
+cd orchestrator
+cp .env.example .env          # add your GROQ_API_KEY
+pip install -e .
+(cd ui && npm install)        # generative-UI bundle deps
+langgraph dev                 # serves the graph on :2024
+```
+
+Then point [Agent Chat UI](https://github.com/langchain-ai/agent-chat-ui) or LangGraph Studio at `http://127.0.0.1:2024`, graph `orchestrator`.
+
+> The render components in `orchestrator/ui/` are React/TSX because generative UI runs in the browser; all graph and agent logic is Python.
 
 ---
 
@@ -420,7 +475,7 @@ python examples/worker_code_review.py
 
 After `pip install -e .`, the `cognilance` command is available. Run `cognilance` with no arguments to print built-in help.
 
-The CLI is for **local development and operations** — running workers/delegators and inspecting the marketplace. Start the registry separately via **[`registry/`](registry/)**. `CognilanceManager` has no CLI command; use a Python script (see `examples/`).
+The CLI is for **local development and operations** — running workers/delegators and inspecting the marketplace. Start the registry separately via **[`registry/`](registry/)**. `CognilanceManager` has no CLI command; the [orchestrator](#orchestrator-generative-ui) uses it directly in Python.
 
 ### Command overview
 
@@ -450,9 +505,9 @@ cd registry && docker compose up
 Requires the registry to be running (unless `--no-register` is passed).
 
 ```bash
-cognilance run examples/worker.py
-cognilance run examples/delegator.py --port 8002
-cognilance run examples/worker.py --host 0.0.0.0 --port 8001 --no-register
+cognilance run agents/research_agent.py
+cognilance run agents/code_reviewer.py --port 8103
+cognilance run agents/research_agent.py --host 0.0.0.0 --port 8101 --no-register
 ```
 
 | Argument / option | Default | Description |
@@ -479,9 +534,9 @@ delegator = CognilanceDelegator(name="...", skills=["..."])
 Useful while developing handlers without writing a separate client or curl commands.
 
 ```bash
-cognilance chat examples/worker.py
-cognilance chat examples/delegator.py --port 8002
-cognilance chat examples/worker.py --no-register
+cognilance chat agents/research_agent.py
+cognilance chat agents/code_reviewer.py --port 8103
+cognilance chat agents/research_agent.py --no-register
 ```
 
 | Argument / option | Default | Description |
@@ -539,7 +594,7 @@ cognilance info abc123-agent-id
 Loads metadata (name, skills, description) from the Python file and posts the given public URL to the registry.
 
 ```bash
-cognilance register examples/worker.py --url https://my-agent.example.com
+cognilance register agents/research_agent.py --url https://my-agent.example.com
 ```
 
 | Argument / option | Description |
@@ -557,17 +612,16 @@ The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
 # Terminal 1 — registry
 cd registry && docker compose up
 
-# Terminal 2 — worker
-python examples/worker_code_review.py
+# Terminal 2-4 — agents
+python agents/research_agent.py
+python agents/data_analyst.py
+python agents/code_reviewer.py
 
-# Terminal 3 — delegator
-python examples/delegator_router.py
-
-# Terminal 4 — verify discovery
+# Terminal 5 — verify discovery
 cognilance discover
 
-# Terminal 5 — manager
-python examples/manager_editorial.py
+# Terminal 6 — orchestrator (generative UI on :2024)
+cd orchestrator && langgraph dev
 ```
 
 ---
@@ -578,6 +632,8 @@ python examples/manager_editorial.py
 |----------|----------|---------|-------------|
 | `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL |
 | `COGNILANCE_PORT` | No | `8000` | Default port for workers and delegators |
+| `GROQ_API_KEY` | For agents/orchestrator | — | Groq API key used by the agents and the orchestrator |
+| `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | Groq model for agents and the orchestrator |
 
 ---
 
@@ -601,13 +657,26 @@ cognilance/
 │   │   └── a2a.py           # A2AServer + A2AClient
 │   └── cli/
 │       └── main.py          # cognilance CLI entry point
-├── examples/
-│   ├── worker_code_review.py    # Worker — Code Review
-│   ├── worker_marketing.py      # Worker — Marketing Copy
-│   ├── delegator_router.py      # Delegator — Task Router
-│   ├── delegator_pipeline.py    # Delegator — Launch Pipeline
-│   ├── manager_editorial.py     # Manager — Editorial Hiring
-│   └── manager_engineering.py   # Manager — Engineering Hiring
+├── agents/                  # Groq-backed CognilanceWorker agents
+│   ├── research_agent.py    # skill: research      → research-sources UI
+│   ├── data_analyst.py      # skill: data-analysis → data-chart UI
+│   ├── code_reviewer.py     # skill: code-review   → code-findings UI
+│   ├── requirements.txt
+│   └── .env.example
+├── orchestrator/            # Python LangGraph supervisor + generative UI
+│   ├── langgraph.json       # graphs + ui bundle config
+│   ├── pyproject.toml
+│   ├── .env.example
+│   ├── src/orchestrator/
+│   │   ├── graph.py         # StateGraph: router → hire/general → END
+│   │   ├── state.py         # messages + ui + route
+│   │   ├── llm.py           # Groq factory + message helpers
+│   │   └── nodes/           # router, hire (discover+hire+render), general
+│   └── ui/                  # React/TSX generative-UI components
+│       ├── index.tsx        # ComponentMap
+│       ├── research-sources/
+│       ├── data-chart/
+│       └── code-findings/
 ├── registry/                # Registry API (FastAPI + Prisma + SQLite)
 │   ├── prisma/
 │   │   └── schema.prisma

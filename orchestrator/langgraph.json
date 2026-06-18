@@ -1,0 +1,11 @@
+{
+  "node_version": "20",
+  "dependencies": ["."],
+  "graphs": {
+    "orchestrator": "./src/orchestrator/graph.py:graph"
+  },
+  "ui": {
+    "orchestrator": "./ui/index.tsx"
+  },
+  "env": ".env"
+}
