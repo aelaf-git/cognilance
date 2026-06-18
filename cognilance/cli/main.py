@@ -129,10 +129,7 @@ def discover(
     config = Config.from_env()
 
     async def _discover() -> None:
-        registry = RegistryClient(
-            registry_url=config.registry_url,
-            api_key=config.require_api_key(),
-        )
+        registry = RegistryClient(registry_url=config.registry_url)
         try:
             agents = await registry.discover(skills=skills, tags=tags, limit=limit)
         except RegistryError as exc:
@@ -175,10 +172,7 @@ def info(
     config = Config.from_env()
 
     async def _info() -> None:
-        registry = RegistryClient(
-            registry_url=config.registry_url,
-            api_key=config.require_api_key(),
-        )
+        registry = RegistryClient(registry_url=config.registry_url)
         try:
             agent = await registry.get_agent(agent_id)
         except RegistryError as exc:

@@ -3,11 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from prisma import Prisma
 
-from app.auth import AuthContext, get_auth_context
 from app.database import get_db
 from app.schemas import StatusResponse, TraceDetailResponse, TraceEventIn, TraceListResponse
 from app.services import traces as trace_service
-from app.services.api_keys import ensure_api_key
 from app.ws import TraceHub
 
 router = APIRouter(prefix="/v1/traces", tags=["traces"])
@@ -20,18 +18,10 @@ def get_hub(request: Request) -> TraceHub:
 @router.post("/events", response_model=StatusResponse)
 async def collect_event(
     body: TraceEventIn,
-    request: Request,
     db: Prisma = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
     hub: TraceHub = Depends(get_hub),
 ) -> StatusResponse:
-    owner_id = auth.api_key_id
-    if auth.is_bootstrap:
-        raw_key = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-        if raw_key:
-            owner_id = await ensure_api_key(db, raw_key=raw_key, name="bootstrap")
-
-    payload = await trace_service.ingest_event(db, body=body, owner_id=owner_id)
+    payload = await trace_service.ingest_event(db, body=body)
     await hub.broadcast({"kind": "event", "event": payload})
     return StatusResponse()
 
@@ -40,7 +30,6 @@ async def collect_event(
 async def list_traces(
     limit: int = Query(default=50, ge=1, le=200),
     db: Prisma = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> TraceListResponse:
     traces = await trace_service.list_traces(db, limit=limit)
     return TraceListResponse(traces=traces)
@@ -50,7 +39,6 @@ async def list_traces(
 async def get_trace(
     trace_id: str,
     db: Prisma = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> TraceDetailResponse:
     try:
         events = await trace_service.get_trace(db, trace_id=trace_id)

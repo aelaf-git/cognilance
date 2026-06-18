@@ -73,10 +73,7 @@ class _CognilanceRuntime(ABC):
 
     def _get_emitter(self) -> TraceEmitter:
         if self._emitter is None:
-            self._emitter = TraceEmitter(
-                registry_url=self._config.registry_url,
-                api_key=self._config.api_key,
-            )
+            self._emitter = TraceEmitter(registry_url=self._config.registry_url)
         return self._emitter
 
     async def _emit(self, task: Task, type: str, text: str = "", **data) -> None:
@@ -144,7 +141,6 @@ class _CognilanceRuntime(ABC):
 
     def run(self, *, register: bool = True) -> None:
         """Start the A2A listener, register with the registry, and serve tasks."""
-        api_key = self._config.require_api_key()
         agent_url = f"http://{self._get_public_host()}:{self._port}"
         self._agent_card = self._build_agent_card(agent_url)
 
@@ -158,10 +154,7 @@ class _CognilanceRuntime(ABC):
             if not register:
                 return
 
-            registry = RegistryClient(
-                registry_url=self._config.registry_url,
-                api_key=api_key,
-            )
+            registry = RegistryClient(registry_url=self._config.registry_url)
             try:
                 card = await registry.register(
                     name=self.name,
@@ -180,7 +173,7 @@ class _CognilanceRuntime(ABC):
                 await registry.close()
                 raise RuntimeError(
                     f"Cannot reach registry at {self._config.registry_url}. "
-                    "Start the registry backend (`cd registry-backend && docker compose up`) "
+                    "Start the registry (`cd registry && docker compose up`) "
                     "or set COGNILANCE_REGISTRY_URL to your hosted registry. "
                     "Use `--no-register` to skip registration."
                 ) from exc
@@ -253,10 +246,7 @@ class _CognilanceRuntime(ABC):
                 print(f"\nError: {result.status.message}\n")
 
     async def _print_registry(self) -> None:
-        registry = RegistryClient(
-            registry_url=self._config.registry_url,
-            api_key=self._config.require_api_key(),
-        )
+        registry = RegistryClient(registry_url=self._config.registry_url)
         try:
             agents = await registry.discover(limit=50, exclude_id=self._agent_id)
             if not agents:
@@ -272,10 +262,7 @@ class _CognilanceRuntime(ABC):
 
     async def register_external(self, url: str) -> AgentCard:
         """Register an externally-hosted agent with the registry."""
-        registry = RegistryClient(
-            registry_url=self._config.registry_url,
-            api_key=self._config.require_api_key(),
-        )
+        registry = RegistryClient(registry_url=self._config.registry_url)
         try:
             card = await registry.register(
                 name=self.name,

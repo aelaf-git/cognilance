@@ -6,7 +6,6 @@ import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
 
 from prisma import Prisma
 from prisma.models import TraceEvent
@@ -45,7 +44,6 @@ async def ingest_event(
     db: Prisma,
     *,
     body: TraceEventIn,
-    owner_id: UUID | str | None,
 ) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     ts = body.timestamp or now
@@ -63,8 +61,6 @@ async def ingest_event(
         "data": json.dumps(body.data),
         "timestamp": ts,
     }
-    if owner_id:
-        event_data["ownerId"] = str(owner_id)
     event = await db.traceevent.create(data=event_data)
 
     index = await db.traceindex.find_unique(where={"traceId": body.trace_id})
@@ -75,8 +71,6 @@ async def ingest_event(
             "lastEventAt": ts,
             "eventCount": 1,
         }
-        if owner_id:
-            index_data["ownerId"] = str(owner_id)
         await db.traceindex.create(data=index_data)
     else:
         await db.traceindex.update(

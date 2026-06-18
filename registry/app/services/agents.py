@@ -51,13 +51,11 @@ def agent_to_response(agent: Agent) -> AgentResponse:
 async def register_agent(
     db: Prisma,
     *,
-    owner_id: UUID | str,
     body: RegisterAgentRequest,
 ) -> AgentResponse:
     now = datetime.now(timezone.utc)
     agent = await db.agent.create(
         data={
-            "ownerId": str(owner_id),
             "name": body.name,
             "url": body.url.rstrip("/"),
             "description": body.description,
@@ -71,10 +69,10 @@ async def register_agent(
     return agent_to_response(agent)
 
 
-async def heartbeat(db: Prisma, *, agent_id: UUID | str, owner_id: UUID | str) -> None:
+async def heartbeat(db: Prisma, *, agent_id: UUID | str) -> None:
     now = datetime.now(timezone.utc)
     result = await db.agent.update_many(
-        where={"id": str(agent_id), "ownerId": str(owner_id)},
+        where={"id": str(agent_id)},
         data={"online": True, "lastHeartbeat": now, "updatedAt": now},
     )
     if result == 0:
@@ -82,12 +80,9 @@ async def heartbeat(db: Prisma, *, agent_id: UUID | str, owner_id: UUID | str) -
 
 
 async def get_agent(
-    db: Prisma, *, agent_id: UUID | str, owner_id: UUID | str | None = None
+    db: Prisma, *, agent_id: UUID | str
 ) -> AgentResponse:
-    where: dict[str, Any] = {"id": str(agent_id)}
-    if owner_id is not None:
-        where["ownerId"] = str(owner_id)
-    agent = await db.agent.find_first(where=where)
+    agent = await db.agent.find_first(where={"id": str(agent_id)})
     if agent is None:
         raise LookupError("Agent not found")
     return agent_to_response(agent)

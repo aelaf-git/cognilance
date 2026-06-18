@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 
-from app.api import admin, agents, health, traces
+from app.api import agents, health, traces
 from app.config import get_settings
 from app.dashboard import DASHBOARD_HTML
 from app.database import connect_db, disconnect_db, prisma
@@ -73,7 +73,6 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(agents.router)
     app.include_router(traces.router)
-    app.include_router(admin.router)
 
     @app.get("/logo.png")
     async def logo() -> FileResponse:

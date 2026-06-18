@@ -26,7 +26,7 @@ Three classes, three roles. Pick the one that matches what your code does.
 - [CognilanceDelegator](#cognilancedelegator)
 - [Framework integration](#framework-integration)
 - [A2A protocol](#a2a-protocol)
-- [Registry backend](#registry-backend)
+- [Registry](#registry)
 - [CLI reference](#cli-reference)
 - [Local development](#local-development)
 - [Environment variables](#environment-variables)
@@ -65,18 +65,17 @@ pip install -e .
 
 ### Configure
 
-Create a `.env` file in the project root (already gitignored):
+Create a `.env` file in the project root (optional — defaults work for local dev):
 
 ```bash
-COGNILANCE_API_KEY=ck-your-key-here
 COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
 ```
 
 ### Run a worker
 
 ```bash
-# Terminal 1 — registry backend (Docker, SQLite)
-cd registry-backend && docker compose up
+# Terminal 1 — registry (Docker, SQLite)
+cd registry && docker compose up
 
 # Terminal 2 — example worker
 python examples/worker_code_review.py
@@ -152,7 +151,7 @@ async def main():
 
 | Method | Description |
 |--------|-------------|
-| `from_env()` | Create from `COGNILANCE_API_KEY` and `COGNILANCE_REGISTRY_URL` |
+| `from_env()` | Create from `COGNILANCE_REGISTRY_URL` |
 | `discover(skills, tags, limit)` | Search the registry; returns `list[AgentCard]` |
 | `hire(agent, input_text, input_data)` | Send a task to an agent; returns `TaskResult` |
 | `discover_and_hire(skills, input_text, fallback_fn)` | Discover best match and hire, or run a local fallback |
@@ -307,18 +306,17 @@ Workers and delegators expose these HTTP endpoints:
 ```bash
 curl -X POST http://localhost:8001/a2a/tasks \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ck-your-key-here" \
   -d '{"input": {"text": "Translate hello to French"}}'
 ```
 
 ---
 
-## Registry backend
+## Registry
 
-The registry is a **separate service** from the Python SDK. Agents built with the SDK talk to it over HTTP via `RegistryClient`. The backend lives in [`registry-backend/`](registry-backend/).
+The registry is a **separate service** from the Python SDK. Agents built with the SDK talk to it over HTTP via `RegistryClient`. It lives in [`registry/`](registry/).
 
 ```
-┌─────────────────────┐         HTTP (Bearer API key)         ┌──────────────────────┐
+┌─────────────────────┐              HTTP (open API)              ┌──────────────────────┐
 │  Cognilance SDK     │ ─────────────────────────────────────►│  Registry API        │
 │  (pip install)      │   register · discover · heartbeat     │  (FastAPI)           │
 │                     │   trace events                        │                      │
@@ -326,8 +324,7 @@ The registry is a **separate service** from the Python SDK. Agents built with th
                                                                          │
                                                                          ▼
                                                               ┌──────────────────────┐
-                                                              │  SQLite (dev) or     │
-                                                              │  PostgreSQL (prod)   │
+                                                              │  SQLite              │
                                                               └──────────────────────┘
 ```
 
@@ -335,9 +332,7 @@ The registry is a **separate service** from the Python SDK. Agents built with th
 
 - **SDK-compatible HTTP API** — same contract as `RegistryClient` in the Python SDK
 - **Prisma schema** — `prisma/schema.prisma` defines all tables; type-safe async Python client
-- **SQLite for local dev** — zero setup, database file at `prisma/dev.db`
-- **PostgreSQL for production** — use `docker-compose.postgres.yml` when you need a real server
-- **API key authentication** — bcrypt-hashed keys; bootstrap keys for local dev
+- **SQLite** — zero setup, database file at `prisma/dev.db`
 - **Heartbeat + stale detection** — agents go offline after 90s without a heartbeat
 - **Trace collector** — `POST /v1/traces/events` with WebSocket broadcast
 - **Dashboard** — `GET /dashboard` (Workers / Delegators tabs)
@@ -345,8 +340,7 @@ The registry is a **separate service** from the Python SDK. Agents built with th
 ### Quick start (Docker)
 
 ```bash
-cd registry-backend
-cp .env.example .env
+cd registry
 docker compose up --build
 ```
 
@@ -356,115 +350,67 @@ docker compose up --build
 | http://localhost:8088/dashboard | Agent marketplace UI |
 | http://localhost:8088/v1/agents/discover | Public agent search |
 
-Default bootstrap key: `ck-dev-bootstrap-key`
+### Local development
 
-Create an API key:
-
-```bash
-curl -X POST http://localhost:8088/v1/admin/api-keys \
-  -H "Authorization: Bearer ck-dev-bootstrap-key" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-project"}'
-```
-
-Add the printed key to your SDK `.env`:
-
-```env
-COGNILANCE_API_KEY=ck-...
-COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
-```
-
-### Local development (SQLite)
-
-**Requirements:** Python 3.11+ only. No Postgres install needed.
+**Requirements:** Python 3.11+
 
 ```bash
-cd registry-backend
+cd registry
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-cp .env.example .env   # DATABASE_URL=file:./prisma/dev.db
-
 python -m prisma generate
 python -m prisma db push
-python scripts/seed.py my-project
 
 uvicorn app.main:app --reload --port 8080
 ```
 
 The database is a single file: **`prisma/dev.db`** (gitignored). Point the SDK at `http://127.0.0.1:8080` when running uvicorn locally.
 
-### PostgreSQL (production / staging)
-
-When you're ready for Postgres:
-
-```bash
-cp prisma/schema.postgresql.prisma prisma/schema.prisma
-python -m prisma generate
-docker compose -f docker-compose.postgres.yml up --build
-```
-
-Or point `DATABASE_URL` at any Postgres instance after swapping the schema.
-
 ### Prisma workflow
 
 | Command | Purpose |
 |---------|---------|
 | `python -m prisma generate` | Generate the async Python client from `schema.prisma` |
-| `python -m prisma db push` | Apply schema to SQLite/Postgres |
+| `python -m prisma db push` | Apply schema to SQLite |
 | `python -m prisma studio` | Browse data in a web UI |
 
-Schema lives in **`prisma/schema.prisma`** (SQLite dev). Production variant: **`prisma/schema.postgresql.prisma`**.
-
-> **Note:** [Prisma Client Python](https://github.com/RobertCraigie/prisma-client-py) supports both SQLite and PostgreSQL from the same model definitions.
+Schema lives in **`prisma/schema.prisma`**.
 
 ### API reference
 
-All write endpoints require `Authorization: Bearer <api_key>`.
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/health` | — | Health check |
-| POST | `/v1/agents` | ✓ | Register agent |
-| GET | `/v1/agents/discover` | — | Search public online agents |
-| GET | `/v1/agents/{id}` | — | Get agent by ID |
-| POST | `/v1/agents/{id}/heartbeat` | ✓ | Keep agent online |
-| POST | `/v1/traces/events` | ✓ | Ingest trace event |
-| GET | `/v1/traces` | ✓ | List recent traces |
-| GET | `/v1/traces/{id}` | ✓ | Trace detail |
-| WS | `/v1/traces/ws` | — | Live trace stream |
-| POST | `/v1/admin/api-keys` | bootstrap | Create API key |
-| GET | `/dashboard` | — | Web UI |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check |
+| POST | `/v1/agents` | Register agent |
+| GET | `/v1/agents/discover` | Search public online agents |
+| GET | `/v1/agents/{id}` | Get agent by ID |
+| POST | `/v1/agents/{id}/heartbeat` | Keep agent online |
+| POST | `/v1/traces/events` | Ingest trace event |
+| GET | `/v1/traces` | List recent traces |
+| GET | `/v1/traces/{id}` | Trace detail |
+| WS | `/v1/traces/ws` | Live trace stream |
+| GET | `/dashboard` | Web UI |
 
 ### Backend environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `file:./prisma/dev.db` | Prisma connection URL (SQLite dev) |
+| `DATABASE_URL` | `file:./prisma/dev.db` | SQLite database path |
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `8080` | Listen port |
-| `BOOTSTRAP_API_KEYS` | — | Comma-separated dev keys (not stored in DB) |
 | `HEARTBEAT_TIMEOUT_SECONDS` | `90` | Mark agents offline after this gap |
 | `STALE_CHECK_INTERVAL_SECONDS` | `30` | Background stale-agent sweep interval |
 | `CORS_ORIGINS` | `*` | Allowed CORS origins |
-
-### Backend tests
-
-```bash
-cd registry-backend
-docker compose up -d
-RUN_REGISTRY_TESTS=1 pytest -v
-```
 
 ### Connecting the SDK
 
 ```bash
 # Terminal 1 — registry
-cd registry-backend && docker compose up
+cd registry && docker compose up
 
 # Terminal 2 — worker
 export COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
-export COGNILANCE_API_KEY=ck-dev-bootstrap-key
 python examples/worker_code_review.py
 ```
 
@@ -474,7 +420,7 @@ python examples/worker_code_review.py
 
 After `pip install -e .`, the `cognilance` command is available. Run `cognilance` with no arguments to print built-in help.
 
-The CLI is for **local development and operations** — running workers/delegators and inspecting the marketplace. Start the registry separately via **[`registry-backend/`](registry-backend/)**. `CognilanceManager` has no CLI command; use a Python script (see `examples/`).
+The CLI is for **local development and operations** — running workers/delegators and inspecting the marketplace. Start the registry separately via **[`registry/`](registry/)**. `CognilanceManager` has no CLI command; use a Python script (see `examples/`).
 
 ### Command overview
 
@@ -486,12 +432,12 @@ The CLI is for **local development and operations** — running workers/delegato
 | `info` | Show full details for one agent by ID |
 | `register` | List an externally-hosted worker/delegator on the registry |
 
-### Registry backend
+### Registry
 
-Start the registry separately — see [Registry backend](#registry-backend) for Docker, SQLite dev, Postgres production, and API details.
+Start the registry separately — see [Registry](#registry) for Docker, SQLite, and API details.
 
 ```bash
-cd registry-backend && docker compose up
+cd registry && docker compose up
 # API: http://127.0.0.1:8088  ·  Dashboard: http://127.0.0.1:8088/dashboard
 ```
 
@@ -501,7 +447,7 @@ cd registry-backend && docker compose up
 
 **Purpose:** Run a `CognilanceWorker` or `CognilanceDelegator` as a production-style A2A server. Blocks until stopped. Other agents and managers hire it via HTTP (`POST /a2a/tasks`).
 
-Requires the registry backend to be running (unless `--no-register` is passed).
+Requires the registry to be running (unless `--no-register` is passed).
 
 ```bash
 cognilance run examples/worker.py
@@ -608,8 +554,8 @@ The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
 ## Local development
 
 ```bash
-# Terminal 1 — registry backend
-cd registry-backend && docker compose up
+# Terminal 1 — registry
+cd registry && docker compose up
 
 # Terminal 2 — worker
 python examples/worker_code_review.py
@@ -630,8 +576,7 @@ python examples/manager_editorial.py
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `COGNILANCE_API_KEY` | Yes | — | API key for registry and A2A auth |
-| `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry backend URL |
+| `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL |
 | `COGNILANCE_PORT` | No | `8000` | Default port for workers and delegators |
 
 ---
@@ -651,7 +596,7 @@ cognilance/
 │   │   ├── runtime.py       # CognilanceWorker, CognilanceDelegator
 │   │   └── models.py        # Task, AgentCard, TaskResult, enums
 │   ├── registry/
-│   │   └── client.py        # RegistryClient (HTTP → registry-backend)
+│   │   └── client.py        # RegistryClient (HTTP → registry)
 │   ├── transport/
 │   │   └── a2a.py           # A2AServer + A2AClient
 │   └── cli/
@@ -663,20 +608,16 @@ cognilance/
 │   ├── delegator_pipeline.py    # Delegator — Launch Pipeline
 │   ├── manager_editorial.py     # Manager — Editorial Hiring
 │   └── manager_engineering.py   # Manager — Engineering Hiring
-├── registry-backend/        # Production registry API (FastAPI + Prisma)
+├── registry/                # Registry API (FastAPI + Prisma + SQLite)
 │   ├── prisma/
-│   │   ├── schema.prisma              # SQLite dev schema
-│   │   └── schema.postgresql.prisma   # Postgres production variant
+│   │   └── schema.prisma
 │   ├── app/
 │   │   ├── api/             # FastAPI routers
 │   │   ├── services/        # Business logic (uses Prisma client)
 │   │   ├── schemas.py       # Pydantic DTOs (SDK-compatible)
-│   │   ├── auth.py
 │   │   ├── database.py      # Prisma client singleton
 │   │   └── main.py
-│   ├── scripts/seed.py
 │   ├── docker-compose.yml
-│   ├── docker-compose.postgres.yml
 │   └── Dockerfile
 ├── pyproject.toml
 ├── requirements.txt

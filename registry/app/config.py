@@ -17,15 +17,10 @@ class Settings(BaseSettings):
 
     heartbeat_timeout_seconds: int = 90
     stale_check_interval_seconds: int = 30
-    bootstrap_api_keys: str = ""
     cors_origins: str = "*"
 
     def prisma_database_url(self) -> str:
-        """Normalize DATABASE_URL for Prisma (sqlite file: or postgresql://)."""
-        url = self.database_url
-        if url.startswith("postgresql+asyncpg://"):
-            return url.replace("postgresql+asyncpg://", "postgresql://", 1)
-        return url
+        return self.database_url
 
 
 @lru_cache

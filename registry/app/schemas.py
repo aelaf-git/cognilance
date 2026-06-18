@@ -75,14 +75,3 @@ class TraceDetailResponse(BaseModel):
 
 class StatusResponse(BaseModel):
     status: str = "ok"
-
-
-class CreateApiKeyRequest(BaseModel):
-    name: str = "default"
-
-
-class CreateApiKeyResponse(BaseModel):
-    id: UUID
-    name: str
-    key: str
-    prefix: str

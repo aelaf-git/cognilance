@@ -21,13 +21,10 @@ class TraceEmitter:
     interrupt agent work.
     """
 
-    def __init__(self, *, registry_url: str, api_key: str | None = None) -> None:
-        headers = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+    def __init__(self, *, registry_url: str) -> None:
         self._client = httpx.AsyncClient(
             base_url=registry_url.rstrip("/"),
-            headers=headers,
+            headers={"Content-Type": "application/json"},
             timeout=5.0,
         )
 

@@ -109,11 +109,11 @@ class A2AServer:
 class A2AClient:
     """Client for sending tasks to other agents via A2A."""
 
-    def __init__(self, *, api_key: str | None = None) -> None:
-        headers: dict[str, str] = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-        self._client = httpx.AsyncClient(headers=headers, timeout=120.0)
+    def __init__(self) -> None:
+        self._client = httpx.AsyncClient(
+            headers={"Content-Type": "application/json"},
+            timeout=120.0,
+        )
 
     async def close(self) -> None:
         await self._client.aclose()

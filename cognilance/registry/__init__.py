@@ -1,4 +1,4 @@
-"""Registry HTTP client — talks to the Cognilance registry backend."""
+"""Registry HTTP client — talks to the Cognilance registry."""
 
 from cognilance.registry.client import RegistryClient
 

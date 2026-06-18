@@ -16,21 +16,12 @@ HEARTBEAT_INTERVAL_SECONDS = 30
 
 @dataclass(frozen=True)
 class Config:
-    api_key: str | None
     registry_url: str
     port: int = DEFAULT_PORT
 
     @classmethod
     def from_env(cls, *, port: int | None = None) -> Config:
         return cls(
-            api_key=os.getenv("COGNILANCE_API_KEY"),
             registry_url=os.getenv("COGNILANCE_REGISTRY_URL", DEFAULT_REGISTRY_URL).rstrip("/"),
             port=port or int(os.getenv("COGNILANCE_PORT", str(DEFAULT_PORT))),
         )
-
-    def require_api_key(self) -> str:
-        if not self.api_key:
-            raise ValueError(
-                "COGNILANCE_API_KEY is required. Set it in your environment or .env file."
-            )
-        return self.api_key

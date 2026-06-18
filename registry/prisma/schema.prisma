@@ -9,25 +9,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model ApiKey {
-  id        String   @id @default(uuid())
-  name      String
-  keyPrefix String   @map("key_prefix")
-  keyHash   String   @map("key_hash")
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  agents       Agent[]
-  traceEvents  TraceEvent[]
-  traceIndices TraceIndex[]
-
-  @@index([keyPrefix])
-  @@map("api_keys")
-}
-
 model Agent {
   id            String   @id @default(uuid())
-  ownerId       String   @map("owner_id")
   name          String
   url           String
   description   String   @default("")
@@ -40,9 +23,6 @@ model Agent {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  owner ApiKey @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-
-  @@index([ownerId])
   @@index([visibility, online])
   @@index([lastHeartbeat])
   @@map("agents")
@@ -50,7 +30,6 @@ model Agent {
 
 model TraceEvent {
   id           String   @id @default(uuid())
-  ownerId      String?  @map("owner_id")
   traceId      String   @map("trace_id")
   taskId       String   @map("task_id")
   parentTaskId String?  @map("parent_task_id")
@@ -61,24 +40,17 @@ model TraceEvent {
   data         String   @default("{}")
   timestamp    DateTime @default(now())
 
-  owner ApiKey? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-
   @@index([traceId])
-  @@index([ownerId])
   @@index([traceId, timestamp])
   @@map("trace_events")
 }
 
 model TraceIndex {
   traceId      String   @id @map("trace_id")
-  ownerId      String?  @map("owner_id")
   firstEventAt DateTime @map("first_event_at")
   lastEventAt  DateTime @map("last_event_at")
   eventCount   Int      @default(1) @map("event_count")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  owner ApiKey? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-
-  @@index([ownerId])
   @@map("trace_index")
 }

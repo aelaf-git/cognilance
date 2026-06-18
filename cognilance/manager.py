@@ -34,7 +34,6 @@ class CognilanceManager:
     def __init__(
         self,
         *,
-        api_key: str | None = None,
         registry_url: str | None = None,
         agent_id: str | None = None,
         config: Config | None = None,
@@ -43,17 +42,16 @@ class CognilanceManager:
         agent_name: str = "Manager",
     ) -> None:
         cfg = config or Config.from_env()
-        self._api_key = api_key or cfg.require_api_key()
         self._registry_url = (registry_url or cfg.registry_url).rstrip("/")
         self._agent_id = agent_id
-        self._registry = RegistryClient(registry_url=self._registry_url, api_key=self._api_key)
-        self._a2a = A2AClient(api_key=self._api_key)
+        self._registry = RegistryClient(registry_url=self._registry_url)
+        self._a2a = A2AClient()
         # Trace context: inherited when running inside a delegator handler,
         # otherwise this manager is the root of a new hire chain.
         self._trace = trace or TraceContext()
         self._task_id = task_id or f"manager-{uuid.uuid4().hex[:12]}"
         self._agent_name = agent_name
-        self._emitter = TraceEmitter(registry_url=self._registry_url, api_key=self._api_key)
+        self._emitter = TraceEmitter(registry_url=self._registry_url)
 
     @property
     def trace_id(self) -> str:
@@ -78,7 +76,7 @@ class CognilanceManager:
 
     @classmethod
     def from_env(cls, *, agent_id: str | None = None) -> CognilanceManager:
-        """Create a manager using COGNILANCE_API_KEY and COGNILANCE_REGISTRY_URL from .env."""
+        """Create a manager using COGNILANCE_REGISTRY_URL from .env."""
         return cls(agent_id=agent_id)
 
     async def close(self) -> None:

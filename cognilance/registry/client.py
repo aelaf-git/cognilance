@@ -14,15 +14,11 @@ class RegistryError(Exception):
 
 
 class RegistryClient:
-    def __init__(self, *, registry_url: str, api_key: str) -> None:
+    def __init__(self, *, registry_url: str) -> None:
         self._registry_url = registry_url.rstrip("/")
-        self._api_key = api_key
         self._client = httpx.AsyncClient(
             base_url=self._registry_url,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
+            headers={"Content-Type": "application/json"},
             timeout=30.0,
         )
 
