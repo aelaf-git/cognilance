@@ -21,7 +21,8 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+_ROOT_ENV = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_ROOT_ENV)
 
 SYSTEM = """You are a data-analysis worker on the Cognilance marketplace.
 Given a request, produce a single chartable dataset. Choose a clear chart title,

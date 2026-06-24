@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
-from dotenv import load_dotenv
 from langchain_core.messages import BaseMessage
 from langchain_groq import ChatGroq
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+import orchestrator.env  # noqa: F401
 
 
 def get_llm(temperature: float = 0.2) -> ChatGroq:

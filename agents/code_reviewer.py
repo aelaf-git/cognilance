@@ -23,7 +23,8 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+_ROOT_ENV = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_ROOT_ENV)
 
 SYSTEM = """You are a code-review worker on the Cognilance marketplace.
 Audit the submitted code for bugs, security flaws, performance issues, and style

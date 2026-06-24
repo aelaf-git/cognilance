@@ -8,11 +8,13 @@ version = "0.1.0"
 description = "Generative-UI orchestrator that discovers and hires Cognilance agents"
 requires-python = ">=3.10"
 dependencies = [
+    "cognilance",
     "langgraph>=0.2.64",
     "langchain-core>=0.3.0",
     "langchain-groq>=0.2.0",
     "python-dotenv>=1.0.0",
-    "cognilance",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
 ]
 
 [project.optional-dependencies]
@@ -20,8 +22,8 @@ dev = [
     "langgraph-cli[inmem]>=0.1.55",
 ]
 
+[project.scripts]
+cognilance-orchestrator = "orchestrator.main:cli"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/orchestrator"]
-
-[tool.uv.sources]
-cognilance = { path = "..", editable = true }

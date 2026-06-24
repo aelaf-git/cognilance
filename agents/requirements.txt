@@ -1,5 +1,4 @@
-# Cognilance SDK (editable install from the repo root)
--e ..
+# Install the Cognilance SDK first from the repo root: pip install -e .
 
 # LLM provider
 langchain-core>=0.3.0

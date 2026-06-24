@@ -2,21 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Sequence, TypedDict
+from typing import Annotated, Any, Sequence, TypedDict
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from langgraph.graph.ui import AnyUIMessage, ui_message_reducer
 
 
-class State(TypedDict, total=False):
-    """Shared state for the orchestrator.
+class Plan(TypedDict, total=False):
+    action: str
+    skill: str | None
+    reasoning: str
+    suggested_ui: str | None
 
-    - ``messages``: the running chat transcript.
-    - ``ui``: generative UI messages emitted via ``push_ui_message``.
-    - ``route``: the skill bucket chosen by the router node.
-    """
+
+class HireResult(TypedDict, total=False):
+    mode: str
+    text: str
+    data: dict[str, Any]
+    skill: str | None
+    agent_name: str | None
+
+
+class State(TypedDict, total=False):
+    """Shared state for the orchestrator graph."""
 
     messages: Annotated[list[BaseMessage], add_messages]
     ui: Annotated[Sequence[AnyUIMessage], ui_message_reducer]
-    route: str
+    plan: Plan
+    hire_result: HireResult

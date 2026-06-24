@@ -86,8 +86,10 @@ python agents/research_agent.py
 ### Hire from the orchestrator
 
 ```bash
-cd orchestrator && langgraph dev
+python -m orchestrator
 ```
+
+Open the chat UI link printed on startup (default `http://127.0.0.1:8200/chat`).
 
 See [Agents](#agents) and [Orchestrator (generative UI)](#orchestrator-generative-ui) for the full flow.
 
@@ -439,41 +441,67 @@ Reusable Python agents live in [`agents/`](agents/). Each one is a `CognilanceWo
 ### Run the agents
 
 ```bash
-cd agents
-pip install -r requirements.txt
-cp .env.example .env          # add your GROQ_API_KEY
+pip install -r agents/requirements.txt
 
-python research_agent.py      # :8101
-python data_analyst.py        # :8102  (separate terminal)
-python code_reviewer.py       # :8103  (separate terminal)
+# Groq + registry settings live in the repo root .env
+python agents/research_agent.py      # :8101
+python agents/data_analyst.py        # :8102  (separate terminal)
+python agents/code_reviewer.py       # :8103  (separate terminal)
 ```
 
-Each agent needs `GROQ_API_KEY` and a reachable registry (`COGNILANCE_REGISTRY_URL`, default `http://127.0.0.1:8088`).
+Each agent reads `GROQ_API_KEY` and `COGNILANCE_REGISTRY_URL` from the **repo root** `.env` (default registry `http://127.0.0.1:8088`).
+
+Start all three at once:
+
+```bash
+./scripts/start_agents.sh
+```
 
 ---
 
 ## Orchestrator (generative UI)
 
-The [`orchestrator/`](orchestrator/) is a **Python LangGraph** supervisor that uses the Cognilance SDK to discover and hire agents, then renders their results with **generative UI** components (React/TSX, served by LangGraph).
+The [`orchestrator/`](orchestrator/) is a **Python LangGraph** supervisor with two internal agents:
 
-Flow per prompt:
+1. **planner** — discovers agents on the registry via `CognilanceManager`, plans which specialist to hire, and executes the hire over A2A (or answers directly when no hire is needed).
+2. **ui_agent** — chooses a generative UI component (`research-sources`, `data-chart`, `code-findings`, or `text-card`) based on the user request and specialist output.
 
-1. **router** node (Groq) picks a route: `research`, `dataAnalyst`, `codeReviewer`, or `general`.
-2. **hire** node opens a `CognilanceManager`, calls `discover(skills=[...])`, then `hire(agent, input_text=...)`.
-3. The hired agent's `output.data` is mapped to a UI component via `push_ui_message(...)`; if no matching agent is online, it falls back to a text answer.
-4. **general** node answers directly with Groq when no specialist fits.
+The orchestrator ships its own **embedded chat UI** (registry-style dark theme) served by FastAPI — no LangGraph Studio required.
+
+### End-to-end (three terminals)
+
+**Terminal 1 — registry**
 
 ```bash
-cd orchestrator
-cp .env.example .env          # add your GROQ_API_KEY
-pip install -e .
-(cd ui && npm install)        # generative-UI bundle deps
-langgraph dev                 # serves the graph on :2024
+cd registry && docker compose watch
 ```
 
-Then point [Agent Chat UI](https://github.com/langchain-ai/agent-chat-ui) or LangGraph Studio at `http://127.0.0.1:2024`, graph `orchestrator`.
+**Terminal 2 — agents**
 
-> The render components in `orchestrator/ui/` are React/TSX because generative UI runs in the browser; all graph and agent logic is Python.
+```bash
+./scripts/start_agents.sh
+```
+
+**Terminal 3 — orchestrator**
+
+```bash
+source .venv/bin/activate
+pip install -e . -e "./orchestrator[dev]" -r agents/requirements.txt
+python -m orchestrator
+```
+
+Startup prints the chat UI link (default `http://127.0.0.1:8200/chat`). Uses the repo root `.env` for `GROQ_API_KEY` and `COGNILANCE_REGISTRY_URL`.
+
+Optional: `langgraph dev` in `orchestrator/` still works for LangGraph Studio development with the React component map in `orchestrator/ui/`.
+
+### Quick smoke test (no UI)
+
+```bash
+source .venv/bin/activate
+python scripts/e2e_smoke_test.py
+```
+
+> Browser renderers live in `orchestrator/src/orchestrator/ui/chat.py` (vanilla JS). React components in `orchestrator/ui/` are used by LangGraph Studio when running `langgraph dev`.
 
 ---
 
@@ -626,8 +654,8 @@ python agents/code_reviewer.py
 # Terminal 5 — verify discovery
 cognilance discover
 
-# Terminal 6 — orchestrator (generative UI on :2024)
-cd orchestrator && langgraph dev
+# Terminal 6 — orchestrator (chat UI on :8200)
+python -m orchestrator
 ```
 
 ---
@@ -668,14 +696,14 @@ cognilance/
 │   ├── data_analyst.py      # skill: data-analysis → data-chart UI
 │   ├── code_reviewer.py     # skill: code-review   → code-findings UI
 │   ├── requirements.txt
-│   └── .env.example
 ├── orchestrator/            # Python LangGraph supervisor + generative UI
-│   ├── langgraph.json       # graphs + ui bundle config
+│   ├── langgraph.json       # graphs + ui bundle config (env: ../.env)
+│   ├── package.json         # UI bundler deps (for langgraph dev)
 │   ├── pyproject.toml
-│   ├── .env.example
 │   ├── src/orchestrator/
 │   │   ├── graph.py         # StateGraph: router → hire/general → END
 │   │   ├── state.py         # messages + ui + route
+│   │   ├── env.py           # loads repo-root .env
 │   │   ├── llm.py           # Groq factory + message helpers
 │   │   └── nodes/           # router, hire (discover+hire+render), general
 │   └── ui/                  # React/TSX generative-UI components
@@ -683,6 +711,9 @@ cognilance/
 │       ├── research-sources/
 │       ├── data-chart/
 │       └── code-findings/
+├── scripts/
+│   ├── start_agents.sh      # run all three agents
+│   └── e2e_smoke_test.py    # registry + agents + orchestrator smoke test
 ├── registry/                # Registry API (FastAPI + Prisma + SQLite)
 │   ├── prisma/
 │   │   └── schema.prisma

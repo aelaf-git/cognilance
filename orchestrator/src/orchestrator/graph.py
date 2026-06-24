@@ -1,41 +1,27 @@
 """Orchestrator supervisor graph.
 
-Routes the user's prompt to a specialist Cognilance agent (discovered and hired
-through the SDK) and renders the result with a generative-UI component, or falls
-back to a plain answer.
+Two internal agents:
+  1. planner — discovers registry agents, plans hires, executes them via the SDK
+  2. ui_agent — chooses and emits generative UI for the result
 """
 
 from __future__ import annotations
 
+import orchestrator.env  # noqa: F401 — load repo-root .env before nodes
+
 from langgraph.graph import END, START, StateGraph
 
-from orchestrator.nodes.general import general_input
-from orchestrator.nodes.hire import code_node, data_node, research_node
-from orchestrator.nodes.router import router
+from orchestrator.nodes.planner import planner
+from orchestrator.nodes.ui_agent import ui_agent
 from orchestrator.state import State
-
-
-def _route(state: State) -> str:
-    return state.get("route", "general")
-
 
 builder = (
     StateGraph(State)
-    .add_node("router", router)
-    .add_node("research", research_node)
-    .add_node("dataAnalyst", data_node)
-    .add_node("codeReviewer", code_node)
-    .add_node("general", general_input)
-    .add_edge(START, "router")
-    .add_conditional_edges(
-        "router",
-        _route,
-        ["research", "dataAnalyst", "codeReviewer", "general"],
-    )
-    .add_edge("research", END)
-    .add_edge("dataAnalyst", END)
-    .add_edge("codeReviewer", END)
-    .add_edge("general", END)
+    .add_node("planner", planner)
+    .add_node("ui_agent", ui_agent)
+    .add_edge(START, "planner")
+    .add_edge("planner", "ui_agent")
+    .add_edge("ui_agent", END)
 )
 
 graph = builder.compile()
