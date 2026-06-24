@@ -1,36 +1,52 @@
-"""Planner agent — discovers registry agents, plans hires, and executes them."""
+"""Planner agent — Cursor-style thinking, registry discovery, and hire execution."""
 
 from __future__ import annotations
 
-import uuid
 from typing import Literal
 
 from cognilance import CognilanceManager
 from cognilance.core.models import AgentCard
-from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field
 
 from orchestrator.llm import get_llm, last_user_text
 from orchestrator.state import HireResult, Plan, State
+from orchestrator.streaming import emit, emit_status, stream_llm
 
 UI_COMPONENTS = """- research-sources: research summaries with linked sources
 - data-chart: bar or line charts for numeric series
 - code-findings: code review findings with severity badges
 - text-card: plain formatted answer when no rich visualization fits"""
 
+THINKING_SYSTEM = """You are the Cognilance planner — like Cursor's agent planner, but for any task.
+
+Think out loud before acting. Write in clear prose (not JSON). Cover:
+1. What the user is asking for and any constraints
+2. What capabilities or tools are needed
+3. Which marketplace agents could help (reference the catalog by name and skill)
+4. Whether to hire a specialist or answer directly
+5. Your step-by-step plan
+
+Be concise but thorough. Use short paragraphs or numbered steps."""
+
+
+class PlanStep(BaseModel):
+    title: str = Field(description="Short step title")
+    detail: str = Field(description="What this step accomplishes")
+
 
 class PlannerDecision(BaseModel):
+    steps: list[PlanStep] = Field(description="Ordered execution plan")
     action: Literal["hire", "general"] = Field(
         description="hire a specialist from the registry, or answer directly"
     )
     skill: str | None = Field(
         default=None,
-        description="Exact skill slug to discover when action is hire (e.g. research, data-analysis, code-review)",
+        description="Exact skill slug to discover when action is hire",
     )
-    reasoning: str = Field(description="Short explanation of the plan")
+    reasoning: str = Field(description="One-line summary of the plan")
     suggested_ui: str | None = Field(
         default=None,
-        description=f"Preferred UI component for the UI agent.\n{UI_COMPONENTS}",
+        description=f"Preferred UI component.\n{UI_COMPONENTS}",
     )
 
 
@@ -49,25 +65,48 @@ def _format_catalog(agents: list[AgentCard]) -> str:
 
 async def planner(state: State) -> dict:
     query = last_user_text(state.get("messages", []))
+    emit_status("Scanning agent marketplace…")
 
     async with CognilanceManager(agent_name="Orchestrator") as manager:
         catalog = await manager.discover(limit=50)
+        catalog_text = _format_catalog(catalog)
+
+        thinking = await stream_llm(
+            get_llm(temperature=0.3),
+            [
+                {"role": "system", "content": THINKING_SYSTEM},
+                {
+                    "role": "user",
+                    "content": (
+                        f"User request:\n{query}\n\n"
+                        f"Marketplace catalog:\n{catalog_text}"
+                    ),
+                },
+            ],
+            event="thinking",
+        )
+        emit("thinking_done", text=thinking)
+
+        emit_status("Finalizing plan…")
         llm = get_llm(temperature=0).with_structured_output(PlannerDecision)
         decision: PlannerDecision = await llm.ainvoke(
             [
                 {
                     "role": "system",
                     "content": (
-                        "You are the Cognilance planner. Study the user's request and the "
-                        "marketplace catalog, then decide whether to hire a specialist agent "
-                        "or answer directly.\n\n"
-                        "When hiring, set skill to an exact slug from the catalog. "
-                        "Prefer online agents. Pick a suggested_ui component when hiring.\n\n"
+                        "Turn the planner's thinking into a concrete execution plan. "
+                        "Pick hire only when a matching online agent skill exists in the catalog.\n\n"
                         f"Available UI components:\n{UI_COMPONENTS}\n\n"
-                        f"Marketplace catalog:\n{_format_catalog(catalog)}"
+                        f"Marketplace catalog:\n{catalog_text}"
                     ),
                 },
-                {"role": "user", "content": query},
+                {
+                    "role": "user",
+                    "content": (
+                        f"User request:\n{query}\n\n"
+                        f"Planner thinking:\n{thinking}"
+                    ),
+                },
             ]
         )  # type: ignore[assignment]
 
@@ -76,31 +115,19 @@ async def planner(state: State) -> dict:
             "skill": decision.skill,
             "reasoning": decision.reasoning,
             "suggested_ui": decision.suggested_ui,
+            "thinking": thinking,
+            "steps": [
+                {"title": step.title, "detail": step.detail} for step in decision.steps
+            ],
         }
+        emit("plan", data=plan)
 
         if decision.action == "general":
-            response = await get_llm(temperature=0.4).ainvoke(
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are the Cognilance orchestrator. Answer the user directly "
-                            "and concisely. Mention which marketplace specialist could help "
-                            "if relevant."
-                        ),
-                    },
-                    {"role": "user", "content": query},
-                ]
-            )
-            text = (
-                response.content
-                if isinstance(response.content, str)
-                else str(response.content)
-            )
+            emit_status("Answering directly — no specialist hire needed")
             hire_result: HireResult = {
                 "mode": "general",
-                "text": text,
-                "data": {"body": text},
+                "text": "",
+                "data": {},
                 "skill": None,
                 "agent_name": None,
             }
@@ -117,6 +144,7 @@ async def planner(state: State) -> dict:
             }
             return {"plan": plan, "hire_result": hire_result}
 
+        emit_status(f"Discovering agents with skill '{skill}'…")
         agents = await manager.discover(skills=[skill], limit=5)
         if not agents:
             hire_result = {
@@ -132,7 +160,9 @@ async def planner(state: State) -> dict:
             return {"plan": plan, "hire_result": hire_result}
 
         chosen = agents[0]
+        emit_status(f"Hiring {chosen.name}…")
         result = await manager.hire(chosen, input_text=query)
+        emit_status(f"{chosen.name} completed the task")
         hire_result = {
             "mode": "hired",
             "text": result.output.text or "",

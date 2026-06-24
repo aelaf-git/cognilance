@@ -2,15 +2,85 @@
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from typing import Any, AsyncIterator
 
 from cognilance.assets import LOGO_PATH
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from langchain_core.messages import HumanMessage
 
 from orchestrator.graph import graph
 from orchestrator.ui.chat import orchestrator_chat_html
+
+
+def _ui_items(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"name": item["name"], "props": item.get("props") or {}}
+        for item in (result.get("ui") or [])
+        if item.get("type") == "ui"
+    ]
+
+
+def _meta_from_result(result: dict[str, Any], message: Any) -> str | None:
+    plan = result.get("plan") or {}
+    hire = result.get("hire_result") or {}
+    meta_parts: list[str] = []
+    if plan.get("reasoning"):
+        meta_parts.append(f"plan: {plan['reasoning']}")
+    if hire.get("agent_name"):
+        meta_parts.append(f"hired: {hire['agent_name']}")
+    elif hire.get("mode") == "general":
+        meta_parts.append("mode: general")
+    extra = (message.additional_kwargs or {}).get("orchestrator_meta")
+    if extra:
+        meta_parts.append(str(extra))
+    return " · ".join(meta_parts) if meta_parts else None
+
+
+def _normalize_custom_event(chunk: dict[str, Any]) -> dict[str, Any] | None:
+    if chunk.get("event"):
+        return chunk
+    if chunk.get("type") == "ui":
+        return {
+            "event": "ui",
+            "name": chunk.get("name"),
+            "props": chunk.get("props") or {},
+        }
+    return None
+
+
+async def _stream_chat(text: str) -> AsyncIterator[str]:
+    final: dict[str, Any] | None = None
+    try:
+        async for mode, chunk in graph.astream(
+            {"messages": [HumanMessage(content=text)]},
+            stream_mode=["custom", "values"],
+        ):
+            if mode == "custom" and isinstance(chunk, dict):
+                event = _normalize_custom_event(chunk)
+                if event:
+                    yield f"data: {json.dumps(event)}\n\n"
+            elif mode == "values":
+                final = chunk
+    except Exception as exc:
+        yield f"data: {json.dumps({'event': 'error', 'message': str(exc)})}\n\n"
+        return
+
+    if final and final.get("messages"):
+        message = final["messages"][-1]
+        payload = {
+            "event": "final",
+            "text": message.content
+            if isinstance(message.content, str)
+            else str(message.content),
+            "ui": _ui_items(final),
+            "plan": final.get("plan") or {},
+            "meta": _meta_from_result(final, message),
+        }
+        yield f"data: {json.dumps(payload)}\n\n"
+
+    yield f"data: {json.dumps({'event': 'done'})}\n\n"
 
 
 def create_app() -> FastAPI:
@@ -34,6 +104,22 @@ def create_app() -> FastAPI:
     async def chat_page() -> str:
         return orchestrator_chat_html()
 
+    @app.post("/chat/stream")
+    async def chat_stream(request: Request) -> StreamingResponse:
+        payload: dict[str, Any] = await request.json()
+        text = str(payload.get("text", "")).strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="text is required")
+        return StreamingResponse(
+            _stream_chat(text),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     @app.post("/chat")
     async def chat_message(request: Request) -> JSONResponse:
         payload: dict[str, Any] = await request.json()
@@ -43,29 +129,14 @@ def create_app() -> FastAPI:
         try:
             result = await graph.ainvoke({"messages": [HumanMessage(content=text)]})
             message = result["messages"][-1]
-            ui_items = [
-                {"name": item["name"], "props": item.get("props") or {}}
-                for item in (result.get("ui") or [])
-                if item.get("type") == "ui"
-            ]
-            plan = result.get("plan") or {}
-            hire = result.get("hire_result") or {}
-            meta_parts: list[str] = []
-            if plan.get("reasoning"):
-                meta_parts.append(f"plan: {plan['reasoning']}")
-            if hire.get("agent_name"):
-                meta_parts.append(f"hired: {hire['agent_name']}")
-            elif hire.get("mode") == "general":
-                meta_parts.append("mode: general")
-            extra = (message.additional_kwargs or {}).get("orchestrator_meta")
-            if extra:
-                meta_parts.append(str(extra))
             return JSONResponse(
                 content={
-                    "text": message.content if isinstance(message.content, str) else str(message.content),
-                    "ui": ui_items,
-                    "plan": plan,
-                    "meta": " · ".join(meta_parts) if meta_parts else None,
+                    "text": message.content
+                    if isinstance(message.content, str)
+                    else str(message.content),
+                    "ui": _ui_items(result),
+                    "plan": result.get("plan") or {},
+                    "meta": _meta_from_result(result, message),
                 }
             )
         except Exception as exc:

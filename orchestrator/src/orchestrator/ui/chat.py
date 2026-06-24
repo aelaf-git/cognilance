@@ -28,12 +28,16 @@ def orchestrator_chat_html() -> str:
     --accent: #ffffff;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { -webkit-text-size-adjust: 100%; }
+  html {
+    height: 100%;
+    -webkit-text-size-adjust: 100%;
+    overflow: hidden;
+  }
   body {
     background: var(--bg);
     color: var(--text);
     font-family: "Inter", system-ui, -apple-system, sans-serif;
-    height: 100vh;
+    height: 100%;
     height: 100dvh;
     display: flex;
     flex-direction: column;
@@ -47,6 +51,7 @@ def orchestrator_chat_html() -> str:
     padding: 20px 28px;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
+    flex-shrink: 0;
   }
   header img { height: 28px; width: auto; max-width: 36vw; object-fit: contain; flex-shrink: 0; }
   header .title {
@@ -64,7 +69,8 @@ def orchestrator_chat_html() -> str:
     flex-shrink: 0;
   }
   #messages {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 24px 28px;
@@ -73,6 +79,8 @@ def orchestrator_chat_html() -> str:
     gap: 16px;
     background: var(--bg);
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scroll-behavior: auto;
   }
   .msg {
     max-width: min(88%, 760px);
@@ -114,6 +122,86 @@ def orchestrator_chat_html() -> str:
     color: var(--muted);
     font-family: ui-monospace, monospace;
     white-space: pre-wrap;
+  }
+  .thinking-block {
+    align-self: flex-start;
+    width: min(100%, 760px);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .thinking-head {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .thinking-head .pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+  .thinking-body {
+    padding: 14px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 1.5em;
+    max-height: min(40vh, 320px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .thinking-steps {
+    padding: 0 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .thinking-step {
+    border-left: 2px solid var(--border);
+    padding-left: 10px;
+    font-size: 12px;
+  }
+  .thinking-step .step-title {
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .thinking-step .step-detail { color: var(--dim); }
+  .thinking-status {
+    padding: 8px 14px 12px;
+    font-size: 11px;
+    color: var(--dim);
+    font-family: ui-monospace, monospace;
+    border-top: 1px solid var(--border);
+  }
+  .answer-stream {
+    align-self: flex-start;
+    max-width: min(88%, 760px);
+    padding: 12px 16px;
+    border-radius: 4px;
+    line-height: 1.55;
+    font-size: 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
   }
   .gen-ui {
     align-self: flex-start;
@@ -180,6 +268,7 @@ def orchestrator_chat_html() -> str:
     font-size: 12px;
     padding: 0 28px 8px;
     letter-spacing: 0.02em;
+    flex-shrink: 0;
   }
   #composer {
     padding: 16px 28px 20px;
@@ -187,6 +276,7 @@ def orchestrator_chat_html() -> str:
     border-top: 1px solid var(--border);
     display: flex;
     gap: 10px;
+    flex-shrink: 0;
   }
   #input {
     flex: 1;
@@ -232,28 +322,89 @@ def orchestrator_chat_html() -> str:
   <span class="sub">planner · generative UI</span>
 </header>
 <div id="messages"></div>
-<div class="typing" id="typing" hidden>Planning and hiring…</div>
+<div class="typing" id="typing" hidden></div>
 <form id="composer" onsubmit="return sendMsg(event)">
   <textarea id="input" rows="1" placeholder="Describe what you need…" autofocus></textarea>
   <button type="submit" id="send">Send</button>
 </form>
 <script>
+const messagesEl = document.getElementById("messages");
+let stickToBottom = true;
+
+messagesEl.addEventListener("scroll", () => {
+  const gap = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+  stickToBottom = gap < 96;
+}, { passive: true });
+
+function scrollToBottom(force) {
+  if (!force && !stickToBottom) return;
+  requestAnimationFrame(() => {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  });
+}
+
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c =>
     ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
 function addMsg(role, text, meta) {
-  const el = document.getElementById("messages");
   const div = document.createElement("div");
   div.className = "msg " + role;
   div.innerHTML = esc(text) + (meta ? `<div class="meta">${esc(meta)}</div>` : "");
-  el.appendChild(div);
-  el.scrollTop = el.scrollHeight;
+  messagesEl.appendChild(div);
+  scrollToBottom(true);
+  return div;
+}
+
+function createThinkingBlock() {
+  const wrap = document.createElement("div");
+  wrap.className = "thinking-block";
+  wrap.innerHTML = `
+    <div class="thinking-head"><span class="pulse"></span> Planning</div>
+    <div class="thinking-body"></div>
+    <div class="thinking-steps" hidden></div>
+    <div class="thinking-status"></div>
+  `;
+  messagesEl.appendChild(wrap);
+  scrollToBottom(true);
+  return {
+    root: wrap,
+    body: wrap.querySelector(".thinking-body"),
+    steps: wrap.querySelector(".thinking-steps"),
+    status: wrap.querySelector(".thinking-status"),
+    head: wrap.querySelector(".thinking-head"),
+  };
+}
+
+function finishThinking(block) {
+  if (!block) return;
+  block.head.innerHTML = "Plan";
+  const pulse = block.root.querySelector(".pulse");
+  if (pulse) pulse.remove();
+}
+
+function renderPlanSteps(block, steps) {
+  if (!block || !steps || !steps.length) return;
+  block.steps.hidden = false;
+  block.steps.innerHTML = steps.map((step, i) => `
+    <div class="thinking-step">
+      <div class="step-title">${i + 1}. ${esc(step.title)}</div>
+      <div class="step-detail">${esc(step.detail)}</div>
+    </div>
+  `).join("");
+  scrollToBottom();
+}
+
+function createAnswerStream() {
+  const div = document.createElement("div");
+  div.className = "answer-stream";
+  messagesEl.appendChild(div);
+  scrollToBottom(true);
+  return div;
 }
 
 function renderUI(item) {
-  const el = document.getElementById("messages");
   const wrap = document.createElement("div");
   wrap.className = "gen-ui";
   const head = document.createElement("div");
@@ -264,8 +415,8 @@ function renderUI(item) {
   body.className = "ui-body";
   body.innerHTML = renderComponent(item.name, item.props || {});
   wrap.appendChild(body);
-  el.appendChild(wrap);
-  el.scrollTop = el.scrollHeight;
+  messagesEl.appendChild(wrap);
+  scrollToBottom();
 }
 
 function renderComponent(name, props) {
@@ -341,22 +492,97 @@ async function sendMsg(e) {
   const text = input.value.trim();
   if (!text) return false;
   input.value = "";
+  stickToBottom = true;
   addMsg("user", text);
   btn.disabled = true;
   typing.hidden = false;
+  typing.textContent = "Starting planner…";
+
+  let thinking = createThinkingBlock();
+  let answerEl = null;
+  let answerMeta = null;
+  const uiItems = [];
+
   try {
-    const res = await fetch("/chat", {
+    const res = await fetch("/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     });
-    const data = await res.json();
-    if (!res.ok || data.error) {
-      addMsg("error", data.text || "Request failed");
-    } else {
-      addMsg("agent", data.text || "(empty response)", data.meta || null);
-      for (const item of data.ui || []) renderUI(item);
+    if (!res.ok || !res.body) {
+      addMsg("error", "Stream request failed");
+      return false;
     }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
+
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith("data: ")) continue;
+        let data;
+        try { data = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (data.event === "thinking" && data.delta) {
+          thinking.body.textContent += data.delta;
+          thinking.body.scrollTop = thinking.body.scrollHeight;
+          scrollToBottom();
+        } else if (data.event === "thinking_done") {
+          finishThinking(thinking);
+        } else if (data.event === "status" && data.message) {
+          typing.textContent = data.message;
+          thinking.status.textContent = data.message;
+          scrollToBottom();
+        } else if (data.event === "plan" && data.data) {
+          renderPlanSteps(thinking, data.data.steps || []);
+          if (data.data.reasoning) {
+            thinking.status.textContent = data.data.reasoning;
+          }
+          scrollToBottom();
+        } else if (data.event === "answer" && data.delta) {
+          if (!answerEl) answerEl = createAnswerStream();
+          answerEl.textContent += data.delta;
+          scrollToBottom();
+        } else if (data.event === "ui") {
+          uiItems.push({ name: data.name, props: data.props || {} });
+        } else if (data.event === "final") {
+          answerMeta = data.meta || null;
+          if (!answerEl && data.text) {
+            answerEl = createAnswerStream();
+            answerEl.textContent = data.text;
+          }
+          if (data.ui && data.ui.length) {
+            for (const item of data.ui) uiItems.push(item);
+          }
+        } else if (data.event === "error") {
+          addMsg("error", data.message || "Request failed");
+        }
+      }
+    }
+
+    if (answerEl && answerMeta) {
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = answerMeta;
+      answerEl.appendChild(meta);
+    }
+
+    const seen = new Set();
+    for (const item of uiItems) {
+      const key = item.name + JSON.stringify(item.props || {});
+      if (seen.has(key)) continue;
+      seen.add(key);
+      renderUI(item);
+    }
+    scrollToBottom(true);
   } catch (err) {
     addMsg("error", String(err));
   } finally {
@@ -367,7 +593,7 @@ async function sendMsg(e) {
   return false;
 }
 
-addMsg("system", "Orchestrator ready — planner will discover agents and hire specialists");
+addMsg("system", "Orchestrator ready — planner thinks first, then hires specialists and streams the answer");
 document.getElementById("input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();

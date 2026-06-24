@@ -9,11 +9,18 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.ui import AnyUIMessage, ui_message_reducer
 
 
+class PlanStep(TypedDict):
+    title: str
+    detail: str
+
+
 class Plan(TypedDict, total=False):
     action: str
     skill: str | None
     reasoning: str
     suggested_ui: str | None
+    thinking: str
+    steps: list[PlanStep]
 
 
 class HireResult(TypedDict, total=False):
