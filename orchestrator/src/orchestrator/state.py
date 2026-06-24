@@ -20,6 +20,7 @@ class Plan(TypedDict, total=False):
     reasoning: str
     suggested_ui: str | None
     thinking: str
+    catalog: str
     steps: list[PlanStep]
 
 

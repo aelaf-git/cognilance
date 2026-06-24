@@ -1,4 +1,4 @@
-"""Planner agent — Cursor-style thinking, registry discovery, and hire execution."""
+"""Planner — Cursor-style thinking and structured plan (no execution)."""
 
 from __future__ import annotations
 
@@ -9,13 +9,12 @@ from cognilance.core.models import AgentCard
 from pydantic import BaseModel, Field
 
 from orchestrator.llm import get_llm, last_user_text
-from orchestrator.state import HireResult, Plan, State
+from orchestrator.state import Plan, State
 from orchestrator.streaming import emit, emit_status, stream_llm
 
 UI_COMPONENTS = """- research-sources: research summaries with linked sources
 - data-chart: bar or line charts for numeric series
-- code-findings: code review findings with severity badges
-- text-card: plain formatted answer when no rich visualization fits"""
+- code-findings: code review findings with severity badges"""
 
 THINKING_SYSTEM = """You are the Cognilance planner — like Cursor's agent planner, but for any task.
 
@@ -24,18 +23,20 @@ Think out loud before acting. Write in clear prose (not JSON). Cover:
 2. What capabilities or tools are needed
 3. Which marketplace agents could help (reference the catalog by name and skill)
 4. Whether to hire a specialist or answer directly
-5. Your step-by-step plan
+5. Your step-by-step plan for how execution should proceed
 
 Be concise but thorough. Use short paragraphs or numbered steps."""
 
 
 class PlanStep(BaseModel):
-    title: str = Field(description="Short step title")
+    title: str = Field(description="Short step title shown during execution")
     detail: str = Field(description="What this step accomplishes")
 
 
 class PlannerDecision(BaseModel):
-    steps: list[PlanStep] = Field(description="Ordered execution plan")
+    steps: list[PlanStep] = Field(
+        description="Ordered steps the executor will run, like Cursor/Replit"
+    )
     action: Literal["hire", "general"] = Field(
         description="hire a specialist from the registry, or answer directly"
     )
@@ -46,7 +47,7 @@ class PlannerDecision(BaseModel):
     reasoning: str = Field(description="One-line summary of the plan")
     suggested_ui: str | None = Field(
         default=None,
-        description=f"Preferred UI component.\n{UI_COMPONENTS}",
+        description=f"Preferred rich UI component when hiring.\n{UI_COMPONENTS}",
     )
 
 
@@ -87,7 +88,7 @@ async def planner(state: State) -> dict:
         )
         emit("thinking_done", text=thinking)
 
-        emit_status("Finalizing plan…")
+        emit_status("Building execution plan…")
         llm = get_llm(temperature=0).with_structured_output(PlannerDecision)
         decision: PlannerDecision = await llm.ainvoke(
             [
@@ -95,8 +96,10 @@ async def planner(state: State) -> dict:
                     "role": "system",
                     "content": (
                         "Turn the planner's thinking into a concrete execution plan. "
-                        "Pick hire only when a matching online agent skill exists in the catalog.\n\n"
-                        f"Available UI components:\n{UI_COMPONENTS}\n\n"
+                        "Steps will be shown to the user and executed in order — "
+                        "like Cursor or Replit agents.\n\n"
+                        "Pick hire only when a matching online agent skill exists.\n\n"
+                        f"Rich UI components (hire only):\n{UI_COMPONENTS}\n\n"
                         f"Marketplace catalog:\n{catalog_text}"
                     ),
                 },
@@ -116,58 +119,10 @@ async def planner(state: State) -> dict:
             "reasoning": decision.reasoning,
             "suggested_ui": decision.suggested_ui,
             "thinking": thinking,
+            "catalog": catalog_text,
             "steps": [
                 {"title": step.title, "detail": step.detail} for step in decision.steps
             ],
         }
         emit("plan", data=plan)
-
-        if decision.action == "general":
-            emit_status("Answering directly — no specialist hire needed")
-            hire_result: HireResult = {
-                "mode": "general",
-                "text": "",
-                "data": {},
-                "skill": None,
-                "agent_name": None,
-            }
-            return {"plan": plan, "hire_result": hire_result}
-
-        skill = (decision.skill or "").strip()
-        if not skill:
-            hire_result = {
-                "mode": "error",
-                "text": "Planner chose hire but did not specify a skill.",
-                "data": {},
-                "skill": None,
-                "agent_name": None,
-            }
-            return {"plan": plan, "hire_result": hire_result}
-
-        emit_status(f"Discovering agents with skill '{skill}'…")
-        agents = await manager.discover(skills=[skill], limit=5)
-        if not agents:
-            hire_result = {
-                "mode": "error",
-                "text": (
-                    f"No agent offering the '{skill}' skill is online right now. "
-                    "Start the matching agent in /agents and try again."
-                ),
-                "data": {},
-                "skill": skill,
-                "agent_name": None,
-            }
-            return {"plan": plan, "hire_result": hire_result}
-
-        chosen = agents[0]
-        emit_status(f"Hiring {chosen.name}…")
-        result = await manager.hire(chosen, input_text=query)
-        emit_status(f"{chosen.name} completed the task")
-        hire_result = {
-            "mode": "hired",
-            "text": result.output.text or "",
-            "data": result.output.data or {},
-            "skill": skill,
-            "agent_name": chosen.name,
-        }
-        return {"plan": plan, "hire_result": hire_result}
+        return {"plan": plan}

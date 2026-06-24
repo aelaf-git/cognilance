@@ -123,15 +123,16 @@ def orchestrator_chat_html() -> str:
     font-family: ui-monospace, monospace;
     white-space: pre-wrap;
   }
-  .thinking-block {
-    align-self: flex-start;
-    width: min(100%, 760px);
+  .plan-panel {
+    align-self: stretch;
+    width: 100%;
+    max-width: 760px;
     border: 1px solid var(--border);
     border-radius: 6px;
     overflow: hidden;
     background: var(--surface);
   }
-  .thinking-head {
+  .plan-head {
     padding: 10px 14px;
     border-bottom: 1px solid var(--border);
     font-size: 11px;
@@ -142,7 +143,7 @@ def orchestrator_chat_html() -> str:
     align-items: center;
     gap: 8px;
   }
-  .thinking-head .pulse {
+  .plan-head .pulse {
     width: 6px;
     height: 6px;
     border-radius: 50%;
@@ -153,43 +154,77 @@ def orchestrator_chat_html() -> str:
     0%, 100% { opacity: 0.35; }
     50% { opacity: 1; }
   }
-  .thinking-body {
-    padding: 14px;
+  .plan-summary {
+    padding: 10px 14px 0;
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .plan-steps {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .plan-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .plan-step .step-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-size: 12px;
+    line-height: 16px;
+    text-align: center;
+    color: var(--dim);
+  }
+  .plan-step.running { border-color: var(--muted); }
+  .plan-step.running .step-icon { color: var(--text); }
+  .plan-step.done { opacity: 0.85; }
+  .plan-step.done .step-icon { color: var(--text); }
+  .plan-step .step-body { flex: 1; min-width: 0; }
+  .plan-step .step-title {
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .plan-step .step-detail {
+    color: var(--dim);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .plan-toggle {
+    display: block;
+    width: calc(100% - 28px);
+    margin: 0 14px 12px;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .plan-toggle:hover { color: var(--text); border-color: var(--muted); }
+  .plan-thinking {
+    padding: 0 14px 14px;
     font-size: 13px;
     color: var(--muted);
     line-height: 1.65;
     white-space: pre-wrap;
     word-break: break-word;
-    min-height: 1.5em;
-    max-height: min(40vh, 320px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
   }
-  .thinking-steps {
-    padding: 0 14px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .thinking-step {
-    border-left: 2px solid var(--border);
-    padding-left: 10px;
-    font-size: 12px;
-  }
-  .thinking-step .step-title {
-    color: var(--text);
-    font-weight: 600;
-    margin-bottom: 2px;
-  }
-  .thinking-step .step-detail { color: var(--dim); }
-  .thinking-status {
-    padding: 8px 14px 12px;
-    font-size: 11px;
-    color: var(--dim);
-    font-family: ui-monospace, monospace;
-    border-top: 1px solid var(--border);
-  }
+  .plan-thinking[hidden] { display: none; }
   .answer-stream {
     align-self: flex-start;
     max-width: min(88%, 760px);
@@ -357,43 +392,95 @@ function addMsg(role, text, meta) {
   return div;
 }
 
-function createThinkingBlock() {
+function createPlanPanel() {
   const wrap = document.createElement("div");
-  wrap.className = "thinking-block";
+  wrap.className = "plan-panel";
   wrap.innerHTML = `
-    <div class="thinking-head"><span class="pulse"></span> Planning</div>
-    <div class="thinking-body"></div>
-    <div class="thinking-steps" hidden></div>
-    <div class="thinking-status"></div>
+    <div class="plan-head"><span class="pulse"></span> Plan</div>
+    <div class="plan-summary"></div>
+    <div class="plan-steps"></div>
+    <button type="button" class="plan-toggle" hidden>Show thinking process</button>
+    <div class="plan-thinking" hidden></div>
   `;
   messagesEl.appendChild(wrap);
   scrollToBottom(true);
+  const toggle = wrap.querySelector(".plan-toggle");
+  const thinking = wrap.querySelector(".plan-thinking");
+  toggle.addEventListener("click", () => {
+    const open = thinking.hidden;
+    thinking.hidden = !open;
+    toggle.textContent = open ? "Hide thinking process" : "Show thinking process";
+  });
   return {
     root: wrap,
-    body: wrap.querySelector(".thinking-body"),
-    steps: wrap.querySelector(".thinking-steps"),
-    status: wrap.querySelector(".thinking-status"),
-    head: wrap.querySelector(".thinking-head"),
+    head: wrap.querySelector(".plan-head"),
+    summary: wrap.querySelector(".plan-summary"),
+    steps: wrap.querySelector(".plan-steps"),
+    toggle,
+    thinking,
+    stepEls: [],
   };
 }
 
-function finishThinking(block) {
-  if (!block) return;
-  block.head.innerHTML = "Plan";
-  const pulse = block.root.querySelector(".pulse");
+function finishPlanning(panel) {
+  if (!panel) return;
+  panel.head.innerHTML = "Plan";
+  const pulse = panel.root.querySelector(".pulse");
   if (pulse) pulse.remove();
+  if (panel.thinking.textContent.trim()) {
+    panel.toggle.hidden = false;
+  }
 }
 
-function renderPlanSteps(block, steps) {
-  if (!block || !steps || !steps.length) return;
-  block.steps.hidden = false;
-  block.steps.innerHTML = steps.map((step, i) => `
-    <div class="thinking-step">
-      <div class="step-title">${i + 1}. ${esc(step.title)}</div>
-      <div class="step-detail">${esc(step.detail)}</div>
-    </div>
-  `).join("");
+function renderPlanSteps(panel, steps, reasoning) {
+  if (!panel) return;
+  if (reasoning) panel.summary.textContent = reasoning;
+  panel.stepEls = [];
+  panel.steps.innerHTML = (steps || []).map((step, i) => {
+    const el = document.createElement("div");
+    el.className = "plan-step pending";
+    el.dataset.index = String(i);
+    el.innerHTML = `
+      <div class="step-icon">○</div>
+      <div class="step-body">
+        <div class="step-title">${esc(step.title)}</div>
+        <div class="step-detail">${esc(step.detail || "")}</div>
+      </div>
+    `;
+    panel.steps.appendChild(el);
+    panel.stepEls.push(el);
+    return el;
+  });
   scrollToBottom();
+}
+
+function addExecutionStep(panel, index, title, detail) {
+  if (!panel) return null;
+  const el = document.createElement("div");
+  el.className = "plan-step pending";
+  el.dataset.index = String(index);
+  el.innerHTML = `
+    <div class="step-icon">○</div>
+    <div class="step-body">
+      <div class="step-title">${esc(title)}</div>
+      <div class="step-detail">${esc(detail || "")}</div>
+    </div>
+  `;
+  panel.steps.appendChild(el);
+  panel.stepEls.push(el);
+  return el;
+}
+
+function setStepState(panel, index, state) {
+  if (!panel) return;
+  const el = panel.stepEls[index];
+  if (!el) return;
+  el.classList.remove("pending", "running", "done");
+  el.classList.add(state);
+  const icon = el.querySelector(".step-icon");
+  if (state === "running") icon.textContent = "◐";
+  else if (state === "done") icon.textContent = "✓";
+  else icon.textContent = "○";
 }
 
 function createAnswerStream() {
@@ -405,6 +492,7 @@ function createAnswerStream() {
 }
 
 function renderUI(item) {
+  if (!item || item.name === "text-card") return;
   const wrap = document.createElement("div");
   wrap.className = "gen-ui";
   const head = document.createElement("div");
@@ -423,7 +511,6 @@ function renderComponent(name, props) {
   if (name === "research-sources") return renderResearch(props);
   if (name === "data-chart") return renderChart(props);
   if (name === "code-findings") return renderFindings(props);
-  if (name === "text-card") return renderTextCard(props);
   return `<div class="empty">Unknown component: ${esc(name)}</div>`;
 }
 
@@ -479,11 +566,6 @@ function renderFindings(p) {
   return html + "</tbody></table>";
 }
 
-function renderTextCard(p) {
-  return `<div class="text-card-title">${esc(p.title || "Response")}</div>
-    <div class="text-card-body">${esc(p.body || "")}</div>`;
-}
-
 async function sendMsg(e) {
   e.preventDefault();
   const input = document.getElementById("input");
@@ -496,11 +578,10 @@ async function sendMsg(e) {
   addMsg("user", text);
   btn.disabled = true;
   typing.hidden = false;
-  typing.textContent = "Starting planner…";
+  typing.textContent = "Planning…";
 
-  let thinking = createThinkingBlock();
+  let planPanel = createPlanPanel();
   let answerEl = null;
-  let answerMeta = null;
   const uiItems = [];
 
   try {
@@ -532,47 +613,50 @@ async function sendMsg(e) {
         try { data = JSON.parse(line.slice(6)); } catch { continue; }
 
         if (data.event === "thinking" && data.delta) {
-          thinking.body.textContent += data.delta;
-          thinking.body.scrollTop = thinking.body.scrollHeight;
+          planPanel.thinking.hidden = false;
+          planPanel.thinking.textContent += data.delta;
           scrollToBottom();
         } else if (data.event === "thinking_done") {
-          finishThinking(thinking);
+          finishPlanning(planPanel);
+          planPanel.thinking.hidden = true;
         } else if (data.event === "status" && data.message) {
           typing.textContent = data.message;
-          thinking.status.textContent = data.message;
-          scrollToBottom();
         } else if (data.event === "plan" && data.data) {
-          renderPlanSteps(thinking, data.data.steps || []);
-          if (data.data.reasoning) {
-            thinking.status.textContent = data.data.reasoning;
-          }
+          renderPlanSteps(planPanel, data.data.steps || [], data.data.reasoning || "");
           scrollToBottom();
+        } else if (data.event === "execution_start") {
+          typing.textContent = "Executing plan…";
+        } else if (data.event === "step_start") {
+          let idx = data.index;
+          if (idx >= planPanel.stepEls.length) {
+            addExecutionStep(planPanel, idx, data.title || "", data.detail || "");
+          }
+          setStepState(planPanel, idx, "running");
+          scrollToBottom();
+        } else if (data.event === "step_done") {
+          setStepState(planPanel, data.index, "done");
+        } else if (data.event === "execution_done") {
+          typing.textContent = "Writing answer…";
         } else if (data.event === "answer" && data.delta) {
           if (!answerEl) answerEl = createAnswerStream();
           answerEl.textContent += data.delta;
           scrollToBottom();
-        } else if (data.event === "ui") {
+        } else if (data.event === "ui" && data.name !== "text-card") {
           uiItems.push({ name: data.name, props: data.props || {} });
         } else if (data.event === "final") {
-          answerMeta = data.meta || null;
           if (!answerEl && data.text) {
             answerEl = createAnswerStream();
             answerEl.textContent = data.text;
           }
           if (data.ui && data.ui.length) {
-            for (const item of data.ui) uiItems.push(item);
+            for (const item of data.ui) {
+              if (item.name !== "text-card") uiItems.push(item);
+            }
           }
         } else if (data.event === "error") {
           addMsg("error", data.message || "Request failed");
         }
       }
-    }
-
-    if (answerEl && answerMeta) {
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.textContent = answerMeta;
-      answerEl.appendChild(meta);
     }
 
     const seen = new Set();
@@ -593,7 +677,7 @@ async function sendMsg(e) {
   return false;
 }
 
-addMsg("system", "Orchestrator ready — planner thinks first, then hires specialists and streams the answer");
+addMsg("system", "Orchestrator ready — plan first, execute steps, then stream the answer");
 document.getElementById("input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
