@@ -461,12 +461,27 @@ Start all three at once:
 
 ## Orchestrator (generative UI)
 
-The [`orchestrator/`](orchestrator/) is a **Python LangGraph** supervisor with two internal agents:
+The [`orchestrator/`](orchestrator/) implements the **Cognilance Orchestrator execution algorithm** as a LangGraph pipeline with per-thread sessions (`thread_id` + checkpointer) and registry catalog caching.
 
-1. **planner** — discovers agents on the registry via `CognilanceManager`, plans which specialist to hire, and executes the hire over A2A (or answers directly when no hire is needed).
-2. **ui_agent** — chooses a generative UI component (`research-sources`, `data-chart`, `code-findings`, or `text-card`) based on the user request and specialist output.
+### Algorithm
 
-The orchestrator ships its own **embedded chat UI** (registry-style dark theme) served by FastAPI — no LangGraph Studio required.
+1. **User input** — prompt submitted via chat UI or API
+2. **Planning** — Planner classifies complexity and queries the registry (cached per thread, 60s TTL) in parallel, then builds a dynamic plan from **available** agents only
+3. **Routing** — **Simple** → Thinking Agent; **Complex** → multi-subtask plan with Thinking Agent fallback when no specialist matches
+4. **Task delegation** — Task Agent runs subtasks in dependency layers (parallel within a layer)
+5. **Execution** — hired agents via `CognilanceManager`; Thinking Agent handles gaps
+6. **Output rendering** — UI Selector picks a rich React component (`research-sources`, `data-chart`, `code-findings`)
+
+### Internal agents
+
+| Agent | Node | Role |
+|-------|------|------|
+| Planner | `planner` | Complexity + catalog + plan |
+| Thinking | `thinking` | Simple path and subtask fallback |
+| Task | `task` | Parallel/sequential subtask execution |
+| UI Selector | `ui_selector` | Generative UI component selection |
+
+The orchestrator ships its own **embedded chat UI** (registry-style dark theme) served by FastAPI. The client persists `thread_id` in `localStorage` for multi-turn sessions.
 
 ### End-to-end (three terminals)
 

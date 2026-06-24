@@ -1,32 +1,39 @@
-"""Orchestrator supervisor graph.
-
-Three phases (Cursor / Replit style):
-  1. planner — think and build an execution plan
-  2. execute — run each plan step, hire specialists via the SDK
-  3. ui_agent — stream the answer; rich UI only for specialist data
-"""
+"""Orchestrator supervisor graph — algorithm-aligned pipeline."""
 
 from __future__ import annotations
 
 import orchestrator.env  # noqa: F401 — load repo-root .env before nodes
 
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from orchestrator.nodes.execute import execute
 from orchestrator.nodes.planner import planner
-from orchestrator.nodes.ui_agent import ui_agent
+from orchestrator.nodes.task import task_agent
+from orchestrator.nodes.thinking_node import thinking_node
+from orchestrator.nodes.ui_selector import ui_selector
 from orchestrator.state import State
+
+
+def _route(state: State) -> str:
+    return "thinking" if state.get("route") == "simple" else "task"
+
 
 builder = (
     StateGraph(State)
     .add_node("planner", planner)
-    .add_node("execute", execute)
-    .add_node("ui_agent", ui_agent)
+    .add_node("thinking", thinking_node)
+    .add_node("task", task_agent)
+    .add_node("ui_selector", ui_selector)
     .add_edge(START, "planner")
-    .add_edge("planner", "execute")
-    .add_edge("execute", "ui_agent")
-    .add_edge("ui_agent", END)
+    .add_conditional_edges(
+        "planner",
+        _route,
+        ["thinking", "task"],
+    )
+    .add_edge("thinking", "ui_selector")
+    .add_edge("task", "ui_selector")
+    .add_edge("ui_selector", END)
 )
 
-graph = builder.compile()
+graph = builder.compile(checkpointer=MemorySaver())
 graph.name = "Cognilance Orchestrator"

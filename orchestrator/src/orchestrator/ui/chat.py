@@ -143,6 +143,16 @@ def orchestrator_chat_html() -> str:
     align-items: center;
     gap: 8px;
   }
+  .plan-head .route-badge {
+    margin-left: auto;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 2px;
+  }
   .plan-head .pulse {
     width: 6px;
     height: 6px;
@@ -364,7 +374,9 @@ def orchestrator_chat_html() -> str:
 </form>
 <script>
 const messagesEl = document.getElementById("messages");
+const THREAD_KEY = "cognilance_orchestrator_thread";
 let stickToBottom = true;
+let threadId = localStorage.getItem(THREAD_KEY) || "";
 
 messagesEl.addEventListener("scroll", () => {
   const gap = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
@@ -422,9 +434,10 @@ function createPlanPanel() {
   };
 }
 
-function finishPlanning(panel) {
+function finishPlanning(panel, route) {
   if (!panel) return;
-  panel.head.innerHTML = "Plan";
+  const label = route === "complex" ? "Plan · Complex" : "Plan · Simple";
+  panel.head.innerHTML = `${label}<span class="route-badge">${route === "complex" ? "Complex" : "Simple"}</span>`;
   const pulse = panel.root.querySelector(".pulse");
   if (pulse) pulse.remove();
   if (panel.thinking.textContent.trim()) {
@@ -432,48 +445,35 @@ function finishPlanning(panel) {
   }
 }
 
-function renderPlanSteps(panel, steps, reasoning) {
+function renderPlanSteps(panel, steps, reasoning, route, subtasks) {
   if (!panel) return;
   if (reasoning) panel.summary.textContent = reasoning;
+  const items = route === "complex" && subtasks && subtasks.length ? subtasks : (steps || []);
   panel.stepEls = [];
-  panel.steps.innerHTML = (steps || []).map((step, i) => {
+  panel.steps.innerHTML = "";
+  items.forEach((step, i) => {
     const el = document.createElement("div");
     el.className = "plan-step pending";
-    el.dataset.index = String(i);
+    el.dataset.id = step.id || String(i);
+    const assignee = step.assignee ? ` · ${step.assignee}` : "";
     el.innerHTML = `
       <div class="step-icon">○</div>
       <div class="step-body">
-        <div class="step-title">${esc(step.title)}</div>
-        <div class="step-detail">${esc(step.detail || "")}</div>
+        <div class="step-title">${esc(step.title)}${esc(assignee)}</div>
+        <div class="step-detail">${esc(step.detail || step.instruction || "")}</div>
       </div>
     `;
     panel.steps.appendChild(el);
     panel.stepEls.push(el);
-    return el;
   });
   scrollToBottom();
 }
 
-function addExecutionStep(panel, index, title, detail) {
-  if (!panel) return null;
-  const el = document.createElement("div");
-  el.className = "plan-step pending";
-  el.dataset.index = String(index);
-  el.innerHTML = `
-    <div class="step-icon">○</div>
-    <div class="step-body">
-      <div class="step-title">${esc(title)}</div>
-      <div class="step-detail">${esc(detail || "")}</div>
-    </div>
-  `;
-  panel.steps.appendChild(el);
-  panel.stepEls.push(el);
-  return el;
+function findStepEl(panel, id) {
+  return panel.stepEls.find((el) => el.dataset.id === id);
 }
 
-function setStepState(panel, index, state) {
-  if (!panel) return;
-  const el = panel.stepEls[index];
+function setStepStateByEl(el, state) {
   if (!el) return;
   el.classList.remove("pending", "running", "done");
   el.classList.add(state);
@@ -588,7 +588,7 @@ async function sendMsg(e) {
     const res = await fetch("/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, thread_id: threadId || null }),
     });
     if (!res.ok || !res.body) {
       addMsg("error", "Stream request failed");
@@ -617,24 +617,43 @@ async function sendMsg(e) {
           planPanel.thinking.textContent += data.delta;
           scrollToBottom();
         } else if (data.event === "thinking_done") {
-          finishPlanning(planPanel);
+          finishPlanning(planPanel, planPanel.route || "simple");
           planPanel.thinking.hidden = true;
+        } else if (data.event === "route_decision") {
+          planPanel.route = data.route || "simple";
         } else if (data.event === "status" && data.message) {
           typing.textContent = data.message;
         } else if (data.event === "plan" && data.data) {
-          renderPlanSteps(planPanel, data.data.steps || [], data.data.reasoning || "");
+          planPanel.route = data.data.route || planPanel.route || "simple";
+          renderPlanSteps(
+            planPanel,
+            data.data.steps || [],
+            data.data.reasoning || "",
+            planPanel.route,
+            data.data.subtasks || []
+          );
           scrollToBottom();
         } else if (data.event === "execution_start") {
           typing.textContent = "Executing plan…";
-        } else if (data.event === "step_start") {
-          let idx = data.index;
-          if (idx >= planPanel.stepEls.length) {
-            addExecutionStep(planPanel, idx, data.title || "", data.detail || "");
+        } else if (data.event === "subtask_start") {
+          let el = findStepEl(planPanel, data.id);
+          if (!el) {
+            const tmp = document.createElement("div");
+            tmp.className = "plan-step pending";
+            tmp.dataset.id = data.id;
+            tmp.innerHTML = `
+              <div class="step-icon">○</div>
+              <div class="step-body">
+                <div class="step-title">${esc(data.title || data.id)} · ${esc(data.assignee || "")}</div>
+              </div>`;
+            planPanel.steps.appendChild(tmp);
+            planPanel.stepEls.push(tmp);
+            el = tmp;
           }
-          setStepState(planPanel, idx, "running");
+          setStepStateByEl(el, "running");
           scrollToBottom();
-        } else if (data.event === "step_done") {
-          setStepState(planPanel, data.index, "done");
+        } else if (data.event === "subtask_done") {
+          setStepStateByEl(findStepEl(planPanel, data.id), "done");
         } else if (data.event === "execution_done") {
           typing.textContent = "Writing answer…";
         } else if (data.event === "answer" && data.delta) {
@@ -644,6 +663,10 @@ async function sendMsg(e) {
         } else if (data.event === "ui" && data.name !== "text-card") {
           uiItems.push({ name: data.name, props: data.props || {} });
         } else if (data.event === "final") {
+          if (data.thread_id) {
+            threadId = data.thread_id;
+            localStorage.setItem(THREAD_KEY, threadId);
+          }
           if (!answerEl && data.text) {
             answerEl = createAnswerStream();
             answerEl.textContent = data.text;
@@ -652,6 +675,11 @@ async function sendMsg(e) {
             for (const item of data.ui) {
               if (item.name !== "text-card") uiItems.push(item);
             }
+          }
+        } else if (data.event === "done") {
+          if (data.thread_id) {
+            threadId = data.thread_id;
+            localStorage.setItem(THREAD_KEY, threadId);
           }
         } else if (data.event === "error") {
           addMsg("error", data.message || "Request failed");

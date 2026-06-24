@@ -7,6 +7,7 @@ import asyncio
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import httpx
@@ -52,10 +53,22 @@ def start_agents() -> list[subprocess.Popen]:
     return procs
 
 
-async def run_graph(prompt: str) -> dict:
+async def run_graph(prompt: str, *, thread_id: str | None = None) -> dict:
     from orchestrator.graph import graph
 
-    return await graph.ainvoke({"messages": [HumanMessage(content=prompt)]})
+    config = {"configurable": {"thread_id": thread_id or str(uuid.uuid4())}}
+    return await graph.ainvoke(
+        {"messages": [HumanMessage(content=prompt)]},
+        config=config,
+    )
+
+
+def _ui_names(result: dict) -> list[str]:
+    return [
+        item["name"]
+        for item in (result.get("ui") or [])
+        if item.get("type") == "ui"
+    ]
 
 
 async def main() -> None:
@@ -71,21 +84,29 @@ async def main() -> None:
         agents = discover.json().get("agents", [])
         print(f"   {len(agents)} agent(s) online: {[a['name'] for a in agents]}")
 
-        print("3) Orchestrator — general route...")
-        general = await run_graph("What is 2+2?")
-        text = general["messages"][-1].content
-        plan = general.get("plan") or {}
+        print("3) Orchestrator — simple route...")
+        simple = await run_graph("What is 2+2?", thread_id="smoke-simple")
+        text = simple["messages"][-1].content
         print(f"   answer: {text[:120]}")
-        print(f"   plan action: {plan.get('action')}")
+        print(f"   route: {simple.get('route')}")
+        assert simple.get("route") == "simple", "expected simple route"
+        assert "text-card" not in _ui_names(simple), "text-card should not be emitted"
 
-        print("4) Orchestrator — research route (hires Research Agent)...")
-        research = await run_graph("Research the history of transformers in machine learning")
+        print("4) Orchestrator — complex route (research)...")
+        research = await run_graph(
+            "Research the history of transformers in machine learning",
+            thread_id="smoke-complex",
+        )
         msg = research["messages"][-1]
-        ui = research.get("ui") or []
-        hire = research.get("hire_result") or {}
+        ui = _ui_names(research)
+        results = research.get("subtask_results") or []
         print(f"   text: {str(msg.content)[:120]}")
-        print(f"   hired: {hire.get('agent_name')}")
-        print(f"   ui messages: {len(ui)}")
+        print(f"   route: {research.get('route')}")
+        print(f"   subtasks completed: {len(results)}")
+        print(f"   ui: {ui}")
+        assert research.get("route") == "complex", "expected complex route"
+        assert len(results) >= 1, "expected subtask results"
+        assert "text-card" not in ui, "text-card should not be emitted"
 
         print("\nAll smoke checks passed.")
     finally:

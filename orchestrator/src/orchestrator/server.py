@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any, AsyncIterator
 
 from cognilance.assets import LOGO_PATH
@@ -18,30 +19,14 @@ def _ui_items(result: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {"name": item["name"], "props": item.get("props") or {}}
         for item in (result.get("ui") or [])
-        if item.get("type") == "ui"
+        if item.get("type") == "ui" and item.get("name") != "text-card"
     ]
-
-
-def _meta_from_result(result: dict[str, Any], message: Any) -> str | None:
-    plan = result.get("plan") or {}
-    hire = result.get("hire_result") or {}
-    meta_parts: list[str] = []
-    if plan.get("reasoning"):
-        meta_parts.append(f"plan: {plan['reasoning']}")
-    if hire.get("agent_name"):
-        meta_parts.append(f"hired: {hire['agent_name']}")
-    elif hire.get("mode") == "general":
-        meta_parts.append("mode: general")
-    extra = (message.additional_kwargs or {}).get("orchestrator_meta")
-    if extra:
-        meta_parts.append(str(extra))
-    return " · ".join(meta_parts) if meta_parts else None
 
 
 def _normalize_custom_event(chunk: dict[str, Any]) -> dict[str, Any] | None:
     if chunk.get("event"):
         return chunk
-    if chunk.get("type") == "ui":
+    if chunk.get("type") == "ui" and chunk.get("name") != "text-card":
         return {
             "event": "ui",
             "name": chunk.get("name"),
@@ -50,11 +35,17 @@ def _normalize_custom_event(chunk: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-async def _stream_chat(text: str) -> AsyncIterator[str]:
+def _thread_config(thread_id: str) -> dict[str, Any]:
+    return {"configurable": {"thread_id": thread_id}}
+
+
+async def _stream_chat(text: str, thread_id: str) -> AsyncIterator[str]:
     final: dict[str, Any] | None = None
+    config = _thread_config(thread_id)
     try:
         async for mode, chunk in graph.astream(
             {"messages": [HumanMessage(content=text)]},
+            config=config,
             stream_mode=["custom", "values"],
         ):
             if mode == "custom" and isinstance(chunk, dict):
@@ -71,16 +62,19 @@ async def _stream_chat(text: str) -> AsyncIterator[str]:
         message = final["messages"][-1]
         payload = {
             "event": "final",
+            "thread_id": thread_id,
             "text": message.content
             if isinstance(message.content, str)
             else str(message.content),
             "ui": _ui_items(final),
             "plan": final.get("plan") or {},
-            "meta": _meta_from_result(final, message),
+            "route": final.get("route"),
+            "complexity": final.get("complexity"),
+            "subtask_results": final.get("subtask_results") or [],
         }
         yield f"data: {json.dumps(payload)}\n\n"
 
-    yield f"data: {json.dumps({'event': 'done'})}\n\n"
+    yield f"data: {json.dumps({'event': 'done', 'thread_id': thread_id})}\n\n"
 
 
 def create_app() -> FastAPI:
@@ -110,8 +104,9 @@ def create_app() -> FastAPI:
         text = str(payload.get("text", "")).strip()
         if not text:
             raise HTTPException(status_code=400, detail="text is required")
+        thread_id = str(payload.get("thread_id") or "").strip() or str(uuid.uuid4())
         return StreamingResponse(
-            _stream_chat(text),
+            _stream_chat(text, thread_id),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -126,17 +121,24 @@ def create_app() -> FastAPI:
         text = str(payload.get("text", "")).strip()
         if not text:
             raise HTTPException(status_code=400, detail="text is required")
+        thread_id = str(payload.get("thread_id") or "").strip() or str(uuid.uuid4())
         try:
-            result = await graph.ainvoke({"messages": [HumanMessage(content=text)]})
+            result = await graph.ainvoke(
+                {"messages": [HumanMessage(content=text)]},
+                config=_thread_config(thread_id),
+            )
             message = result["messages"][-1]
             return JSONResponse(
                 content={
+                    "thread_id": thread_id,
                     "text": message.content
                     if isinstance(message.content, str)
                     else str(message.content),
                     "ui": _ui_items(result),
                     "plan": result.get("plan") or {},
-                    "meta": _meta_from_result(result, message),
+                    "route": result.get("route"),
+                    "complexity": result.get("complexity"),
+                    "subtask_results": result.get("subtask_results") or [],
                 }
             )
         except Exception as exc:

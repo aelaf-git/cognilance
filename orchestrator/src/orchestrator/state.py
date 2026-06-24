@@ -15,21 +15,27 @@ class PlanStep(TypedDict):
 
 
 class Plan(TypedDict, total=False):
-    action: str
-    skill: str | None
     reasoning: str
     suggested_ui: str | None
     thinking: str
-    catalog: str
     steps: list[PlanStep]
 
 
-class HireResult(TypedDict, total=False):
-    mode: str
+class Subtask(TypedDict, total=False):
+    id: str
+    title: str
+    instruction: str
+    skill: str | None
+    assignee: str
+    depends_on: list[str]
+
+
+class SubtaskResult(TypedDict, total=False):
+    subtask_id: str
     text: str
     data: dict[str, Any]
-    skill: str | None
-    agent_name: str | None
+    assignee: str
+    status: str
 
 
 class State(TypedDict, total=False):
@@ -37,5 +43,15 @@ class State(TypedDict, total=False):
 
     messages: Annotated[list[BaseMessage], add_messages]
     ui: Annotated[Sequence[AnyUIMessage], ui_message_reducer]
+    complexity: str
+    route: str
+    thinking: str
     plan: Plan
-    hire_result: HireResult
+    catalog_agents: list[dict[str, Any]]
+    catalog_text: str
+    catalog_fetched_at: float | None
+    subtasks: list[Subtask]
+    subtask_results: list[SubtaskResult]
+    final_text: str
+    final_data: dict[str, Any]
+    answer_streamed: bool
