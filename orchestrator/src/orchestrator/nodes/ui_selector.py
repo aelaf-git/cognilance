@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import re
 import uuid
-from typing import Literal
+from typing import Any, Literal
 
 from langchain_core.messages import AIMessage
 from langgraph.graph.ui import push_ui_message
@@ -13,16 +14,22 @@ from orchestrator.llm import get_llm
 from orchestrator.state import State
 from orchestrator.streaming import emit, emit_status, reveal_text
 
-ComponentName = Literal["research-sources", "data-chart", "code-findings"]
+ComponentName = Literal["research-sources", "data-chart", "python-code"]
 
 UI_COMPONENTS = """- research-sources: research summaries with linked sources
 - data-chart: bar or line charts for numeric series
-- code-findings: code review findings with severity badges"""
+- python-code: Python source code with filename and summary"""
 
 SKILL_DEFAULT_UI: dict[str, ComponentName] = {
     "research": "research-sources",
     "data-analysis": "data-chart",
-    "code-review": "code-findings",
+    "python-code": "python-code",
+}
+
+SUGGESTED_UI_ALIASES: dict[str, ComponentName] = {
+    "code-findings": "python-code",
+    "code-review": "python-code",
+    "code": "python-code",
 }
 
 
@@ -36,39 +43,88 @@ class UISelection(BaseModel):
     reasoning: str = Field(description="Why this component fits the output")
 
 
-def _props_for_component(component: ComponentName, final_data: dict, text: str) -> dict:
+def _gather_data(state: State) -> dict[str, Any]:
+    """Merge structured payloads from final_data and hired subtask results."""
+    merged: dict[str, Any] = dict(state.get("final_data") or {})
+    for result in state.get("subtask_results") or []:
+        for key, value in (result.get("data") or {}).items():
+            if key == "body":
+                continue
+            if key not in merged or merged[key] in (None, "", [], {}):
+                merged[key] = value
+            elif isinstance(merged[key], list) and isinstance(value, list):
+                merged[key] = merged[key] + value
+
+    text = state.get("final_text") or ""
+    if not merged.get("code") and text:
+        match = re.search(r"```(?:python)?\s*\n(.*?)```", text, re.DOTALL | re.IGNORECASE)
+        if match:
+            merged.setdefault("filename", "solution.py")
+            merged["code"] = match.group(1).strip()
+    return merged
+
+
+def _normalize_suggested(name: str | None) -> ComponentName | None:
+    if not name:
+        return None
+    if name in {"research-sources", "data-chart", "python-code"}:
+        return name  # type: ignore[return-value]
+    return SUGGESTED_UI_ALIASES.get(name)
+
+
+def _props_for_component(component: ComponentName, data: dict[str, Any], text: str) -> dict:
     if component == "research-sources":
         return {
-            "summary": final_data.get("summary") or text,
-            "sources": final_data.get("sources") or [],
+            "summary": data.get("summary") or text,
+            "sources": data.get("sources") or [],
         }
     if component == "data-chart":
         return {
-            "title": final_data.get("title"),
-            "chartType": final_data.get("chartType", "bar"),
-            "series": final_data.get("series") or [],
+            "title": data.get("title"),
+            "chartType": data.get("chartType", "bar"),
+            "series": data.get("series") or [],
         }
-    if component == "code-findings":
+    if component == "python-code":
+        code = data.get("code") or ""
         return {
-            "summary": final_data.get("summary") or text,
-            "findings": final_data.get("findings") or [],
+            "summary": data.get("summary") or text,
+            "filename": data.get("filename") or "solution.py",
+            "code": code,
         }
     return {}
 
 
-def _heuristic_component(state: State) -> ComponentName | None:
-    plan = state.get("plan") or {}
-    suggested = plan.get("suggested_ui")
-    if suggested in {"research-sources", "data-chart", "code-findings"}:
-        return suggested  # type: ignore[return-value]
+def _props_have_content(component: ComponentName, props: dict[str, Any]) -> bool:
+    if component == "research-sources":
+        return bool(props.get("sources"))
+    if component == "data-chart":
+        return bool(props.get("series"))
+    if component == "python-code":
+        return bool(str(props.get("code") or "").strip())
+    return bool(props)
 
-    data = state.get("final_data") or {}
+
+def _heuristic_component(state: State, data: dict[str, Any]) -> ComponentName | None:
+    plan = state.get("plan") or {}
+    suggested = _normalize_suggested(plan.get("suggested_ui"))
+    if suggested:
+        return suggested
+
     if data.get("sources"):
         return "research-sources"
     if data.get("series"):
         return "data-chart"
-    if data.get("findings"):
-        return "code-findings"
+    if data.get("code"):
+        return "python-code"
+
+    for result in state.get("subtask_results") or []:
+        result_data = result.get("data") or {}
+        if result_data.get("sources"):
+            return "research-sources"
+        if result_data.get("series"):
+            return "data-chart"
+        if result_data.get("code"):
+            return "python-code"
 
     for result in state.get("subtask_results") or []:
         skill = None
@@ -83,7 +139,7 @@ def _heuristic_component(state: State) -> ComponentName | None:
 
 async def ui_selector(state: State) -> dict:
     text = state.get("final_text") or ""
-    data = state.get("final_data") or {}
+    data = _gather_data(state)
     streamed = state.get("answer_streamed", False)
 
     if not streamed and text:
@@ -91,11 +147,16 @@ async def ui_selector(state: State) -> dict:
         emit("answer_done", text=text)
 
     emit_status("Selecting generative UI…")
-    component = _heuristic_component(state)
+    component = _heuristic_component(state, data)
 
     if component is None and data:
         rich_keys = set(data.keys()) - {"body"}
         if rich_keys:
+            preview = {
+                key: (str(value)[:400] + "…" if len(str(value)) > 400 else value)
+                for key, value in data.items()
+                if key != "body"
+            }
             llm = get_llm(temperature=0).with_structured_output(UISelection)
             decision: UISelection = await llm.ainvoke(
                 [
@@ -103,7 +164,8 @@ async def ui_selector(state: State) -> dict:
                         "role": "system",
                         "content": (
                             "Pick the best rich UI component for this output. "
-                            "Set component to null when plain text is sufficient.\n\n"
+                            "Use python-code when structured data includes runnable Python source. "
+                            "Set component to null only when plain text is sufficient.\n\n"
                             f"{UI_COMPONENTS}"
                         ),
                     },
@@ -111,7 +173,7 @@ async def ui_selector(state: State) -> dict:
                         "role": "user",
                         "content": (
                             f"Final text:\n{text}\n\n"
-                            f"Structured data keys: {list(rich_keys)}"
+                            f"Structured data preview:\n{preview}"
                         ),
                     },
                 ]
@@ -122,8 +184,19 @@ async def ui_selector(state: State) -> dict:
 
     if component:
         props = _props_for_component(component, data, text)
-        if props and any(props.values()):
+        if _props_have_content(component, props):
             emit("ui", name=component, props=props)
+            emit(
+                "gen_ui_selected",
+                component=component,
+                props=props,
+            )
             push_ui_message(component, props, message=message)
+        else:
+            emit(
+                "gen_ui_selected",
+                component=None,
+                reason=f"No rich content for {component}",
+            )
 
     return {"messages": [message]}

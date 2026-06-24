@@ -45,7 +45,7 @@ python -u agents/research_agent.py &
 PIDS+=($!)
 python -u agents/data_analyst.py &
 PIDS+=($!)
-python -u agents/code_reviewer.py &
+python -u agents/python_code_writer.py &
 PIDS+=($!)
 
 echo "Waiting for agents..."

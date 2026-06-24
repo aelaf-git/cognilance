@@ -22,7 +22,7 @@ def _format_catalog(agents: list[AgentCard]) -> str:
         return "No agents are registered in the marketplace."
     lines: list[str] = []
     for agent in agents:
-        skills = ", ".join(skill.name for skill in agent.skills)
+        skills = ", ".join(skill.id or skill.name for skill in agent.skills)
         status = "online" if agent.online else "offline"
         lines.append(
             f"- {agent.name}: skills=[{skills}] ({status}) — {agent.description or 'no description'}"
@@ -66,12 +66,36 @@ async def get_catalog(
     return agents, catalog_text, updates
 
 
+def _normalize_skill(skill: str) -> str:
+    return skill.strip().lower().replace("_", "-").replace(" ", "-")
+
+
+_SKILL_ALIASES: dict[str, set[str]] = {
+    "python-code": {"python-code", "python", "code-writing", "code-writer", "python-coding"},
+    "research": {"research", "web-research"},
+    "data-analysis": {"data-analysis", "data-analysis", "analytics", "charting"},
+}
+
+
+def _skill_matches(requested: str, candidate: str) -> bool:
+    req = _normalize_skill(requested)
+    cand = _normalize_skill(candidate)
+    if req == cand:
+        return True
+    for aliases in _SKILL_ALIASES.values():
+        if req in aliases and cand in aliases:
+            return True
+    return False
+
+
 def find_agent_by_skill(agents: list[AgentCard], skill: str) -> AgentCard | None:
     """Pick the first online agent offering the given skill slug."""
+    if not skill:
+        return None
     for agent in agents:
         if not agent.online:
             continue
         for agent_skill in agent.skills:
-            if agent_skill.name == skill or agent_skill.id == skill:
+            if _skill_matches(skill, agent_skill.name) or _skill_matches(skill, agent_skill.id):
                 return agent
     return None

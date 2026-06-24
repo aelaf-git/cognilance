@@ -73,19 +73,18 @@ async def _run_subtask(
     emit_status(f"Running: {subtask.get('title', subtask_id)}")
 
     try:
-        if assignee != "thinking" and skill:
-            agent = find_agent_by_skill(catalog_agents, skill)
-            if agent:
-                result = await manager.hire(agent, input_text=instruction)
-                payload: SubtaskResult = {
-                    "subtask_id": subtask_id,
-                    "text": result.output.text or "",
-                    "data": result.output.data or {},
-                    "assignee": agent.name,
-                    "status": "completed",
-                }
-                emit("subtask_done", id=subtask_id, status="completed", assignee=agent.name)
-                return payload
+        agent = find_agent_by_skill(catalog_agents, skill) if skill else None
+        if agent:
+            result = await manager.hire(agent, input_text=instruction)
+            payload: SubtaskResult = {
+                "subtask_id": subtask_id,
+                "text": result.output.text or "",
+                "data": result.output.data or {},
+                "assignee": agent.name,
+                "status": "completed",
+            }
+            emit("subtask_done", id=subtask_id, status="completed", assignee=agent.name)
+            return payload
 
         text, data = await run_thinking(instruction, stream=False)
         payload = {

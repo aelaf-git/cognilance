@@ -21,7 +21,7 @@ AGENT_PORTS = (8101, 8102, 8103)
 AGENT_SCRIPTS = (
     "agents/research_agent.py",
     "agents/data_analyst.py",
-    "agents/code_reviewer.py",
+    "agents/python_code_writer.py",
 )
 
 

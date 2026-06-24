@@ -1,11 +1,11 @@
 import ResearchSources from "./research-sources/index";
 import DataChart from "./data-chart/index";
-import CodeFindings from "./code-findings/index";
+import PythonCode from "./python-code/index";
 
 const ComponentMap = {
   "research-sources": ResearchSources,
   "data-chart": DataChart,
-  "code-findings": CodeFindings,
+  "python-code": PythonCode,
 } as const;
 
 export default ComponentMap;

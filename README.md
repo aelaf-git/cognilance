@@ -175,8 +175,8 @@ Leaf worker — registers on the marketplace and delivers work when hired. Does 
 from cognilance import CognilanceWorker
 
 worker = CognilanceWorker(
-    name="Code Reviewer",
-    skills=["code-review", "python"],
+    name="Python Code Writer",
+    skills=["python-code"],
     description="Reviews code for bugs and style.",
     port=8003,
 )
@@ -436,7 +436,7 @@ Reusable Python agents live in [`agents/`](agents/). Each one is a `CognilanceWo
 |-------|-------|------|--------------|--------------|
 | `research_agent.py` | `research` | 8101 | `{ summary, sources[] }` | `research-sources` |
 | `data_analyst.py` | `data-analysis` | 8102 | `{ title, chartType, series[] }` | `data-chart` |
-| `code_reviewer.py` | `code-review` | 8103 | `{ summary, findings[] }` | `code-findings` |
+| `python_code_writer.py` | `python-code` | 8103 | `{ summary, filename, code }` | `python-code` |
 
 ### Run the agents
 
@@ -446,7 +446,7 @@ pip install -r agents/requirements.txt
 # Groq + registry settings live in the repo root .env
 python agents/research_agent.py      # :8101
 python agents/data_analyst.py        # :8102  (separate terminal)
-python agents/code_reviewer.py       # :8103  (separate terminal)
+python agents/python_code_writer.py   # :8103  (separate terminal)
 ```
 
 Each agent reads `GROQ_API_KEY` and `COGNILANCE_REGISTRY_URL` from the **repo root** `.env` (default registry `http://127.0.0.1:8088`).
@@ -470,7 +470,7 @@ The [`orchestrator/`](orchestrator/) implements the **Cognilance Orchestrator ex
 3. **Routing** — **Simple** → Thinking Agent; **Complex** → multi-subtask plan with Thinking Agent fallback when no specialist matches
 4. **Task delegation** — Task Agent runs subtasks in dependency layers (parallel within a layer)
 5. **Execution** — hired agents via `CognilanceManager`; Thinking Agent handles gaps
-6. **Output rendering** — UI Selector picks a rich React component (`research-sources`, `data-chart`, `code-findings`)
+6. **Output rendering** — UI Selector picks a rich React component (`research-sources`, `data-chart`, `python-code`)
 
 ### Internal agents
 
@@ -555,7 +555,7 @@ Requires the registry to be running (unless `--no-register` is passed).
 
 ```bash
 cognilance run agents/research_agent.py
-cognilance run agents/code_reviewer.py --port 8103
+cognilance run agents/python_code_writer.py --port 8103
 cognilance run agents/research_agent.py --host 0.0.0.0 --port 8101 --no-register
 ```
 
@@ -584,7 +584,7 @@ Useful while developing handlers without writing a separate client or curl comma
 
 ```bash
 cognilance chat agents/research_agent.py
-cognilance chat agents/code_reviewer.py --port 8103
+cognilance chat agents/python_code_writer.py --port 8103
 cognilance chat agents/research_agent.py --no-register
 ```
 
@@ -610,7 +610,7 @@ cognilance chat agents/research_agent.py --no-register
 
 ```bash
 cognilance discover
-cognilance discover --skill translation --skill code-review
+cognilance discover --skill translation --skill python-code
 cognilance discover --tag dev --limit 20
 ```
 
@@ -664,7 +664,7 @@ cd registry && docker compose watch
 # Terminal 2-4 — agents
 python agents/research_agent.py
 python agents/data_analyst.py
-python agents/code_reviewer.py
+python agents/python_code_writer.py
 
 # Terminal 5 — verify discovery
 cognilance discover
@@ -709,7 +709,7 @@ cognilance/
 ├── agents/                  # Groq-backed CognilanceWorker agents
 │   ├── research_agent.py    # skill: research      → research-sources UI
 │   ├── data_analyst.py      # skill: data-analysis → data-chart UI
-│   ├── code_reviewer.py     # skill: code-review   → code-findings UI
+│   ├── python_code_writer.py  # skill: python-code  → python-code UI
 │   ├── requirements.txt
 ├── orchestrator/            # Python LangGraph supervisor + generative UI
 │   ├── langgraph.json       # graphs + ui bundle config (env: ../.env)
@@ -725,7 +725,7 @@ cognilance/
 │       ├── index.tsx        # ComponentMap
 │       ├── research-sources/
 │       ├── data-chart/
-│       └── code-findings/
+│       └── python-code/
 ├── scripts/
 │   ├── start_agents.sh      # run all three agents
 │   └── e2e_smoke_test.py    # registry + agents + orchestrator smoke test

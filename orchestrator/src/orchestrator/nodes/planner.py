@@ -16,7 +16,7 @@ from orchestrator.streaming import emit, emit_status, stream_llm
 
 UI_COMPONENTS = """- research-sources: research summaries with linked sources
 - data-chart: bar or line charts for numeric series
-- code-findings: code review findings with severity badges"""
+- python-code: Python source code with filename and summary"""
 
 THINKING_SYSTEM = """You are the Cognilance planner — like Cursor's agent planner, but for any task.
 
@@ -74,7 +74,9 @@ async def _classify_complexity(query: str, catalog_text: str) -> ComplexityDecis
                 "role": "system",
                 "content": (
                     "Classify whether the user's task is simple (answer directly) "
-                    "or complex (requires specialist agents from the marketplace)."
+                    "or complex (requires specialist agents from the marketplace). "
+                    "Tasks that need research, data analysis, charts, or generating "
+                    "Python code must be classified as complex."
                 ),
             },
             {
@@ -83,6 +85,40 @@ async def _classify_complexity(query: str, catalog_text: str) -> ComplexityDecis
             },
         ]
     )  # type: ignore[return-value]
+
+
+def _wants_python_code(query: str) -> bool:
+    q = query.lower()
+    hints = (
+        "python",
+        "write code",
+        "write a function",
+        "write a script",
+        "implement",
+        "palindrome",
+        "leetcode",
+        "def ",
+        "class ",
+    )
+    return any(hint in q for hint in hints)
+
+
+def _force_python_subtask(query: str, agents: list[AgentCard]) -> list[Subtask] | None:
+    if not _wants_python_code(query):
+        return None
+    match = find_agent_by_skill(agents, "python-code")
+    if not match:
+        return None
+    return [
+        {
+            "id": "python-code",
+            "title": "Write Python code",
+            "instruction": query,
+            "skill": "python-code",
+            "assignee": match.name,
+            "depends_on": [],
+        }
+    ]
 
 
 def _resolve_subtasks(
@@ -191,6 +227,14 @@ async def planner(state: State) -> dict:
                     "depends_on": [],
                 }
             ]
+
+        forced_python = _force_python_subtask(query, catalog_agents)
+        if forced_python:
+            complexity = "complex"
+            route = "complex"
+            subtasks = forced_python
+            if not decision.suggested_ui:
+                decision.suggested_ui = "python-code"
 
         plan: Plan = {
             "reasoning": decision.reasoning,
