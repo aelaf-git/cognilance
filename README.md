@@ -177,14 +177,17 @@ from cognilance import CognilanceWorker
 worker = CognilanceWorker(
     name="Python Code Writer",
     skills=["python-code"],
-    description="Reviews code for bugs and style.",
-    port=8003,
+    description="Writes Python code from natural-language requests.",
+    port=8103,
 )
 
 
 @worker.on_task
 async def handle(task):
-    return task.complete(text=f"Reviewed: {task.input.text}")
+    return task.complete(
+        text="Implemented the requested function.",
+        data={"summary": "...", "filename": "solution.py", "code": "def ..."},
+    )
 
 
 if __name__ == "__main__":
@@ -245,7 +248,7 @@ if __name__ == "__main__":
 
 ### When to use Worker vs Delegator
 
-- **Worker** — your agent does all the work itself (translate, summarize, review code).
+- **Worker** — your agent does all the work itself (translate, summarize, write code).
 - **Delegator** — your agent receives a task and subcontracts parts of it to specialists on the marketplace.
 
 ---
@@ -451,47 +454,71 @@ python agents/python_code_writer.py   # :8103  (separate terminal)
 
 Each agent reads `GROQ_API_KEY` and `COGNILANCE_REGISTRY_URL` from the **repo root** `.env` (default registry `http://127.0.0.1:8088`).
 
-Start all three at once:
+Start all three at once (requires registry on `:8088`):
 
 ```bash
 ./scripts/start_agents.sh
 ```
 
+The script checks registry health before launching agents on ports `8101`–`8103`.
+
 ---
 
 ## Orchestrator (generative UI)
 
-The [`orchestrator/`](orchestrator/) implements the **Cognilance Orchestrator execution algorithm** as a LangGraph pipeline with per-thread sessions (`thread_id` + checkpointer) and registry catalog caching.
+The [`orchestrator/`](orchestrator/) implements the **Cognilance Orchestrator execution algorithm** as a LangGraph pipeline with per-thread sessions (`thread_id` + `MemorySaver` checkpointer) and registry catalog caching (60s TTL per thread).
 
 ### Algorithm
 
-1. **User input** — prompt submitted via chat UI or API
-2. **Planning** — Planner classifies complexity and queries the registry (cached per thread, 60s TTL) in parallel, then builds a dynamic plan from **available** agents only
-3. **Routing** — **Simple** → Thinking Agent; **Complex** → multi-subtask plan with Thinking Agent fallback when no specialist matches
-4. **Task delegation** — Task Agent runs subtasks in dependency layers (parallel within a layer)
-5. **Execution** — hired agents via `CognilanceManager`; Thinking Agent handles gaps
-6. **Output rendering** — UI Selector picks a rich React component (`research-sources`, `data-chart`, `python-code`)
+```
+planner → [simple] thinking → ui_selector → END
+        → [complex] task    → ui_selector → END
+```
+
+1. **User input** — prompt submitted via the chat UI (`POST /chat/stream`) or API
+2. **Planning** — Planner classifies complexity and queries the registry in parallel, streams thinking, then builds a dynamic plan from **available** agents only
+3. **Routing** — **Simple** → Thinking Agent; **Complex** → multi-subtask plan (Python-code requests auto-route to the `python-code` specialist when registered)
+4. **Task delegation** — Task Agent runs subtasks in dependency layers (`asyncio.gather` within each layer)
+5. **Execution** — specialists hired via `CognilanceManager` by skill slug; Thinking Agent handles gaps
+6. **Output rendering** — UI Selector picks a rich React component (`research-sources`, `data-chart`, `python-code`) and streams it to the client
 
 ### Internal agents
 
 | Agent | Node | Role |
 |-------|------|------|
-| Planner | `planner` | Complexity + catalog + plan |
+| Planner | `planner` | Complexity + catalog + plan + thinking stream |
 | Thinking | `thinking` | Simple path and subtask fallback |
 | Task | `task` | Parallel/sequential subtask execution |
 | UI Selector | `ui_selector` | Generative UI component selection |
 
-The orchestrator ships its own **embedded chat UI** (registry-style dark theme) served by FastAPI. The client persists `thread_id` in `localStorage` for multi-turn sessions.
+### Chat UI
+
+The orchestrator ships a **React chat UI** (dark theme, Framer Motion) served at `/chat` by FastAPI:
+
+- **Orchestration feed** — collapsible step cards: User Prompt → Planner Plan → Routing → Delegation → Per-Agent Execution → Aggregated Output → Gen UI Selection
+- **Sidebar** — shows only **hired** marketplace agents for the current run (idle / executing / done)
+- **SSE streaming** — `thinking`, `plan`, `subtask_*`, `answer`, `ui`, and `gen_ui_selected` events
+- **Thread persistence** — `thread_id` stored in `localStorage` for multi-turn sessions
+
+Source lives in [`orchestrator/chat-ui/`](orchestrator/chat-ui/). Build the bundle after UI changes:
+
+```bash
+cd orchestrator/chat-ui && npm install && npm run build
+```
+
+Output is written to `orchestrator/src/orchestrator/ui/static/index.html` (single-file bundle). Restart the orchestrator to pick up a new build.
+
+LangGraph Studio still uses the component map in [`orchestrator/ui/`](orchestrator/ui/) when you run `langgraph dev`.
 
 ### End-to-end (three terminals)
 
-**Terminal 1 — registry**
+**Terminal 1 — registry** (must be up before agents)
 
 ```bash
 cd registry && docker compose watch
 ```
 
-**Terminal 2 — agents**
+**Terminal 2 — agents** (waits for registry health on `:8088`)
 
 ```bash
 ./scripts/start_agents.sh
@@ -507,7 +534,14 @@ python -m orchestrator
 
 Startup prints the chat UI link (default `http://127.0.0.1:8200/chat`). Uses the repo root `.env` for `GROQ_API_KEY` and `COGNILANCE_REGISTRY_URL`.
 
-Optional: `langgraph dev` in `orchestrator/` still works for LangGraph Studio development with the React component map in `orchestrator/ui/`.
+### Example prompts
+
+| Prompt | Expected route | UI component |
+|--------|----------------|--------------|
+| `What is 2+2?` | simple | plain text |
+| `Research the history of transformers in ML` | complex | `research-sources` |
+| `Chart Q1–Q4 sales: 100, 150, 120, 200` | complex | `data-chart` |
+| `Write a Python function that checks if a string is a palindrome` | complex | `python-code` |
 
 ### Quick smoke test (no UI)
 
@@ -515,8 +549,6 @@ Optional: `langgraph dev` in `orchestrator/` still works for LangGraph Studio de
 source .venv/bin/activate
 python scripts/e2e_smoke_test.py
 ```
-
-> Browser renderers live in `orchestrator/src/orchestrator/ui/chat.py` (vanilla JS). React components in `orchestrator/ui/` are used by LangGraph Studio when running `langgraph dev`.
 
 ---
 
@@ -683,6 +715,7 @@ python -m orchestrator
 | `COGNILANCE_PORT` | No | `8000` | Default port for workers and delegators |
 | `GROQ_API_KEY` | For agents/orchestrator | — | Groq API key used by the agents and the orchestrator |
 | `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | Groq model for agents and the orchestrator |
+| `VITE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL for the chat UI sidebar (build-time) |
 
 ---
 
@@ -711,23 +744,34 @@ cognilance/
 │   ├── data_analyst.py      # skill: data-analysis → data-chart UI
 │   ├── python_code_writer.py  # skill: python-code  → python-code UI
 │   ├── requirements.txt
-├── orchestrator/            # Python LangGraph supervisor + generative UI
+├── orchestrator/            # LangGraph supervisor + React chat UI + generative UI
 │   ├── langgraph.json       # graphs + ui bundle config (env: ../.env)
+│   ├── chat-ui/             # React chat app (Vite + Tailwind + Framer Motion)
 │   ├── package.json         # UI bundler deps (for langgraph dev)
 │   ├── pyproject.toml
 │   ├── src/orchestrator/
-│   │   ├── graph.py         # StateGraph: router → hire/general → END
-│   │   ├── state.py         # messages + ui + route
+│   │   ├── graph.py         # planner → thinking|task → ui_selector
+│   │   ├── server.py        # FastAPI: /chat, /chat/stream
+│   │   ├── state.py         # messages, ui, plan, subtasks, catalog cache
+│   │   ├── registry_cache.py
+│   │   ├── streaming.py     # SSE custom events
 │   │   ├── env.py           # loads repo-root .env
 │   │   ├── llm.py           # Groq factory + message helpers
-│   │   └── nodes/           # router, hire (discover+hire+render), general
-│   └── ui/                  # React/TSX generative-UI components
+│   │   ├── ui/
+│   │   │   ├── chat.py      # serves built static/index.html
+│   │   │   └── static/      # chat-ui build output (gitignored generated bundle)
+│   │   └── nodes/
+│   │       ├── planner.py
+│   │       ├── thinking.py / thinking_node.py
+│   │       ├── task.py
+│   │       └── ui_selector.py
+│   └── ui/                  # LangGraph generative-UI components (TSX)
 │       ├── index.tsx        # ComponentMap
 │       ├── research-sources/
 │       ├── data-chart/
 │       └── python-code/
 ├── scripts/
-│   ├── start_agents.sh      # run all three agents
+│   ├── start_agents.sh      # registry check + run all three agents
 │   └── e2e_smoke_test.py    # registry + agents + orchestrator smoke test
 ├── registry/                # Registry API (FastAPI + Prisma + SQLite)
 │   ├── prisma/
