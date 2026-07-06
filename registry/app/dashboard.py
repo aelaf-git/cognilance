@@ -204,32 +204,16 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   <div id="status"><div class="dot" id="status-dot"></div><span id="status-text">loading</span></div>
 </header>
 
-<nav class="tabs">
-  <button class="tab active" data-tab="worker">Workers<span class="count" id="count-worker">0</span></button>
-  <button class="tab" data-tab="delegator">Delegators<span class="count" id="count-delegator">0</span></button>
-</nav>
-
 <section id="agents-panel">
   <div class="grid" id="agent-grid"></div>
 </section>
 
 <script>
 let allAgents = [];
-let activeTab = "worker";
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c =>
     ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
-
-function agentRole(a) {
-  const tags = (a.tags || []).map(t => t.toLowerCase());
-  if (tags.includes("delegator")) return "delegator";
-  if (tags.includes("worker")) return "worker";
-  const skills = (a.skills || []).map(s => (s.name || s).toLowerCase());
-  if (skills.some(s => ["routing", "orchestration", "pipeline", "product-launch"].includes(s)))
-    return "delegator";
-  return "worker";
 }
 
 function renderCard(a) {
@@ -239,7 +223,7 @@ function renderCard(a) {
       <div class="card-head">
         <div class="status ${a.online ? "online" : ""}"></div>
         <div class="name">${esc(a.name)}</div>
-        <span class="role">${esc(agentRole(a))}</span>
+        <span class="role">worker</span>
       </div>
       <div class="desc">${esc(a.description || "No description.")}</div>
       <div class="skills">${skills || '<span class="skill">—</span>'}</div>
@@ -252,29 +236,13 @@ function renderCard(a) {
 
 function renderAgents() {
   const grid = document.getElementById("agent-grid");
-  const workers = allAgents.filter(a => agentRole(a) === "worker");
-  const delegators = allAgents.filter(a => agentRole(a) === "delegator");
-  const items = activeTab === "worker" ? workers : delegators;
 
-  document.getElementById("count-worker").textContent = workers.length;
-  document.getElementById("count-delegator").textContent = delegators.length;
-
-  if (!items.length) {
-    const hint = activeTab === "worker" ? "No workers registered." : "No delegators registered.";
-    grid.innerHTML = `<div class="empty-state">${hint}</div>`;
+  if (!allAgents.length) {
+    grid.innerHTML = `<div class="empty-state">No workers registered.</div>`;
     return;
   }
-  grid.innerHTML = items.map(renderCard).join("");
+  grid.innerHTML = allAgents.map(renderCard).join("");
 }
-
-document.querySelectorAll(".tab").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    activeTab = btn.dataset.tab;
-    renderAgents();
-  });
-});
 
 async function loadAgents() {
   const dot = document.getElementById("status-dot");

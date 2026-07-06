@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 from cognilance.config import Config
-from cognilance.core.runtime import CognilanceDelegator, CognilanceWorker
+from cognilance.core.runtime import CognilanceWorker
 from cognilance.registry.client import RegistryClient, RegistryError
 
 app = typer.Typer(
@@ -24,7 +24,7 @@ app = typer.Typer(
 console = Console()
 
 
-RuntimeInstance = CognilanceWorker | CognilanceDelegator
+RuntimeInstance = CognilanceWorker
 
 
 def _load_agent_from_file(path: Path) -> RuntimeInstance:
@@ -41,12 +41,12 @@ def _load_agent_from_file(path: Path) -> RuntimeInstance:
 
     for attr in dir(module):
         obj = getattr(module, attr)
-        if isinstance(obj, (CognilanceWorker, CognilanceDelegator)):
+        if isinstance(obj, CognilanceWorker):
             return obj
 
     raise typer.BadParameter(
-        f"No CognilanceWorker or CognilanceDelegator instance found in {path}. "
-        "Define `worker = CognilanceWorker(...)` or `delegator = CognilanceDelegator(...)`."
+        f"No CognilanceWorker instance found in {path}. "
+        "Define `worker = CognilanceWorker(...)`."
     )
 
 

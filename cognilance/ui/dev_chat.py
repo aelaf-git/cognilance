@@ -1,4 +1,4 @@
-"""Built-in chat UI — served at GET /chat on every Cognilance worker and delegator."""
+"""Built-in chat UI — served at GET /chat on every Cognilance worker."""
 
 from __future__ import annotations
 
@@ -227,7 +227,7 @@ def agent_chat_html(
     skills: list[str] | None = None,
     role: str = "agent",
 ) -> str:
-    """Chat UI for a running worker or delegator."""
+    """Chat UI for a running worker."""
     skill_list = skills or []
     desc = _esc(description or "Built-in Cognilance chat.")
     role_label = _esc(role)

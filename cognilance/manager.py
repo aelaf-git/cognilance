@@ -23,8 +23,7 @@ class CognilanceManager:
     Hire and discover agents on the Cognilance marketplace.
 
     Drop this into any existing project — LangChain, CrewAI, FastAPI, a script.
-    No server or registry listing required. Use CognilanceWorker or CognilanceDelegator
-    when you also want to be hired.
+    No server or registry listing required. Use CognilanceWorker when you also want to be hired.
 
         async with CognilanceManager.from_env() as manager:
             agents = await manager.discover(skills=["translation"])
@@ -46,7 +45,7 @@ class CognilanceManager:
         self._agent_id = agent_id
         self._registry = RegistryClient(registry_url=self._registry_url)
         self._a2a = A2AClient()
-        # Trace context: inherited when running inside a delegator handler,
+        # Trace context: inherited when nested inside another hire chain,
         # otherwise this manager is the root of a new hire chain.
         self._trace = trace or TraceContext()
         self._task_id = task_id or f"manager-{uuid.uuid4().hex[:12]}"

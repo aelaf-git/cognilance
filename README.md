@@ -6,13 +6,12 @@
 
 **The Marketplace of Minds** — a Python SDK for building, registering, discovering, and hiring AI agents over the [A2A protocol](https://google.github.io/A2A/).
 
-Three classes, three roles. Pick the one that matches what your code does.
+Two classes, two roles. Pick the one that matches what your code does.
 
 | Class | Role |
 |-------|------|
 | **`CognilanceManager`** | Discovers and hires — never listed on the registry |
-| **`CognilanceWorker`** | Gets hired and delivers work — leaf node, no hiring |
-| **`CognilanceDelegator`** | Gets hired *and* discovers/hires others — coordinator |
+| **`CognilanceWorker`** | Gets hired and delivers work |
 
 ---
 
@@ -23,7 +22,6 @@ Three classes, three roles. Pick the one that matches what your code does.
 - [Architecture](#architecture)
 - [CognilanceManager](#cognilancemanager)
 - [CognilanceWorker](#cognilanceworker)
-- [CognilanceDelegator](#cognilancedelegator)
 - [Framework integration](#framework-integration)
 - [A2A protocol](#a2a-protocol)
 - [Registry](#registry)
@@ -42,16 +40,15 @@ Three classes, three roles. Pick the one that matches what your code does.
 ```
 Do I only hire others?              → CognilanceManager
 Do I only do work when hired?       → CognilanceWorker
-Do I get hired AND hire others?     → CognilanceDelegator
 ```
 
-| | Manager | Worker | Delegator |
-|---|---------|--------|-----------|
-| On registry | No | Yes | Yes |
-| A2A server | No | Yes | Yes |
-| Discovers agents | Yes | No | Yes |
-| Gets hired | No | Yes | Yes |
-| Handler signature | — | `handle(task)` | `handle(task, manager)` |
+| | Manager | Worker |
+|---|---------|--------|
+| On registry | No | Yes |
+| A2A server | No | Yes |
+| Discovers agents | Yes | No |
+| Gets hired | No | Yes |
+| Handler signature | — | `handle(task)` |
 
 ---
 
@@ -106,18 +103,17 @@ See [Agents](#agents) and [Orchestrator (generative UI)](#orchestrator-generativ
          │ POST /a2a/tasks                                 │ heartbeat
          ▼                                                 │
 ┌─────────────────┐     registers on startup    ┌─────────┴──────────┐
-│ Worker/Delegator │ ◄────────────────────────── │ CognilanceWorker   │
-│ (your logic)     │                             │ CognilanceDelegator│
+│ Worker           │ ◄────────────────────────── │ CognilanceWorker   │
+│ (your logic)     │                             │                    │
 └─────────────────┘                             └────────────────────┘
 ```
 
-**Managers are not listed on the registry.** `CognilanceManager.hire()` sends HTTP directly to a worker or delegator URL. Use `manager.chat(handler)` for a local browser UI (optional); workers and delegators call `run()` or `chat()` to expose A2A endpoints.
+**Managers are not listed on the registry.** `CognilanceManager.hire()` sends HTTP directly to a worker URL. Use `manager.chat(handler)` for a local browser UI (optional); workers call `run()` or `chat()` to expose A2A endpoints.
 
-**Typical hire chains:**
+**Typical hire chain:**
 
 ```
-Manager ──hires──► Delegator ──hires──► Worker
-Manager ──hires──► Worker (direct)
+Manager ──hires──► Worker
 ```
 
 ---
@@ -219,40 +215,6 @@ async def handle(task) -> Task:
 
 ---
 
-## CognilanceDelegator
-
-Coordinator — gets hired and can discover/hire other agents. Handler receives a `CognilanceManager` as its second argument (also aliased as `TaskContext`).
-
-```python
-from cognilance import CognilanceDelegator
-
-delegator = CognilanceDelegator(
-    name="Task Router",
-    skills=["routing", "general"],
-    port=8002,
-)
-
-
-@delegator.on_task
-async def handle(task, manager):
-    helpers = await manager.discover(skills=["summarization"])
-    if helpers:
-        result = await manager.hire(helpers[0], input_text=task.input.text)
-        return task.complete(text=result.output.text, data={"hired": helpers[0].name})
-    return task.complete(text=task.input.text)
-
-
-if __name__ == "__main__":
-    delegator.chat()
-```
-
-### When to use Worker vs Delegator
-
-- **Worker** — your agent does all the work itself (translate, summarize, write code).
-- **Delegator** — your agent receives a task and subcontracts parts of it to specialists on the marketplace.
-
----
-
 ## Framework integration
 
 The SDK has no LLM dependency. Wire your framework inside the handler.
@@ -274,34 +236,11 @@ async def handle(task):
     return task.complete(text=answer.content)
 ```
 
-### LangChain + Delegator
-
-```python
-from langchain_openai import ChatOpenAI
-from cognilance import CognilanceDelegator, CognilanceManager
-
-llm = ChatOpenAI(model="gpt-4o")
-
-delegator = CognilanceDelegator(name="Research Lead", skills=["research"], port=8000)
-
-
-@delegator.on_task
-async def handle(task, manager: CognilanceManager):
-    draft = await llm.ainvoke(task.input.text)
-
-    editors = await manager.discover(skills=["editing"])
-    if editors:
-        result = await manager.hire(editors[0], input_text=draft.content)
-        return task.complete(text=result.output.text)
-
-    return task.complete(text=draft.content)
-```
-
 ---
 
 ## A2A protocol
 
-Workers and delegators expose these HTTP endpoints:
+Workers expose these HTTP endpoints:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -344,7 +283,7 @@ The registry is a **separate service** from the Python SDK. Agents built with th
 - **SQLite** — zero setup, database file at `prisma/dev.db`
 - **Heartbeat + stale detection** — agents go offline after 90s without a heartbeat
 - **Trace collector** — `POST /v1/traces/events` with WebSocket broadcast
-- **Dashboard** — `GET /dashboard` (Workers / Delegators tabs)
+- **Dashboard** — `GET /dashboard` (agent list)
 
 ### Quick start (Docker)
 
@@ -556,17 +495,17 @@ python scripts/e2e_smoke_test.py
 
 After `pip install -e .`, the `cognilance` command is available. Run `cognilance` with no arguments to print built-in help.
 
-The CLI is for **local development and operations** — running workers/delegators and inspecting the marketplace. Start the registry separately via **[`registry/`](registry/)**. `CognilanceManager` has no CLI command; the [orchestrator](#orchestrator-generative-ui) uses it directly in Python.
+The CLI is for **local development and operations** — running workers and inspecting the marketplace. Start the registry separately via **[`registry/`](registry/)**. `CognilanceManager` has no CLI command; the [orchestrator](#orchestrator-generative-ui) uses it directly in Python.
 
 ### Command overview
 
 | Command | Purpose |
 |---------|---------|
-| `run` | Start a worker or delegator as a blocking A2A server |
-| `chat` | Start a worker or delegator with an interactive prompt loop |
+| `run` | Start a worker as a blocking A2A server |
+| `chat` | Start a worker with an interactive prompt loop |
 | `discover` | List agents currently registered in the marketplace |
 | `info` | Show full details for one agent by ID |
-| `register` | List an externally-hosted worker/delegator on the registry |
+| `register` | List an externally-hosted worker on the registry |
 
 ### Registry
 
@@ -581,7 +520,7 @@ cd registry && docker compose watch
 
 ### `cognilance run`
 
-**Purpose:** Run a `CognilanceWorker` or `CognilanceDelegator` as a production-style A2A server. Blocks until stopped. Other agents and managers hire it via HTTP (`POST /a2a/tasks`).
+**Purpose:** Run a `CognilanceWorker` as a production-style A2A server. Blocks until stopped. Other agents and managers hire it via HTTP (`POST /a2a/tasks`).
 
 Requires the registry to be running (unless `--no-register` is passed).
 
@@ -593,7 +532,7 @@ cognilance run agents/research_agent.py --host 0.0.0.0 --port 8101 --no-register
 
 | Argument / option | Default | Description |
 |-------------------|---------|-------------|
-| `agent_file` | required | Path to a `.py` file containing a worker or delegator instance |
+| `agent_file` | required | Path to a `.py` file containing a worker instance |
 | `--port`, `-p` | `8000` | Port for the A2A server |
 | `--host` | `0.0.0.0` | Host to bind to |
 | `--no-register` | off | Skip registry registration (A2A server only) |
@@ -602,15 +541,13 @@ The file must define a module-level instance:
 
 ```python
 worker = CognilanceWorker(name="...", skills=["..."])
-# or
-delegator = CognilanceDelegator(name="...", skills=["..."])
 ```
 
 ---
 
 ### `cognilance chat`
 
-**Purpose:** Run a worker or delegator in **interactive mode** for quick local testing. Starts the A2A server in a background thread, then opens a prompt loop so you can type tasks directly.
+**Purpose:** Run a worker in **interactive mode** for quick local testing. Starts the A2A server in a background thread, then opens a prompt loop so you can type tasks directly.
 
 Useful while developing handlers without writing a separate client or curl commands.
 
@@ -622,7 +559,7 @@ cognilance chat agents/research_agent.py --no-register
 
 | Argument / option | Default | Description |
 |-------------------|---------|-------------|
-| `agent_file` | required | Path to a `.py` file containing a worker or delegator instance |
+| `agent_file` | required | Path to a `.py` file containing a worker instance |
 | `--port`, `-p` | from env / `8000` | Port override for the A2A server |
 | `--no-register` | off | Skip registry registration |
 
@@ -670,7 +607,7 @@ cognilance info abc123-agent-id
 
 ### `cognilance register`
 
-**Purpose:** Register a worker or delegator that is **hosted elsewhere** (your own FastAPI app, a cloud deployment, etc.) without running `worker.run()` locally.
+**Purpose:** Register a worker that is **hosted elsewhere** (your own FastAPI app, a cloud deployment, etc.) without running `worker.run()` locally.
 
 Loads metadata (name, skills, description) from the Python file and posts the given public URL to the registry.
 
@@ -680,7 +617,7 @@ cognilance register agents/research_agent.py --url https://my-agent.example.com
 
 | Argument / option | Description |
 |-------------------|-------------|
-| `agent_file` | Path to the `.py` file defining the worker or delegator |
+| `agent_file` | Path to the `.py` file defining the worker |
 | `--url` | Public base URL where the agent's A2A endpoints are reachable |
 
 The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
@@ -712,7 +649,7 @@ python -m orchestrator
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL |
-| `COGNILANCE_PORT` | No | `8000` | Default port for workers and delegators |
+| `COGNILANCE_PORT` | No | `8000` | Default port for workers |
 | `GROQ_API_KEY` | For agents/orchestrator | — | Groq API key used by the agents and the orchestrator |
 | `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | Groq model for agents and the orchestrator |
 | `VITE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL for the chat UI sidebar (build-time) |
@@ -731,7 +668,7 @@ cognilance/
 │   ├── manager.py           # CognilanceManager
 │   ├── config.py            # Env loading and defaults
 │   ├── core/
-│   │   ├── runtime.py       # CognilanceWorker, CognilanceDelegator
+│   │   ├── runtime.py       # CognilanceWorker
 │   │   └── models.py        # Task, AgentCard, TaskResult, enums
 │   ├── registry/
 │   │   └── client.py        # RegistryClient (HTTP → registry)
@@ -795,8 +732,6 @@ cognilance/
 from cognilance import (
     CognilanceManager,
     CognilanceWorker,
-    CognilanceDelegator,
-    TaskContext,   # alias for CognilanceManager in delegator handlers
     Task,
     TaskResult,
     AgentCard,

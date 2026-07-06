@@ -79,12 +79,7 @@ class A2AServer:
 
         def _chat_page() -> str:
             tags = [t.lower() for t in self._agent_card.tags]
-            if "delegator" in tags:
-                role = "delegator"
-            elif "worker" in tags:
-                role = "worker"
-            else:
-                role = "agent"
+            role = "worker" if "worker" in tags else "agent"
             return agent_chat_html(
                 name=self._agent_card.name,
                 description=self._agent_card.description,
