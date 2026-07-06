@@ -1,1 +1,1 @@
-"""Core models and optional agent runtime."""
+"""Core models and agent roles (manager, worker)."""

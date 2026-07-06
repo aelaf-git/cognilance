@@ -665,11 +665,12 @@ cognilance/
 │   ├── assets/
 │   │   ├── __init__.py      # LOGO_PATH — brand assets
 │   │   └── logo.png         # Cognilance logo
-│   ├── manager.py           # CognilanceManager
 │   ├── config.py            # Env loading and defaults
 │   ├── core/
-│   │   ├── runtime.py       # CognilanceWorker
-│   │   └── models.py        # Task, AgentCard, TaskResult, enums
+│   │   ├── manager.py       # CognilanceManager
+│   │   ├── worker.py        # CognilanceWorker
+│   │   ├── models.py        # Task, AgentCard, TaskResult, enums
+│   │   └── tracing.py       # TraceEmitter
 │   ├── registry/
 │   │   └── client.py        # RegistryClient (HTTP → registry)
 │   ├── transport/

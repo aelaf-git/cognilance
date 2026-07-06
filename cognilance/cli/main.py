@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 from cognilance.config import Config
-from cognilance.core.runtime import CognilanceWorker
+from cognilance.core.worker import CognilanceWorker
 from cognilance.registry.client import RegistryClient, RegistryError
 
 app = typer.Typer(

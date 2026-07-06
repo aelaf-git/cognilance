@@ -1,4 +1,4 @@
-"""CognilanceWorker and shared A2A runtime."""
+"""CognilanceWorker — marketplace agent that registers and serves A2A tasks."""
 
 from __future__ import annotations
 
