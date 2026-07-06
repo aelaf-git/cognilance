@@ -2,7 +2,6 @@ import { useCallback, useRef, useState } from "react";
 import type {
   FeedCard,
   FeedCardType,
-  HiredAgent,
   OrchestrationTurn,
   StepStatus,
   SubtaskItem,
@@ -14,10 +13,6 @@ const THREAD_KEY = "cognilance_orchestrator_thread";
 
 function uid() {
   return crypto.randomUUID();
-}
-
-function isSpecialist(name: string | undefined): name is string {
-  return Boolean(name && name !== "thinking");
 }
 
 function makeCard(type: FeedCardType, partial: Partial<FeedCard> = {}): FeedCard {
@@ -46,91 +41,327 @@ function ensureCard(turn: OrchestrationTurn, type: FeedCardType): OrchestrationT
   return { ...turn, cards: [...turn.cards, makeCard(type, { status: "running" })] };
 }
 
-export function useChatStream() {
+type EventContext = {
+  route?: string;
+  subtasks: SubtaskItem[];
+  answer: string;
+  uiItems: UiItem[];
+};
+
+function applyEvent(
+  turn: OrchestrationTurn,
+  data: Record<string, unknown>,
+  ctx: EventContext,
+): OrchestrationTurn {
+  const event = data.event as string;
+
+  if (event === "thinking" && data.delta) {
+    const content =
+      (turn.cards.find((c) => c.type === "planner")?.content ?? "") + String(data.delta);
+    return updateCard(turn, "planner", { status: "running", content });
+  }
+  if (event === "thinking_done") {
+    return updateCard(turn, "planner", { status: "done" });
+  }
+  if (event === "plan" && data.data) {
+    const plan = data.data as Record<string, unknown>;
+    ctx.route = (plan.route as string) ?? ctx.route;
+    const steps = (plan.steps as { title: string; detail: string }[]) ?? [];
+    const rawSubtasks = (plan.subtasks as SubtaskItem[]) ?? [];
+    ctx.subtasks = rawSubtasks.map((s) => ({ ...s, status: "pending" as StepStatus }));
+    const reasoning = (plan.reasoning as string) ?? "";
+    const thinking = (plan.thinking as string) ?? "";
+    const planText = [
+      reasoning && `Reasoning:\n${reasoning}`,
+      steps.length
+        ? `Steps:\n${steps.map((s, i) => `${i + 1}. ${s.title}\n   ${s.detail}`).join("\n")}`
+        : "",
+      thinking && `Thinking:\n${thinking}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    return updateCard(turn, "planner", {
+      status: "done",
+      content: planText || turn.cards.find((c) => c.type === "planner")?.content,
+      subtasks: undefined,
+    });
+  }
+  if (event === "route_decision") {
+    ctx.route = (data.route as string) ?? ctx.route;
+    const complexity = data.complexity as string | undefined;
+    let next = ensureCard(turn, "routing");
+    return updateCard(next, "routing", {
+      status: "done",
+      route: ctx.route,
+      complexity,
+      content: `Route: ${ctx.route}${complexity ? `\nComplexity: ${complexity}` : ""}`,
+    });
+  }
+  if (event === "execution_start") {
+    let next = ensureCard(turn, "delegation");
+    next = updateCard(next, "delegation", {
+      status: "running",
+      subtasks: ctx.subtasks.length
+        ? ctx.subtasks
+        : [{ id: "direct", title: "Direct execution", status: "pending" }],
+      content:
+        ctx.route === "simple"
+          ? "Simple route — thinking agent will answer directly."
+          : `Delegating ${ctx.subtasks.length || 1} subtask(s).`,
+    });
+    return ensureCard(next, "agent-exec");
+  }
+  if (event === "subtask_start") {
+    const id = data.id as string;
+    const title = data.title as string;
+    const assignee = data.assignee as string;
+    let next = ensureCard(turn, "agent-exec");
+    const existing = next.cards.find((c) => c.type === "agent-exec");
+    const list = [...(existing?.subtasks ?? ctx.subtasks)];
+    const idx = list.findIndex((s) => s.id === id);
+    const item: SubtaskItem = { id, title, assignee, status: "running" };
+    if (idx >= 0) list[idx] = { ...list[idx], ...item, status: "running" };
+    else list.push(item);
+    ctx.subtasks = list;
+    return updateCard(next, "agent-exec", { status: "running", subtasks: list });
+  }
+  if (event === "subtask_done") {
+    const id = data.id as string;
+    const assignee = data.assignee as string;
+    const st = data.status as string;
+    const isFallback = assignee === "thinking";
+    let next = ensureCard(turn, "agent-exec");
+    const card = next.cards.find((c) => c.type === "agent-exec");
+    const list = (card?.subtasks ?? ctx.subtasks).map((s) =>
+      s.id === id
+        ? {
+            ...s,
+            status: (isFallback ? "fallback" : st === "failed" ? "fallback" : "done") as StepStatus,
+            assignee,
+          }
+        : s,
+    );
+    const allDone = list.every((s) => s.status === "done" || s.status === "fallback");
+    next = updateCard(next, "agent-exec", {
+      status: allDone ? "done" : "running",
+      subtasks: list,
+    });
+    return updateCard(next, "delegation", { status: "done" });
+  }
+  if (event === "execution_done") {
+    let next = updateCard(turn, "delegation", { status: "done" });
+    const exec = next.cards.find((c) => c.type === "agent-exec");
+    if (!exec) {
+      next = ensureCard(next, "agent-exec");
+      next = updateCard(next, "agent-exec", {
+        status: "done",
+        content: ctx.route === "simple" ? "Handled by thinking agent." : undefined,
+      });
+    }
+    return next;
+  }
+  if (event === "answer" && data.delta) {
+    ctx.answer += String(data.delta);
+    let next = turn;
+    if (ctx.route === "simple") {
+      next = ensureCard(next, "delegation");
+      next = updateCard(next, "delegation", {
+        status: "done",
+        content: "Simple route — thinking agent answering directly.",
+      });
+      next = ensureCard(next, "agent-exec");
+      next = updateCard(next, "agent-exec", {
+        status: "running",
+        subtasks: [
+          { id: "thinking", title: "Direct answer", assignee: "thinking", status: "running" },
+        ],
+      });
+    }
+    next = ensureCard(next, "output");
+    return updateCard(next, "output", { status: "running", content: ctx.answer, mono: false });
+  }
+  if (event === "answer_done") {
+    let next = ensureCard(turn, "output");
+    next = updateCard(next, "output", {
+      status: "done",
+      content: (data.text as string) || ctx.answer,
+    });
+    if (ctx.route === "simple") {
+      next = ensureCard(next, "agent-exec");
+      next = updateCard(next, "agent-exec", {
+        status: "done",
+        subtasks: [
+          { id: "thinking", title: "Direct answer", assignee: "thinking", status: "done" },
+        ],
+      });
+    }
+    return next;
+  }
+  if (event === "ui" && data.name !== "text-card") {
+    ctx.uiItems.push({
+      name: data.name as string,
+      props: (data.props as Record<string, unknown>) ?? {},
+    });
+    let next = ensureCard(turn, "gen-ui");
+    return updateCard(next, "gen-ui", {
+      status: "running",
+      uiComponent: data.name as string,
+      uiProps: (data.props as Record<string, unknown>) ?? {},
+    });
+  }
+  if (event === "gen_ui_selected") {
+    const component = data.component as string | null | undefined;
+    if (component) {
+      const props = (data.props as Record<string, unknown>) ?? {};
+      ctx.uiItems.push({ name: component, props });
+      let next = ensureCard(turn, "gen-ui");
+      return updateCard(next, "gen-ui", {
+        status: "done",
+        uiComponent: component,
+        uiProps: props,
+      });
+    }
+    let next = ensureCard(turn, "gen-ui");
+    return updateCard(next, "gen-ui", {
+      status: "done",
+      uiComponent: null,
+      content: String(data.reason ?? "Plain text response."),
+    });
+  }
+  if (event === "final") {
+    if (!ctx.answer && data.text) ctx.answer = String(data.text);
+    const finalUi = (data.ui as UiItem[]) ?? [];
+    for (const item of finalUi) {
+      if (item.name !== "text-card") ctx.uiItems.push(item);
+    }
+    let next = turn;
+    if (ctx.answer) {
+      next = ensureCard(next, "output");
+      next = updateCard(next, "output", { status: "done", content: ctx.answer });
+    }
+    next = ensureCard(next, "gen-ui");
+    const lastUi = ctx.uiItems[ctx.uiItems.length - 1];
+    return updateCard(next, "gen-ui", {
+      status: "done",
+      uiComponent: lastUi?.name ?? null,
+      uiProps: lastUi?.props ?? {},
+      content: lastUi ? undefined : "No rich UI component selected.",
+    });
+  }
+  if (event === "error") {
+    return {
+      ...turn,
+      cards: [
+        ...turn.cards,
+        makeCard("output", {
+          status: "fallback",
+          content: String(data.message ?? "Request failed"),
+          mono: true,
+        }),
+      ],
+    };
+  }
+  return turn;
+}
+
+function finalizeTurn(turn: OrchestrationTurn, ctx: EventContext): OrchestrationTurn {
+  let next = turn;
+  if (!next.cards.some((c) => c.type === "routing") && ctx.route) {
+    next = ensureCard(next, "routing");
+    next = updateCard(next, "routing", { status: "done", route: ctx.route });
+  }
+  if (ctx.route === "simple" && !next.cards.some((c) => c.type === "delegation")) {
+    next = ensureCard(next, "delegation");
+    next = updateCard(next, "delegation", {
+      status: "done",
+      content: "Simple route — no specialist delegation.",
+    });
+  }
+  if (ctx.answer && !next.cards.some((c) => c.type === "output")) {
+    next = ensureCard(next, "output");
+    next = updateCard(next, "output", { status: "done", content: ctx.answer });
+  }
+  if (!next.cards.some((c) => c.type === "gen-ui")) {
+    next = ensureCard(next, "gen-ui");
+    const lastUi = ctx.uiItems[ctx.uiItems.length - 1];
+    next = updateCard(next, "gen-ui", {
+      status: "done",
+      uiComponent: lastUi?.name ?? null,
+      uiProps: lastUi?.props ?? {},
+      content: lastUi ? undefined : "Plain text response.",
+    });
+  }
+  return next;
+}
+
+export function useChatStream(onMissionUpdate?: () => void) {
   const [turns, setTurns] = useState<OrchestrationTurn[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [hiredAgents, setHiredAgents] = useState<HiredAgent[]>([]);
   const threadIdRef = useRef(localStorage.getItem(THREAD_KEY) ?? "");
-  /** subtask id → specialist name tentatively hired on subtask_start */
-  const pendingHiresRef = useRef<Map<string, string>>(new Map());
-  /** specialist name → number of in-flight subtasks */
-  const activeCountRef = useRef<Map<string, number>>(new Map());
+  const activeMissionRef = useRef<string | null>(null);
 
-  const resetHiredAgents = useCallback(() => {
-    setHiredAgents([]);
-    pendingHiresRef.current = new Map();
-    activeCountRef.current = new Map();
-  }, []);
+  const processStream = useCallback(
+    async (
+      body: ReadableStream<Uint8Array>,
+      turnId: string,
+      missionId: string | null,
+    ) => {
+      const ctx: EventContext = { subtasks: [], answer: "", uiItems: [] };
+      const reader = body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-  const upsertHired = useCallback((name: string, patch: Partial<HiredAgent>) => {
-    setHiredAgents((prev) => {
-      const idx = prev.findIndex((a) => a.name === name);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], ...patch, name };
-        return next;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data: ")) continue;
+          let data: Record<string, unknown>;
+          try {
+            data = JSON.parse(line.slice(6));
+          } catch {
+            continue;
+          }
+
+          const event = data.event as string;
+          if (event === "mission_created") {
+            activeMissionRef.current = String(data.mission_id);
+          }
+          if (event === "status" && data.message) {
+            setStatusMessage(String(data.message));
+          }
+          if (data.thread_id) {
+            threadIdRef.current = String(data.thread_id);
+            localStorage.setItem(THREAD_KEY, threadIdRef.current);
+          }
+
+          setTurns((prev) =>
+            prev.map((t) => {
+              if (t.id !== turnId) return t;
+              const updated = applyEvent(t, data, ctx);
+              return missionId ? { ...updated, missionId } : updated;
+            }),
+          );
+        }
       }
-      return [...prev, { name, runStatus: "idle", ...patch }];
-    });
-  }, []);
 
-  const removeHired = useCallback((name: string) => {
-    setHiredAgents((prev) => prev.filter((a) => a.name !== name));
-  }, []);
-
-  const markHiredExecuting = useCallback(
-    (subtaskId: string, name: string, skill?: string | null) => {
-      if (!isSpecialist(name)) return;
-      pendingHiresRef.current.set(subtaskId, name);
-      const count = (activeCountRef.current.get(name) ?? 0) + 1;
-      activeCountRef.current.set(name, count);
-      upsertHired(name, { runStatus: "executing", skill });
+      setTurns((prev) =>
+        prev.map((t) => (t.id === turnId ? finalizeTurn(t, ctx) : t)),
+      );
     },
-    [upsertHired],
-  );
-
-  const markHiredFinished = useCallback(
-    (subtaskId: string, assignee: string, _failed: boolean) => {
-      pendingHiresRef.current.delete(subtaskId);
-      if (!isSpecialist(assignee)) return;
-
-      const count = (activeCountRef.current.get(assignee) ?? 1) - 1;
-      if (count <= 0) {
-        activeCountRef.current.delete(assignee);
-      } else {
-        activeCountRef.current.set(assignee, count);
-      }
-
-      upsertHired(assignee, {
-        runStatus: count > 0 ? "executing" : "done",
-      });
-    },
-    [upsertHired],
-  );
-
-  const markHiredFallback = useCallback(
-    (subtaskId: string) => {
-      const planned = pendingHiresRef.current.get(subtaskId);
-      pendingHiresRef.current.delete(subtaskId);
-      if (!planned) return;
-
-      const count = (activeCountRef.current.get(planned) ?? 1) - 1;
-      if (count <= 0) {
-        activeCountRef.current.delete(planned);
-        removeHired(planned);
-      } else {
-        activeCountRef.current.set(planned, count);
-        upsertHired(planned, { runStatus: "executing" });
-      }
-    },
-    [removeHired, upsertHired],
+    [],
   );
 
   const send = useCallback(
     async (text: string) => {
       const turnId = uid();
-      let turn: OrchestrationTurn = {
+      const turn: OrchestrationTurn = {
         id: turnId,
         cards: [
           makeCard("user", { status: "done", content: text }),
@@ -140,16 +371,7 @@ export function useChatStream() {
       setTurns((prev) => [...prev, turn]);
       setIsStreaming(true);
       setStatusMessage("Planning…");
-      resetHiredAgents();
-
-      let route: string | undefined;
-      let subtasks: SubtaskItem[] = [];
-      let answer = "";
-      const uiItems: UiItem[] = [];
-
-      const patchTurn = (fn: (t: OrchestrationTurn) => OrchestrationTurn) => {
-        setTurns((prev) => prev.map((t) => (t.id === turnId ? fn(t) : t)));
-      };
+      activeMissionRef.current = null;
 
       try {
         const res = await fetch("/chat/stream", {
@@ -161,353 +383,82 @@ export function useChatStream() {
           }),
         });
         if (!res.ok || !res.body) throw new Error("Stream request failed");
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split("\n\n");
-          buffer = parts.pop() ?? "";
-
-          for (const part of parts) {
-            const line = part.trim();
-            if (!line.startsWith("data: ")) continue;
-            let data: Record<string, unknown>;
-            try {
-              data = JSON.parse(line.slice(6));
-            } catch {
-              continue;
-            }
-
-            const event = data.event as string;
-
-            if (event === "thinking" && data.delta) {
-              patchTurn((t) => {
-                const content = (t.cards.find((c) => c.type === "planner")?.content ?? "") + String(data.delta);
-                return updateCard(t, "planner", { status: "running", content });
-              });
-            } else if (event === "thinking_done") {
-              patchTurn((t) => updateCard(t, "planner", { status: "done" }));
-            } else if (event === "plan" && data.data) {
-              const plan = data.data as Record<string, unknown>;
-              route = (plan.route as string) ?? route;
-              const steps = (plan.steps as { title: string; detail: string }[]) ?? [];
-              const rawSubtasks = (plan.subtasks as SubtaskItem[]) ?? [];
-              subtasks = rawSubtasks.map((s) => ({ ...s, status: "pending" as StepStatus }));
-              const reasoning = (plan.reasoning as string) ?? "";
-              const thinking = (plan.thinking as string) ?? "";
-              const planText = [
-                reasoning && `Reasoning:\n${reasoning}`,
-                steps.length
-                  ? `Steps:\n${steps.map((s, i) => `${i + 1}. ${s.title}\n   ${s.detail}`).join("\n")}`
-                  : "",
-                thinking && `Thinking:\n${thinking}`,
-              ]
-                .filter(Boolean)
-                .join("\n\n");
-              patchTurn((t) =>
-                updateCard(t, "planner", {
-                  status: "done",
-                  content: planText || t.cards.find((c) => c.type === "planner")?.content,
-                  subtasks: undefined,
-                }),
-              );
-            } else if (event === "route_decision") {
-              route = (data.route as string) ?? route;
-              const complexity = data.complexity as string | undefined;
-              patchTurn((t) => {
-                let next = ensureCard(t, "routing");
-                next = updateCard(next, "routing", {
-                  status: "done",
-                  route,
-                  complexity,
-                  content: `Route: ${route}${complexity ? `\nComplexity: ${complexity}` : ""}`,
-                });
-                return next;
-              });
-            } else if (event === "execution_start") {
-              patchTurn((t) => {
-                let next = ensureCard(t, "delegation");
-                next = updateCard(next, "delegation", {
-                  status: "running",
-                  subtasks: subtasks.length
-                    ? subtasks
-                    : [{ id: "direct", title: "Direct execution", status: "pending" }],
-                  content:
-                    route === "simple"
-                      ? "Simple route — thinking agent will answer directly."
-                      : `Delegating ${subtasks.length || 1} subtask(s) to specialists.`,
-                });
-                next = ensureCard(next, "agent-exec");
-                return next;
-              });
-            } else if (event === "subtask_start") {
-              const id = data.id as string;
-              const title = data.title as string;
-              const assignee = data.assignee as string;
-              const planned = subtasks.find((s) => s.id === id);
-              const skill = planned?.skill ?? null;
-              if (isSpecialist(assignee)) {
-                markHiredExecuting(id, assignee, skill);
-              }
-              patchTurn((t) => {
-                let next = ensureCard(t, "agent-exec");
-                const existing = next.cards.find((c) => c.type === "agent-exec");
-                const list = [...(existing?.subtasks ?? subtasks)];
-                const idx = list.findIndex((s) => s.id === id);
-                const item: SubtaskItem = {
-                  id,
-                  title,
-                  assignee,
-                  status: "running",
-                };
-                if (idx >= 0) list[idx] = { ...list[idx], ...item, status: "running" };
-                else list.push(item);
-                subtasks = list;
-                return updateCard(next, "agent-exec", {
-                  status: "running",
-                  subtasks: list,
-                });
-              });
-              if (route === "simple") {
-                patchTurn((t) => {
-                  let next = ensureCard(t, "delegation");
-                  next = updateCard(next, "delegation", {
-                    status: "done",
-                    content: "Thinking agent handling request.",
-                  });
-                  return next;
-                });
-              }
-            } else if (event === "subtask_done") {
-              const id = data.id as string;
-              const assignee = data.assignee as string;
-              const st = data.status as string;
-              const isFallback = assignee === "thinking";
-              if (isFallback) {
-                markHiredFallback(id);
-              } else if (isSpecialist(assignee)) {
-                markHiredFinished(id, assignee, st === "failed");
-              }
-              patchTurn((t) => {
-                const next = ensureCard(t, "agent-exec");
-                const card = next.cards.find((c) => c.type === "agent-exec");
-                const list = (card?.subtasks ?? subtasks).map((s) =>
-                  s.id === id
-                    ? {
-                        ...s,
-                        status: (isFallback ? "fallback" : st === "failed" ? "fallback" : "done") as StepStatus,
-                        assignee,
-                      }
-                    : s,
-                );
-                const allDone = list.every((s) => s.status === "done" || s.status === "fallback");
-                return updateCard(next, "agent-exec", {
-                  status: allDone ? "done" : "running",
-                  subtasks: list,
-                });
-              });
-              patchTurn((t) => updateCard(t, "delegation", { status: "done" }));
-            } else if (event === "execution_done") {
-              patchTurn((t) => {
-                let next = updateCard(t, "delegation", { status: "done" });
-                const exec = next.cards.find((c) => c.type === "agent-exec");
-                if (!exec) {
-                  next = ensureCard(next, "agent-exec");
-                  next = updateCard(next, "agent-exec", {
-                    status: route === "simple" ? "done" : "done",
-                    content: route === "simple" ? "Handled by thinking agent." : undefined,
-                  });
-                }
-                return next;
-              });
-            } else if (event === "answer" && data.delta) {
-              answer += String(data.delta);
-              patchTurn((t) => {
-                let next = t;
-                if (route === "simple") {
-                  next = ensureCard(next, "delegation");
-                  next = updateCard(next, "delegation", {
-                    status: "done",
-                    content: "Simple route — thinking agent answering directly.",
-                  });
-                  next = ensureCard(next, "agent-exec");
-                  next = updateCard(next, "agent-exec", {
-                    status: "running",
-                    subtasks: [
-                      {
-                        id: "thinking",
-                        title: "Direct answer",
-                        assignee: "thinking",
-                        status: "running",
-                      },
-                    ],
-                  });
-                }
-                next = ensureCard(next, "output");
-                return updateCard(next, "output", {
-                  status: "running",
-                  content: answer,
-                  mono: false,
-                });
-              });
-            } else if (event === "answer_done") {
-              patchTurn((t) => {
-                let next = ensureCard(t, "output");
-                next = updateCard(next, "output", {
-                  status: "done",
-                  content: (data.text as string) || answer,
-                });
-                if (route === "simple") {
-                  next = ensureCard(next, "agent-exec");
-                  next = updateCard(next, "agent-exec", {
-                    status: "done",
-                    subtasks: [
-                      {
-                        id: "thinking",
-                        title: "Direct answer",
-                        assignee: "thinking",
-                        status: "done",
-                      },
-                    ],
-                  });
-                }
-                return next;
-              });
-            } else if (event === "ui" && data.name !== "text-card") {
-              uiItems.push({ name: data.name as string, props: (data.props as Record<string, unknown>) ?? {} });
-              patchTurn((t) => {
-                let next = ensureCard(t, "gen-ui");
-                return updateCard(next, "gen-ui", {
-                  status: "running",
-                  uiComponent: data.name as string,
-                  uiProps: (data.props as Record<string, unknown>) ?? {},
-                });
-              });
-            } else if (event === "gen_ui_selected") {
-              const component = data.component as string | null | undefined;
-              if (component) {
-                const props = (data.props as Record<string, unknown>) ?? {};
-                uiItems.push({ name: component, props });
-                patchTurn((t) => {
-                  let next = ensureCard(t, "gen-ui");
-                  return updateCard(next, "gen-ui", {
-                    status: "done",
-                    uiComponent: component,
-                    uiProps: props,
-                  });
-                });
-              } else {
-                patchTurn((t) => {
-                  let next = ensureCard(t, "gen-ui");
-                  return updateCard(next, "gen-ui", {
-                    status: "done",
-                    uiComponent: null,
-                    content: String(data.reason ?? "Plain text response."),
-                  });
-                });
-              }
-            } else if (event === "status" && data.message) {
-              setStatusMessage(String(data.message));
-            } else if (event === "final") {
-              if (data.thread_id) {
-                threadIdRef.current = String(data.thread_id);
-                localStorage.setItem(THREAD_KEY, threadIdRef.current);
-              }
-              if (!answer && data.text) answer = String(data.text);
-              const finalUi = (data.ui as UiItem[]) ?? [];
-              for (const item of finalUi) {
-                if (item.name !== "text-card") uiItems.push(item);
-              }
-              patchTurn((t) => {
-                let next = t;
-                if (answer) {
-                  next = ensureCard(next, "output");
-                  next = updateCard(next, "output", { status: "done", content: answer });
-                }
-                next = ensureCard(next, "gen-ui");
-                const lastUi = uiItems[uiItems.length - 1];
-                return updateCard(next, "gen-ui", {
-                  status: lastUi ? "done" : "done",
-                  uiComponent: lastUi?.name ?? null,
-                  uiProps: lastUi?.props ?? {},
-                  content: lastUi ? undefined : "No rich UI component selected.",
-                });
-              });
-            } else if (event === "done") {
-              if (data.thread_id) {
-                threadIdRef.current = String(data.thread_id);
-                localStorage.setItem(THREAD_KEY, threadIdRef.current);
-              }
-            } else if (event === "error") {
-              patchTurn((t) => ({
-                ...t,
-                cards: [
-                  ...t.cards,
-                  makeCard("output", {
-                    status: "fallback",
-                    content: String(data.message ?? "Request failed"),
-                    mono: true,
-                  }),
-                ],
-              }));
-            }
-          }
-        }
-
-        // Simple route may skip execution events — ensure cards exist
-        patchTurn((t) => {
-          let next = t;
-          if (!next.cards.some((c) => c.type === "routing") && route) {
-            next = ensureCard(next, "routing");
-            next = updateCard(next, "routing", { status: "done", route });
-          }
-          if (route === "simple" && !next.cards.some((c) => c.type === "delegation")) {
-            next = ensureCard(next, "delegation");
-            next = updateCard(next, "delegation", {
-              status: "done",
-              content: "Simple route — no specialist delegation.",
-            });
-          }
-          if (answer && !next.cards.some((c) => c.type === "output")) {
-            next = ensureCard(next, "output");
-            next = updateCard(next, "output", { status: "done", content: answer });
-          }
-          if (!next.cards.some((c) => c.type === "gen-ui")) {
-            next = ensureCard(next, "gen-ui");
-            const lastUi = uiItems[uiItems.length - 1];
-            next = updateCard(next, "gen-ui", {
-              status: "done",
-              uiComponent: lastUi?.name ?? null,
-              uiProps: lastUi?.props ?? {},
-              content: lastUi ? undefined : "Plain text response.",
-            });
-          }
-          return next;
-        });
+        const missionHeader = res.headers.get("X-Mission-Id");
+        await processStream(res.body, turnId, missionHeader);
       } catch (err) {
-        patchTurn((t) => ({
-          ...t,
-          cards: [
-            ...t.cards,
-            makeCard("output", {
-              status: "fallback",
-              content: err instanceof Error ? err.message : String(err),
-              mono: true,
-            }),
-          ],
-        }));
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === turnId
+              ? {
+                  ...t,
+                  cards: [
+                    ...t.cards,
+                    makeCard("output", {
+                      status: "fallback",
+                      content: err instanceof Error ? err.message : String(err),
+                      mono: true,
+                    }),
+                  ],
+                }
+              : t,
+          ),
+        );
       } finally {
         setIsStreaming(false);
         setStatusMessage(null);
+        onMissionUpdate?.();
       }
     },
-    [markHiredExecuting, markHiredFallback, markHiredFinished, resetHiredAgents],
+    [onMissionUpdate, processStream],
   );
 
-  return { turns, send, isStreaming, statusMessage, hiredAgents };
+  const reconnectMission = useCallback(
+    async (missionId: string) => {
+      const turnId = uid();
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: turnId,
+          missionId,
+          cards: [makeCard("planner", { status: "running", content: "Reconnecting to mission…" })],
+        },
+      ]);
+      setIsStreaming(true);
+      try {
+        const res = await fetch(`/missions/${missionId}/events`);
+        if (!res.ok || !res.body) throw new Error("Could not reconnect to mission");
+        await processStream(res.body, turnId, missionId);
+      } catch (err) {
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === turnId
+              ? {
+                  ...t,
+                  cards: [
+                    makeCard("output", {
+                      status: "fallback",
+                      content: err instanceof Error ? err.message : String(err),
+                      mono: true,
+                    }),
+                  ],
+                }
+              : t,
+          ),
+        );
+      } finally {
+        setIsStreaming(false);
+        onMissionUpdate?.();
+      }
+    },
+    [onMissionUpdate, processStream],
+  );
+
+  return {
+    turns,
+    send,
+    reconnectMission,
+    isStreaming,
+    statusMessage,
+    activeMissionId: activeMissionRef.current,
+  };
 }

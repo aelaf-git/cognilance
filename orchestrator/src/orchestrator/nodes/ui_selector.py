@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from langchain_core.messages import AIMessage
 from langgraph.graph.ui import push_ui_message
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from orchestrator.llm import get_llm
 from orchestrator.state import State
@@ -35,12 +35,22 @@ SUGGESTED_UI_ALIASES: dict[str, ComponentName] = {
 
 class UISelection(BaseModel):
     component: ComponentName | None = Field(
+        default=None,
         description=(
-            "Rich UI component to render, or null when plain streamed text is enough.\n"
+            "Rich UI component to render. Omit when plain text is enough.\n"
             f"{UI_COMPONENTS}"
-        )
+        ),
     )
-    reasoning: str = Field(description="Why this component fits the output")
+    reasoning: str = Field(default="", description="Why this component fits the output")
+
+    @field_validator("component", mode="before")
+    @classmethod
+    def _coerce_null_component(cls, value: Any) -> ComponentName | None:
+        if value is None:
+            return None
+        if isinstance(value, str) and value.strip().lower() in {"", "null", "none", "n/a"}:
+            return None
+        return value
 
 
 def _gather_data(state: State) -> dict[str, Any]:
@@ -137,6 +147,12 @@ def _heuristic_component(state: State, data: dict[str, Any]) -> ComponentName | 
     return None
 
 
+def _data_suggests_rich_ui(data: dict[str, Any]) -> bool:
+    if data.get("sources") or data.get("series") or data.get("code"):
+        return True
+    return isinstance(data.get("chartType"), str)
+
+
 async def ui_selector(state: State) -> dict:
     text = state.get("final_text") or ""
     data = _gather_data(state)
@@ -149,14 +165,13 @@ async def ui_selector(state: State) -> dict:
     emit_status("Selecting generative UI…")
     component = _heuristic_component(state, data)
 
-    if component is None and data:
-        rich_keys = set(data.keys()) - {"body"}
-        if rich_keys:
-            preview = {
-                key: (str(value)[:400] + "…" if len(str(value)) > 400 else value)
-                for key, value in data.items()
-                if key != "body"
-            }
+    if component is None and _data_suggests_rich_ui(data):
+        preview = {
+            key: (str(value)[:400] + "…" if len(str(value)) > 400 else value)
+            for key, value in data.items()
+            if key != "body"
+        }
+        try:
             llm = get_llm(temperature=0).with_structured_output(UISelection)
             decision: UISelection = await llm.ainvoke(
                 [
@@ -165,7 +180,7 @@ async def ui_selector(state: State) -> dict:
                         "content": (
                             "Pick the best rich UI component for this output. "
                             "Use python-code when structured data includes runnable Python source. "
-                            "Set component to null only when plain text is sufficient.\n\n"
+                            "Leave component unset when plain text is sufficient.\n\n"
                             f"{UI_COMPONENTS}"
                         ),
                     },
@@ -179,6 +194,8 @@ async def ui_selector(state: State) -> dict:
                 ]
             )  # type: ignore[assignment]
             component = decision.component
+        except Exception:
+            component = None
 
     message = AIMessage(id=str(uuid.uuid4()), content=text)
 

@@ -26,6 +26,9 @@ class Subtask(TypedDict, total=False):
     title: str
     instruction: str
     skill: str | None
+    tool: str | None
+    action: str | None
+    params: dict[str, Any] | None
     assignee: str
     depends_on: list[str]
 

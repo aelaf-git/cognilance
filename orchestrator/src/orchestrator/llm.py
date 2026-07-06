@@ -28,6 +28,18 @@ def last_user_text(messages: list[BaseMessage]) -> str:
     return ""
 
 
+def to_chat_messages(messages: list[BaseMessage]) -> list[dict[str, str]]:
+    """Convert LangChain messages to OpenAI-style role/content dicts."""
+    result: list[dict[str, str]] = []
+    for message in messages:
+        role = getattr(message, "type", None)
+        if role == "human":
+            result.append({"role": "user", "content": _content_to_text(message.content)})
+        elif role == "ai":
+            result.append({"role": "assistant", "content": _content_to_text(message.content)})
+    return result
+
+
 def _content_to_text(content) -> str:
     if isinstance(content, str):
         return content
