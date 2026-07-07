@@ -99,3 +99,7 @@ def find_agent_by_skill(agents: list[AgentCard], skill: str) -> AgentCard | None
             if _skill_matches(skill, agent_skill.name) or _skill_matches(skill, agent_skill.id):
                 return agent
     return None
+
+
+def has_agent_for_skill(agents: list[AgentCard], skill: str) -> bool:
+    return find_agent_by_skill(agents, skill) is not None
