@@ -26,6 +26,9 @@ class Subtask(TypedDict, total=False):
     title: str
     instruction: str
     skill: str | None
+    tool: str | None
+    action: str | None
+    params: dict[str, Any] | None
     assignee: str
     depends_on: list[str]
 
@@ -55,3 +58,4 @@ class State(TypedDict, total=False):
     final_text: str
     final_data: dict[str, Any]
     answer_streamed: bool
+    direct_reply: bool

@@ -8,11 +8,20 @@ from typing import Any
 
 from cognilance import CognilanceManager
 
-from orchestrator.llm import get_llm, last_user_text
-from orchestrator.nodes.thinking import run_thinking
-from orchestrator.registry_cache import find_agent_by_skill
+from langchain_core.messages import BaseMessage
+
+from orchestrator.integrations.client import IntegrationClient
+from orchestrator.integrations.routing import (
+    format_document_result,
+    format_gmail_list_result,
+    format_subscription_result,
+    format_calendar_list_result,
+)
+from orchestrator.tools.web import format_web_fetch_result, format_web_search_result
+from orchestrator.llm import get_llm, last_user_text, to_chat_messages
 from orchestrator.state import State, Subtask, SubtaskResult
 from orchestrator.streaming import emit, emit_status
+from orchestrator.tools.router import ToolRouter
 
 
 def _dependency_layers(subtasks: list[Subtask]) -> list[list[Subtask]]:
@@ -47,7 +56,6 @@ def _dependency_layers(subtasks: list[Subtask]) -> list[list[Subtask]]:
 
     remaining = [sid for sid, degree in indegree.items() if degree > 0]
     if remaining:
-        # Cycle or missing deps — run everything left in one final layer
         seen = {item["id"] for layer in layers for item in layer}
         layers.append([by_id[sid] for sid in remaining if sid in by_id and sid not in seen])
 
@@ -57,11 +65,14 @@ def _dependency_layers(subtasks: list[Subtask]) -> list[list[Subtask]]:
 async def _run_subtask(
     subtask: Subtask,
     manager: CognilanceManager,
-    catalog_agents: list,
+    router: ToolRouter,
+    *,
+    conversation: list[BaseMessage] | None = None,
 ) -> SubtaskResult:
     subtask_id = subtask["id"]
     instruction = subtask.get("instruction") or ""
     skill = subtask.get("skill")
+    tool = subtask.get("tool")
     assignee = subtask.get("assignee") or "thinking"
 
     emit(
@@ -69,32 +80,35 @@ async def _run_subtask(
         id=subtask_id,
         title=subtask.get("title", ""),
         assignee=assignee,
+        tool=tool or (f"hire:{skill}" if skill else "thinking"),
     )
     emit_status(f"Running: {subtask.get('title', subtask_id)}")
 
     try:
-        agent = find_agent_by_skill(catalog_agents, skill) if skill else None
-        if agent:
-            result = await manager.hire(agent, input_text=instruction)
-            payload: SubtaskResult = {
-                "subtask_id": subtask_id,
-                "text": result.output.text or "",
-                "data": result.output.data or {},
-                "assignee": agent.name,
-                "status": "completed",
-            }
-            emit("subtask_done", id=subtask_id, status="completed", assignee=agent.name)
-            return payload
-
-        text, data = await run_thinking(instruction, stream=False)
-        payload = {
+        result = await router.execute(
+            manager,
+            tool=tool,
+            skill=skill,
+            instruction=instruction,
+            input_data={
+                "action": subtask.get("action"),
+                "params": subtask.get("params"),
+                "conversation": conversation,
+            },
+        )
+        payload: SubtaskResult = {
             "subtask_id": subtask_id,
-            "text": text,
-            "data": data,
-            "assignee": "thinking",
-            "status": "completed",
+            "text": result.text,
+            "data": result.data,
+            "assignee": result.assignee,
+            "status": result.status,
         }
-        emit("subtask_done", id=subtask_id, status="completed", assignee="thinking")
+        emit(
+            "subtask_done",
+            id=subtask_id,
+            status=result.status,
+            assignee=result.assignee,
+        )
         return payload
     except Exception as exc:
         payload = {
@@ -124,34 +138,85 @@ def _merge_data(results: list[SubtaskResult]) -> dict[str, Any]:
     return merged
 
 
-async def _synthesize_final(query: str, results: list[SubtaskResult]) -> str:
-    if len(results) == 1:
-        return results[0].get("text") or ""
+def _result_facts(results: list[SubtaskResult]) -> str:
+    parts: list[str] = []
+    for result in results:
+        if result.get("status") == "failed":
+            parts.append(f"FAILED ({result.get('assignee', 'agent')}): {result.get('text', '')}")
+            continue
+        data = result.get("data") or {}
+        if data.get("emails"):
+            parts.append(format_gmail_list_result(data))
+        elif data.get("events") is not None:
+            parts.append(format_calendar_list_result(data))
+        elif data.get("sources") and data.get("query"):
+            parts.append(format_web_search_result(data))
+        elif data.get("url") and data.get("content") is not None:
+            parts.append(format_web_fetch_result(data))
+        elif data.get("document_id") or str(data.get("url", "")).startswith(
+            "https://docs.google.com/document/"
+        ):
+            parts.append(format_document_result(data))
+        elif data.get("subscription_id") or "stopped" in data:
+            parts.append(format_subscription_result(data))
+        elif result.get("text"):
+            parts.append(f"[{result.get('assignee', 'agent')}] {result.get('text')}")
+    return "\n\n".join(parts).strip()
 
-    parts = [
-        f"[{r.get('assignee', 'agent')}] {r.get('text', '')}"
-        for r in results
-        if r.get("text")
-    ]
-    combined = "\n\n".join(parts)
+
+async def _synthesize_final(
+    query: str,
+    results: list[SubtaskResult],
+    *,
+    conversation: list[BaseMessage] | None = None,
+) -> str:
+    if not results:
+        return ""
+
+    if len(results) == 1 and results[0].get("status") == "failed":
+        return results[0].get("text") or "The task failed."
+
+    facts = _result_facts(results)
+    if not facts:
+        return results[0].get("text") or "" if len(results) == 1 else ""
+
+    if len(results) == 1:
+        data = results[0].get("data") or {}
+        if data.get("subscription_id") or "stopped" in data:
+            return format_subscription_result(data)
+        if data.get("sources") and data.get("query"):
+            return format_web_search_result(data)
+        if data.get("url") and data.get("content") is not None and results[0].get("assignee") == "web":
+            return format_web_fetch_result(data)
+
     llm = get_llm(temperature=0.3)
-    response = await llm.ainvoke(
-        [
-            {
-                "role": "system",
-                "content": (
-                    "Synthesize subtask results into one clear answer for the user. "
-                    "Preserve key facts and structured details."
-                ),
-            },
-            {
-                "role": "user",
-                "content": f"User request:\n{query}\n\nSubtask results:\n{combined}",
-            },
-        ]
+    messages: list[dict[str, str]] = [
+        {
+            "role": "system",
+            "content": (
+                "You are Cognilance replying in chat. "
+                "Write a short, natural answer using the execution results below. "
+                "Preserve links, counts, and facts exactly. "
+                "Never mention tools, APIs, subscribe_inbox, or internal orchestration. "
+                "Never claim an action succeeded if results say FAILED. "
+                "One to three sentences unless listing emails or documents."
+            ),
+        },
+    ]
+    if conversation:
+        messages.extend(to_chat_messages(conversation))
+    messages.append(
+        {
+            "role": "user",
+            "content": f"User request:\n{query}\n\nExecution results:\n{facts}",
+        }
     )
-    content = response.content
-    return content if isinstance(content, str) else str(content)
+    try:
+        response = await llm.ainvoke(messages)
+        content = response.content
+        return content if isinstance(content, str) else str(content)
+    except Exception:
+        return facts
 
 
 async def task_agent(state: State) -> dict:
@@ -166,18 +231,31 @@ async def task_agent(state: State) -> dict:
         return {"subtask_results": [], "final_text": "", "final_data": {}}
 
     catalog_agents = deserialize_agents(state.get("catalog_agents") or [])
+    router = ToolRouter(catalog_agents=catalog_agents, integration_client=IntegrationClient())
     layers = _dependency_layers(subtasks)
     all_results: list[SubtaskResult] = []
 
     async with CognilanceManager(agent_name="Orchestrator") as manager:
         for layer in layers:
             layer_results = await asyncio.gather(
-                *[_run_subtask(item, manager, catalog_agents) for item in layer]
+                *[
+                    _run_subtask(
+                        item,
+                        manager,
+                        router,
+                        conversation=state.get("messages", []),
+                    )
+                    for item in layer
+                ]
             )
             all_results.extend(layer_results)
 
     emit_status("Aggregating results…")
-    final_text = await _synthesize_final(query, all_results)
+    final_text = await _synthesize_final(
+        query,
+        all_results,
+        conversation=state.get("messages", []),
+    )
     final_data = _merge_data(all_results)
     emit("execution_done")
 
