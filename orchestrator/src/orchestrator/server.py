@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from langchain_core.messages import HumanMessage
 
 from orchestrator.auth.session import get_user_id, resolve_user_id, set_user_cookie
-from orchestrator.context import current_user_id
+from orchestrator.context import current_conversation_id, current_mission_id, current_user_id
 from orchestrator.graph import ensure_graph, init_graph
 from orchestrator.integrations.oauth import OAuthService
 from orchestrator.conversations.store import ConversationStore
@@ -22,6 +22,9 @@ from orchestrator.missions.finalize import finalize_session_status
 from orchestrator.missions.session_type import SessionType
 from orchestrator.missions.models import MissionStatus
 from orchestrator.missions.store import MissionStore
+from orchestrator.subscriptions.store import SubscriptionStore
+from orchestrator.subscriptions.session_sync import enrich_session_dict, stop_listener_for_mission
+from orchestrator.subscriptions.ticker import tick_subscriptions
 from orchestrator.ui.chat import orchestrator_chat_html
 from orchestrator.apps.store import init_all_stores
 
@@ -41,7 +44,9 @@ def _ui_items(result: dict[str, Any]) -> list[dict[str, Any]]:
 def create_app() -> FastAPI:
     store = MissionStore()
     conv_store = ConversationStore()
+    sub_store = SubscriptionStore()
     store.init_db()
+    sub_store.init_db()
     init_all_stores()
     oauth_service = OAuthService()
 
@@ -67,11 +72,22 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def on_startup() -> None:
         store.init_db()
+        sub_store.init_db()
         init_all_stores()
         recovered = store.recover_stale_running()
         if recovered:
             print(f"Recovered {recovered} stale running mission(s)", flush=True)
         await init_graph()
+
+        async def subscription_ticker_loop() -> None:
+            while True:
+                try:
+                    await tick_subscriptions()
+                except Exception as exc:
+                    print(f"Subscription ticker error: {exc}", flush=True)
+                await asyncio.sleep(5)
+
+        asyncio.create_task(subscription_ticker_loop())
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -146,6 +162,10 @@ def create_app() -> FastAPI:
         conversations = []
         for c in conv_store.list_conversations(limit=50):
             stats = conv_store.session_stats(c.id)
+            listeners = [
+                s.to_dict()
+                for s in sub_store.list_active_for_conversation(c.id)
+            ]
             conversations.append(
                 {
                     "id": c.id,
@@ -154,6 +174,7 @@ def create_app() -> FastAPI:
                     "updated_at": c.updated_at.isoformat(),
                     "session_count": stats["session_count"],
                     "latest_status": stats["latest_status"],
+                    "active_listeners": listeners,
                 }
             )
         return JSONResponse(content={"conversations": conversations})
@@ -187,9 +208,10 @@ def create_app() -> FastAPI:
             for m in conv_store.list_messages(conversation_id, limit=200)
         ]
         sessions = [
-            m.to_session_dict()
+            enrich_session_dict(m, sub_store=sub_store)
             for m in store.list_missions_for_conversation(conversation_id, limit=50)
         ]
+        listeners = [s.to_dict() for s in sub_store.list_active_for_conversation(conversation_id)]
         return JSONResponse(
             content={
                 "id": conversation.id,
@@ -198,6 +220,7 @@ def create_app() -> FastAPI:
                 "updated_at": conversation.updated_at.isoformat(),
                 "messages": messages,
                 "sessions": sessions,
+                "active_listeners": listeners,
             }
         )
 
@@ -206,7 +229,7 @@ def create_app() -> FastAPI:
         if not conv_store.get_conversation(conversation_id):
             raise HTTPException(status_code=404, detail="Conversation not found")
         sessions = [
-            m.to_session_dict()
+            enrich_session_dict(m, sub_store=sub_store)
             for m in store.list_missions_for_conversation(conversation_id, limit=50)
         ]
         return JSONResponse(content={"sessions": sessions, "conversation_id": conversation_id})
@@ -217,6 +240,7 @@ def create_app() -> FastAPI:
         if not conv_store.get_conversation(conversation_id):
             raise HTTPException(status_code=404, detail="Conversation not found")
         removed = store.delete_missions_for_conversation(conversation_id)
+        sub_store.stop_for_conversation(conversation_id)
         conv_store.delete_conversation(conversation_id)
         return JSONResponse(
             content={
@@ -226,16 +250,76 @@ def create_app() -> FastAPI:
             }
         )
 
+    @app.get("/conversations/{conversation_id}/subscriptions")
+    async def list_conversation_subscriptions(conversation_id: str) -> JSONResponse:
+        if not conv_store.get_conversation(conversation_id):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        subs = [
+            s.to_dict()
+            for s in sub_store.list_active_for_conversation(conversation_id)
+        ]
+        return JSONResponse(content={"subscriptions": subs, "conversation_id": conversation_id})
+
+    @app.get("/conversations/{conversation_id}/notifications")
+    async def conversation_notifications(
+        conversation_id: str,
+        request: Request,
+    ) -> StreamingResponse:
+        if not conv_store.get_conversation(conversation_id):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        after_id = int(request.query_params.get("after", "0") or "0")
+
+        async def stream() -> AsyncIterator[str]:
+            nonlocal after_id
+            while True:
+                notes = sub_store.list_notifications(conversation_id, after_id=after_id)
+                for note in notes:
+                    after_id = int(note["id"])
+                    yield f"data: {json.dumps(note)}\n\n"
+                await asyncio.sleep(2)
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @app.post("/subscriptions/{subscription_id}/stop")
+    async def stop_subscription(subscription_id: str, request: Request) -> JSONResponse:
+        from orchestrator.subscriptions.service import SubscriptionService
+
+        sub = sub_store.get_subscription(subscription_id)
+        if not sub:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        user_id = _user(request)
+        if sub.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        service = SubscriptionService(sub_store=sub_store, conv_store=conv_store)
+        result = await service.unsubscribe_gmail_inbox(
+            user_id,
+            conversation_id=sub.conversation_id,
+            subscription_id=subscription_id,
+        )
+        return JSONResponse(content=result)
+
     @app.get("/sessions")
     async def list_sessions(request: Request) -> JSONResponse:
         conversation_id = str(request.query_params.get("conversation_id") or "").strip() or None
         if conversation_id:
             sessions = [
-                m.to_session_dict()
+                enrich_session_dict(m, sub_store=sub_store)
                 for m in store.list_missions_for_conversation(conversation_id, limit=50)
             ]
         else:
-            sessions = [m.to_session_dict() for m in store.list_missions(limit=50)]
+            sessions = [
+                enrich_session_dict(m, sub_store=sub_store)
+                for m in store.list_missions(limit=50)
+            ]
         return JSONResponse(content={"sessions": sessions})
 
     @app.post("/sessions")
@@ -260,15 +344,18 @@ def create_app() -> FastAPI:
         mission = store.get_mission(session_id)
         if not mission:
             raise HTTPException(status_code=404, detail="Session not found")
-        return JSONResponse(content=mission.to_session_dict())
+        return JSONResponse(content=enrich_session_dict(mission, sub_store=sub_store))
 
     @app.post("/sessions/{session_id}/abort")
     async def abort_session(session_id: str) -> JSONResponse:
         mission = store.get_mission(session_id)
         if not mission:
             raise HTTPException(status_code=404, detail="Session not found")
-        store.update_status(session_id, MissionStatus.CANCELLED, error="Aborted by user")
-        store.append_event(session_id, {"event": "session_aborted"})
+        stop_listener_for_mission(
+            session_id,
+            sub_store=sub_store,
+            mission_store=store,
+        )
         return JSONResponse(content={"session_id": session_id, "status": "cancelled"})
 
     @app.delete("/sessions/{session_id}")
@@ -294,7 +381,12 @@ def create_app() -> FastAPI:
         events = store.list_events(session_id)
         for event in events:
             event.pop("_event_id", None)
-        return JSONResponse(content={"events": events, "session": mission.to_session_dict()})
+        return JSONResponse(
+            content={
+                "events": events,
+                "session": enrich_session_dict(mission, sub_store=sub_store),
+            }
+        )
 
     @app.get("/missions")
     async def list_missions() -> JSONResponse:
@@ -399,6 +491,8 @@ def create_app() -> FastAPI:
             had_error = False
             error_message: str | None = None
             store.update_status(mission_id, MissionStatus.RUNNING)
+            conv_token = current_conversation_id.set(conversation_id)
+            mission_token = current_mission_id.set(mission_id)
 
             async def persist_with_status(event: dict[str, Any]) -> None:
                 nonlocal final_text, final_ui, had_error, error_message
@@ -435,6 +529,9 @@ def create_app() -> FastAPI:
                 )
             except Exception as exc:
                 store.update_status(mission_id, MissionStatus.FAILED, error=str(exc))
+            finally:
+                current_conversation_id.reset(conv_token)
+                current_mission_id.reset(mission_token)
 
         async def stream() -> AsyncIterator[str]:
             created = {

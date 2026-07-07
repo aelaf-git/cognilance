@@ -9,6 +9,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
+from orchestrator.context import current_conversation_id, current_mission_id
 from orchestrator.graph import ensure_graph
 from orchestrator.missions.finalize import finalize_session_status
 from orchestrator.missions.models import MissionStatus
@@ -114,6 +115,8 @@ async def run_mission(
         return
 
     store.update_status(mission_id, MissionStatus.RUNNING)
+    conv_token = current_conversation_id.set(mission.conversation_id or mission.thread_id)
+    mission_token = current_mission_id.set(mission_id)
     final_text: str | None = None
     final_ui: list[dict[str, Any]] | None = None
     had_error = False
@@ -150,3 +153,6 @@ async def run_mission(
     except Exception as exc:
         store.update_status(mission_id, MissionStatus.FAILED, error=str(exc))
         await persist({"event": "error", "message": str(exc)})
+    finally:
+        current_conversation_id.reset(conv_token)
+        current_mission_id.reset(mission_token)

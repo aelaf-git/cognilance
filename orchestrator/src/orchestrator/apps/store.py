@@ -70,8 +70,10 @@ class AppStore:
 def init_all_stores() -> None:
     from orchestrator.conversations.store import ConversationStore
     from orchestrator.integrations.store import IntegrationStore
+    from orchestrator.subscriptions.store import SubscriptionStore
 
     MissionStore().init_db()
     AppStore().init_db()
     IntegrationStore().init_db()
     ConversationStore().init_db()
+    SubscriptionStore().init_db()

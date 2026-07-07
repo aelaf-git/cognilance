@@ -8,6 +8,12 @@ from langchain_core.messages import BaseMessage
 
 from orchestrator.integrations.client import IntegrationClient
 from orchestrator.integrations.doc_params import google_docs_action, is_google_docs_task
+from orchestrator.integrations.calendar_params import prepare_calendar_list_params
+from orchestrator.subscriptions.monitor_intent import (
+    is_monitor_request,
+    is_stop_monitor_request,
+    monitor_integration_for_query,
+)
 from orchestrator.state import Subtask
 
 
@@ -24,7 +30,50 @@ def integration_subtasks_for_query(
     conversation: list[BaseMessage] | None = None,
 ) -> list[Subtask] | None:
     """Return forced subtasks when a connected integration should run immediately."""
+    from orchestrator.conversation.ack import is_acknowledgment
+
+    if is_acknowledgment(query):
+        return None
+
     q = query.lower()
+
+    if is_stop_monitor_request(query):
+        integration = monitor_integration_for_query(query)
+        if integration == "gmail" and client.is_connected(user_id, "gmail"):
+            return [
+                {
+                    "id": "stop-monitor",
+                    "title": "Stop inbox listener",
+                    "instruction": query,
+                    "tool": "app:gmail",
+                    "action": "unsubscribe_inbox",
+                    "params": {},
+                    "assignee": "gmail",
+                    "depends_on": [],
+                }
+            ]
+
+    if is_monitor_request(query):
+        from orchestrator.context import current_conversation_id
+        from orchestrator.subscriptions.store import SubscriptionStore
+
+        conv_id = current_conversation_id.get() or ""
+        if conv_id and SubscriptionStore().list_active_for_conversation(conv_id):
+            return None
+        integration = monitor_integration_for_query(query)
+        if integration == "gmail" and client.is_connected(user_id, "gmail"):
+            return [
+                {
+                    "id": "gmail-monitor",
+                    "title": "Listen for new Gmail messages",
+                    "instruction": query,
+                    "tool": "app:gmail",
+                    "action": "subscribe_inbox",
+                    "params": {"query": query},
+                    "assignee": "gmail",
+                    "depends_on": [],
+                }
+            ]
 
     if client.is_connected(user_id, "google-drive") and is_google_docs_task(
         query, conversation
@@ -46,6 +95,8 @@ def integration_subtasks_for_query(
     if client.is_connected(user_id, "gmail") and _query_mentions(
         q, "email", "emails", "inbox", "gmail", "mailbox", "mail"
     ):
+        if is_monitor_request(query) or is_stop_monitor_request(query):
+            return None
         if _query_mentions(q, "send", "compose", "write") and _query_mentions(
             q, "email", "mail"
         ):
@@ -70,6 +121,7 @@ def integration_subtasks_for_query(
     if client.is_connected(user_id, "google-calendar") and _query_mentions(
         q, "calendar", "event", "events", "meeting", "meetings", "schedule"
     ):
+        cal_params = prepare_calendar_list_params(query, {"max_results": 25})
         return [
             {
                 "id": "calendar",
@@ -77,7 +129,7 @@ def integration_subtasks_for_query(
                 "instruction": query,
                 "tool": "app:google-calendar",
                 "action": "list_events",
-                "params": {"max_results": 10},
+                "params": cal_params,
                 "assignee": "google-calendar",
                 "depends_on": [],
             }
@@ -189,3 +241,41 @@ def format_gmail_list_result(result: dict[str, Any]) -> str:
             lines.append(f"   Preview: {snippet[:120]}")
         lines.append("")
     return "\n".join(lines).strip()
+
+
+def format_calendar_list_result(result: dict[str, Any]) -> str:
+    events = result.get("events") or []
+    if not events:
+        window = ""
+        if result.get("time_min") and result.get("time_max"):
+            window = " in that time range"
+        return f"No calendar events found{window}."
+
+    lines = [f"Found {len(events)} calendar event(s):\n"]
+    for i, event in enumerate(events, 1):
+        title = event.get("summary") or "(no title)"
+        start = event.get("start") or "unknown time"
+        location = event.get("location") or ""
+        lines.append(f"{i}. {title}")
+        lines.append(f"   When: {start}")
+        if location:
+            lines.append(f"   Where: {location}")
+        link = event.get("html_link") or ""
+        if link:
+            lines.append(f"   Link: {link}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def format_subscription_result(result: dict[str, Any]) -> str:
+    if "stopped" in result:
+        return str(result.get("message") or "Stopped listening for new emails.")
+    if result.get("subscription_id"):
+        interval = int(result.get("poll_interval_seconds") or 90)
+        return (
+            f"I'm listening for new Gmail messages and will check every {interval} seconds. "
+            f"Say 'stop listening' whenever you want me to stop."
+        )
+    if result.get("message"):
+        return str(result["message"])
+    return str(result)

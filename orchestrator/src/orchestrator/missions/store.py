@@ -292,6 +292,14 @@ class MissionStore:
             return None
         return self._row_to_mission(updated)
 
+    def update_session_type(self, mission_id: str, session_type: SessionType) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE missions SET session_type = ?, updated_at = ? WHERE id = ?",
+                (session_type.value, now, mission_id),
+            )
+
     def update_status(
         self,
         mission_id: str,

@@ -103,6 +103,19 @@ export function useConversations() {
     [activeConversationId, loadConversationSessions, refresh],
   );
 
+  const stopSubscription = useCallback(
+    async (subscriptionId: string) => {
+      const res = await fetch(`/subscriptions/${subscriptionId}/stop`, { method: "POST" });
+      if (!res.ok) return false;
+      await refresh();
+      if (activeConversationId) {
+        await loadConversationSessions(activeConversationId);
+      }
+      return true;
+    },
+    [activeConversationId, loadConversationSessions, refresh],
+  );
+
   return {
     conversations,
     activeConversationId,
@@ -115,5 +128,6 @@ export function useConversations() {
     deleteConversation,
     loadConversationSessions,
     abortSession,
+    stopSubscription,
   };
 }

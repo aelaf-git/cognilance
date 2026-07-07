@@ -2,25 +2,27 @@ import { FeedCardView } from "@/components/FeedCard";
 import { PROCESS_CARD_TYPES } from "@/lib/sessionEvents";
 import type { OrchestrationTurn, SessionSummary } from "@/types";
 
+export function isProcessingSession(session: SessionSummary): boolean {
+  return (
+    session.display_status === "processing" ||
+    (session.listener_active === true &&
+      (session.status === "running" || session.status === "queued"))
+  );
+}
+
 export function sessionStatusLabel(session: SessionSummary): string {
-  if (session.session_type === "recurring") {
-    if (session.status === "cancelled") return "Aborted";
-    if (session.status === "failed") return "Failed";
-    if (session.status === "running" || session.status === "queued") return "Running";
-    return "Active";
-  }
-  const labels: Record<string, string> = {
-    queued: "Queued",
-    running: "Running",
-    completed: "Done",
-    failed: "Failed",
-    cancelled: "Aborted",
-  };
-  return labels[session.status] ?? session.status;
+  if (isProcessingSession(session)) return "Processing…";
+  if (session.display_status === "done" || session.status === "completed") return "Done";
+  if (session.display_status === "aborted" || session.status === "cancelled") return "Aborted";
+  if (session.display_status === "failed" || session.status === "failed") return "Failed";
+  if (session.status === "running" || session.status === "queued") return "Running";
+  return session.status;
 }
 
 function statusAccent(session: SessionSummary): string {
-  if (session.status === "running" || session.status === "queued") return "border-l-planner";
+  if (isProcessingSession(session) || session.status === "running" || session.status === "queued") {
+    return "border-l-planner";
+  }
   if (session.status === "failed") return "border-l-red-500";
   if (session.status === "cancelled") return "border-l-task";
   return "border-l-registry";
@@ -44,10 +46,12 @@ export function SessionDetailCollapsed({ onExpand }: { onExpand: () => void }) {
 export function SessionListPanel({
   sessions,
   onSelectSession,
+  onAbortSession,
   onCollapse,
 }: {
   sessions: SessionSummary[];
   onSelectSession: (sessionId: string) => void;
+  onAbortSession: (sessionId: string) => void;
   onCollapse: () => void;
 }) {
   return (
@@ -78,22 +82,41 @@ export function SessionListPanel({
           <p className="px-1 text-xs text-dim">No sessions yet. Send a message to start one.</p>
         ) : (
           <div className="space-y-2">
-            {sessions.map((session, index) => (
-              <button
-                key={session.id}
-                type="button"
-                onClick={() => onSelectSession(session.id)}
-                className={`w-full rounded-lg border border-border bg-surface/60 px-3 py-2.5 text-left transition hover:border-border/80 hover:bg-surface border-l-[3px] ${statusAccent(session)}`}
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-                  Session {index + 1}
-                </p>
-                <p className="mt-1 line-clamp-2 text-xs text-white">{session.instruction}</p>
-                <span className="mt-2 inline-block text-[10px] uppercase tracking-wide text-dim">
-                  {sessionStatusLabel(session)}
-                </span>
-              </button>
-            ))}
+            {sessions.map((session, index) => {
+              const processing = isProcessingSession(session);
+              return (
+                <div
+                  key={session.id}
+                  className={`rounded-lg border border-border bg-surface/60 px-3 py-2.5 border-l-[3px] ${statusAccent(session)}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelectSession(session.id)}
+                    className="w-full text-left"
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                      Session {index + 1}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-xs text-white">{session.instruction}</p>
+                    <span className="mt-2 inline-block text-[10px] uppercase tracking-wide text-dim">
+                      {sessionStatusLabel(session)}
+                    </span>
+                  </button>
+                  {processing ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAbortSession(session.id);
+                      }}
+                      className="mt-2 text-[10px] uppercase tracking-wide text-dim hover:text-red-400"
+                    >
+                      Abort
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -114,9 +137,7 @@ export function SessionDetailModal({
 }) {
   const processCards =
     turn?.cards.filter((c) => PROCESS_CARD_TYPES.includes(c.type)) ?? [];
-  const canAbort =
-    session.session_type === "recurring" &&
-    (session.status === "running" || session.status === "queued");
+  const canAbort = isProcessingSession(session);
 
   return (
     <div
@@ -161,7 +182,7 @@ export function SessionDetailModal({
               onClick={() => onAbort(session.id)}
               className="text-xs text-dim hover:text-red-400"
             >
-              Abort session
+              Abort
             </button>
           </div>
         ) : null}
@@ -169,9 +190,11 @@ export function SessionDetailModal({
         <div className="min-h-0 flex-1 overflow-y-auto p-5 scrollbar-thin">
           {processCards.length === 0 ? (
             <p className="text-xs text-dim">
-              {session.status === "running" || session.status === "queued"
-                ? "Waiting for process events…"
-                : "No process steps recorded."}
+              {isProcessingSession(session)
+                ? "Listening in the background — you can keep chatting."
+                : session.status === "running" || session.status === "queued"
+                  ? "Waiting for process events…"
+                  : "No process steps recorded."}
             </p>
           ) : (
             <div className="space-y-3">

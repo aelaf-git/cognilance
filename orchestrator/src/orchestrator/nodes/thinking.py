@@ -5,12 +5,17 @@ from __future__ import annotations
 from langchain_core.messages import BaseMessage
 
 from orchestrator.llm import get_llm, to_chat_messages
-from orchestrator.streaming import stream_llm
+from orchestrator.streaming import reveal_text
 
-THINKING_SYSTEM = """You are the Cognilance Thinking Agent. Use the full conversation history \
-when answering — remember names, preferences, and facts the user shared earlier. \
-Reason clearly and answer the user directly. Be concise and accurate. \
-Do not mention internal orchestration unless explaining a missing integration."""
+THINKING_SYSTEM = """You are Cognilance replying in chat.
+
+Rules:
+- Output ONLY the final message the user should read — no reasoning, planning, or inner monologue.
+- Never mention tools, APIs, subscribe_inbox, app:gmail, integrations, or orchestration.
+- Never say "let me try", "I'll attempt", "please wait", or describe steps you will take.
+- One to three short sentences. Warm and natural.
+- If the user is acknowledging something already set up, confirm briefly and stop.
+- If they need an action you cannot perform, say what they should do in plain language only."""
 
 
 def build_thinking_system(*, capabilities: str = "") -> str:
@@ -18,15 +23,9 @@ def build_thinking_system(*, capabilities: str = "") -> str:
         return THINKING_SYSTEM
     return (
         f"{THINKING_SYSTEM}\n\n"
-        f"Tool access for this user:\n{capabilities}\n\n"
-    "If the user wants an action that needs a NOT CONNECTED integration, "
-    "say which integration is required and that they must connect it at /integrations. "
-    "Never describe plans, subtasks, or internal tools — either answer directly or "
-    "state that an integration must be connected first. "
-    "Never claim you sent email, created calendar events, edited Google Docs, "
-    "or called external APIs unless that actually happened in execution results. "
-    "If the user needs a connected integration, explain that the orchestrator "
-    "will run it in the execution phase."
+        f"Connected capabilities (do not name these in chat):\n{capabilities}\n\n"
+        "If a required capability is not connected, tell the user to open Integrations "
+        "and connect it — without naming internal tool slugs."
     )
 
 
@@ -45,10 +44,10 @@ async def run_thinking(
         messages.extend(to_chat_messages(conversation))
     elif instruction:
         messages.append({"role": "user", "content": instruction})
+
+    response = await get_llm(temperature=0.3).ainvoke(messages)
+    content = response.content
+    text = content if isinstance(content, str) else str(content)
     if stream:
-        text = await stream_llm(get_llm(temperature=0.4), messages, event="answer")
-    else:
-        response = await get_llm(temperature=0.4).ainvoke(messages)
-        content = response.content
-        text = content if isinstance(content, str) else str(content)
+        reveal_text(text, event="answer")
     return text, {"body": text}

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from enum import Enum
 
+from orchestrator.subscriptions.monitor_intent import is_monitor_request
+
 _RECURRING_HINTS = (
     "weekly",
     "every week",
@@ -31,6 +33,8 @@ class SessionType(str, Enum):
 
 
 def detect_session_type(instruction: str) -> SessionType:
+    if is_monitor_request(instruction):
+        return SessionType.RECURRING
     lower = instruction.lower()
     if any(hint in lower for hint in _RECURRING_HINTS):
         return SessionType.RECURRING

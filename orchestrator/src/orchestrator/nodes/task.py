@@ -11,7 +11,13 @@ from cognilance import CognilanceManager
 from langchain_core.messages import BaseMessage
 
 from orchestrator.integrations.client import IntegrationClient
-from orchestrator.integrations.routing import format_document_result, format_gmail_list_result
+from orchestrator.integrations.routing import (
+    format_document_result,
+    format_gmail_list_result,
+    format_subscription_result,
+    format_calendar_list_result,
+)
+from orchestrator.tools.web import format_web_fetch_result, format_web_search_result
 from orchestrator.llm import get_llm, last_user_text, to_chat_messages
 from orchestrator.state import State, Subtask, SubtaskResult
 from orchestrator.streaming import emit, emit_status
@@ -141,10 +147,18 @@ def _result_facts(results: list[SubtaskResult]) -> str:
         data = result.get("data") or {}
         if data.get("emails"):
             parts.append(format_gmail_list_result(data))
+        elif data.get("events") is not None:
+            parts.append(format_calendar_list_result(data))
+        elif data.get("sources") and data.get("query"):
+            parts.append(format_web_search_result(data))
+        elif data.get("url") and data.get("content") is not None:
+            parts.append(format_web_fetch_result(data))
         elif data.get("document_id") or str(data.get("url", "")).startswith(
             "https://docs.google.com/document/"
         ):
             parts.append(format_document_result(data))
+        elif data.get("subscription_id") or "stopped" in data:
+            parts.append(format_subscription_result(data))
         elif result.get("text"):
             parts.append(f"[{result.get('assignee', 'agent')}] {result.get('text')}")
     return "\n\n".join(parts).strip()
@@ -166,16 +180,26 @@ async def _synthesize_final(
     if not facts:
         return results[0].get("text") or "" if len(results) == 1 else ""
 
+    if len(results) == 1:
+        data = results[0].get("data") or {}
+        if data.get("subscription_id") or "stopped" in data:
+            return format_subscription_result(data)
+        if data.get("sources") and data.get("query"):
+            return format_web_search_result(data)
+        if data.get("url") and data.get("content") is not None and results[0].get("assignee") == "web":
+            return format_web_fetch_result(data)
+
     llm = get_llm(temperature=0.3)
     messages: list[dict[str, str]] = [
         {
             "role": "system",
             "content": (
-                "You are Cognilance — an AI-native orchestrator. "
-                "Answer the user naturally using the execution results below. "
+                "You are Cognilance replying in chat. "
+                "Write a short, natural answer using the execution results below. "
                 "Preserve links, counts, and facts exactly. "
-                "Never claim an action succeeded if the results say FAILED. "
-                "Never invent API outcomes that are not in the results."
+                "Never mention tools, APIs, subscribe_inbox, or internal orchestration. "
+                "Never claim an action succeeded if results say FAILED. "
+                "One to three sentences unless listing emails or documents."
             ),
         },
     ]

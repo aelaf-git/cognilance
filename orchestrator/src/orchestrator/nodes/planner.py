@@ -10,12 +10,16 @@ from cognilance.core.models import AgentCard
 from pydantic import BaseModel, Field
 
 from orchestrator.context import current_user_id
+from orchestrator.conversation.ack import acknowledgment_reply, is_acknowledgment
 from orchestrator.integrations.client import IntegrationClient
 from orchestrator.integrations.routing import integration_subtasks_for_query
+from orchestrator.tools.web_routing import web_subtasks_for_query
 from orchestrator.llm import get_llm, last_user_text
 from orchestrator.registry_cache import find_agent_by_skill, get_catalog, has_agent_for_skill
 from orchestrator.state import Plan, State, Subtask
 from orchestrator.streaming import emit, emit_status, stream_llm
+from orchestrator.subscriptions.store import SubscriptionStore
+from orchestrator.subscriptions.monitor_intent import is_monitor_request
 
 UI_COMPONENTS = """- research-sources: research summaries with linked sources
 - data-chart: bar or line charts for numeric series
@@ -56,11 +60,11 @@ class SubtaskPlan(BaseModel):
     )
     tool: str | None = Field(
         default=None,
-        description="Tool slug: hire:<skill>, app:google-drive, app:gmail, app:google-calendar, app:notion, app:slack, app:github, or thinking",
+        description="Tool slug: hire:<skill>, app:google-drive, app:gmail, web, or thinking",
     )
     action: str | None = Field(
         default=None,
-        description="Integration action when tool is app:<integration>",
+        description="Action for app:* or web tools (e.g. search, fetch_url, list_emails)",
     )
     params: dict[str, Any] | None = Field(
         default=None,
@@ -98,6 +102,9 @@ async def _classify_complexity(
                     "Tasks that need research, data analysis, charts, generating Python code, "
                     "or calling external services (email, calendar, Slack, Google Docs, etc.) "
                     "are complex. "
+                    "Questions needing current web information (news, lookups, public facts) "
+                    "are complex — use tool=web action=search. "
+                    "Reading a specific URL uses tool=web action=fetch_url. "
                     "Creating or editing Google Docs is ALWAYS complex. "
                     "If the marketplace catalog is empty or no agent has the required skill, "
                     "the orchestrator handles the task itself via tool=thinking or connected integrations. "
@@ -223,6 +230,12 @@ def _resolve_subtasks(
                 )
             else:
                 assignee = app_id
+        elif tool == "web" or (tool and tool.startswith("web:")):
+            if tool.startswith("web:"):
+                action = action or tool.split(":", 1)[1]
+                tool = "web"
+            assignee = "web"
+            action = action or "search"
         elif tool and tool.startswith("hire:"):
             hire_skill = tool.split(":", 1)[1]
             match = find_agent_by_skill(agents, hire_skill)
@@ -273,6 +286,66 @@ async def planner(state: State) -> dict:
     app_service = IntegrationClient()
     capabilities = app_service.capabilities_context(user_id)
 
+    from orchestrator.context import current_conversation_id
+
+    conversation_id = current_conversation_id.get() or ""
+    listener_active = False
+    if conversation_id:
+        listener_active = bool(
+            SubscriptionStore().list_active_for_conversation(conversation_id)
+        )
+
+    if is_acknowledgment(query):
+        reply = acknowledgment_reply(listener_active=listener_active)
+        plan: Plan = {
+            "reasoning": "Brief acknowledgment — no further action needed.",
+            "suggested_ui": None,
+            "thinking": "",
+            "steps": [],
+        }
+        emit("plan", data={**plan, "complexity": "simple", "route": "simple", "subtasks": []})
+        emit("route_decision", route="simple", complexity="simple")
+        emit("direct_reply", text=reply)
+        return {
+            "complexity": "simple",
+            "route": "simple",
+            "thinking": "",
+            "plan": plan,
+            "subtasks": [],
+            "subtask_results": [],
+            "final_text": reply,
+            "final_data": {},
+            "answer_streamed": False,
+            "direct_reply": True,
+        }
+
+    if is_monitor_request(query) and listener_active:
+        reply = (
+            "I'm already watching your inbox in this chat. "
+            "Say 'stop listening' if you want me to turn that off."
+        )
+        plan = {
+            "reasoning": "Inbox listener already active for this conversation.",
+            "suggested_ui": None,
+            "thinking": "",
+            "steps": [],
+        }
+        emit("plan", data={**plan, "complexity": "simple", "route": "simple", "subtasks": []})
+        emit("route_decision", route="simple", complexity="simple")
+        emit("direct_reply", text=reply)
+        return {
+            "complexity": "simple",
+            "route": "simple",
+            "thinking": "",
+            "plan": plan,
+            "subtasks": [],
+            "subtask_results": [],
+            "final_text": reply,
+            "final_data": {},
+            "answer_streamed": False,
+            "direct_reply": True,
+        }
+
     async with CognilanceManager(agent_name="Orchestrator") as manager:
         preview_catalog = state.get("catalog_text") or "Catalog not yet loaded."
         try:
@@ -317,12 +390,18 @@ async def planner(state: State) -> dict:
                         "Build an execution plan using ONLY agents that exist in the catalog "
                         "and ONLY CONNECTED integrations from the tool access list. "
                         "For complex tasks, define subtasks with ids and dependency edges. "
-                        "Set tool to hire:<skill>, app:<integration-id>, or thinking. "
+                        "Set tool to hire:<skill>, app:<integration-id>, web, or thinking. "
+                        "For web: action=search with params {query}; action=fetch_url with params {url}. "
+                        "Use web:search for current events, public facts, or anything on the internet. "
+                        "Use web:fetch_url when the user shares a URL to read or summarize. "
                         "For app tools, set action to a supported action and params as needed. "
                         "For Google Docs (app:google-drive): use create_document with name + "
                         "content (actual document body, not the user's command); use write_document "
                         "with document_id, content, mode=append, and optional style "
                         "(bold, font_size, font_family). Reuse document_id from prior messages. "
+                        "For ongoing monitoring (notify me when, keep listening, watch inbox): "
+                        "use app:gmail action=subscribe_inbox — NOT list_emails. "
+                        "To stop: app:gmail action=unsubscribe_inbox. "
                         "Use exact skill slugs from the catalog for hire tools. "
                         "If a needed integration is NOT CONNECTED, use thinking and tell the user to connect it. "
                         "If no agent matches a needed skill, use tool=thinking — the orchestrator "
@@ -368,6 +447,12 @@ async def planner(state: State) -> dict:
             complexity = "complex"
             route = "complex"
             subtasks = forced_integration
+        else:
+            forced_web = web_subtasks_for_query(query)
+            if forced_web:
+                complexity = "complex"
+                route = "complex"
+                subtasks = forced_web
 
         if route == "complex" and not subtasks:
             subtasks = [

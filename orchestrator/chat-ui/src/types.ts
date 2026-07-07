@@ -57,6 +57,15 @@ export type ConversationSummary = {
   updated_at: string;
   session_count?: number;
   latest_status?: string | null;
+  active_listeners?: SubscriptionSummary[];
+};
+
+export type SubscriptionSummary = {
+  id: string;
+  integration: string;
+  kind: string;
+  status: string;
+  poll_interval_seconds?: number;
 };
 
 export type SessionSummary = {
@@ -70,6 +79,11 @@ export type SessionSummary = {
   created_at: string;
   result_text?: string | null;
   error?: string | null;
+  subscription_id?: string | null;
+  listener_active?: boolean;
+  listener_integration?: string;
+  listener_kind?: string;
+  display_status?: string;
 };
 
 export type UiItem = {

@@ -45,7 +45,15 @@ INTEGRATIONS: dict[str, IntegrationSpec] = {
             "https://www.googleapis.com/auth/gmail.readonly",
             "https://www.googleapis.com/auth/gmail.send",
         ],
-        "actions": ["list_emails", "read_email", "send_email", "search_emails"],
+        "actions": [
+            "list_emails",
+            "read_email",
+            "send_email",
+            "search_emails",
+            "subscribe_inbox",
+            "unsubscribe_inbox",
+            "check_inbox",
+        ],
         "logo": "gmail",
     },
     "google-calendar": {

@@ -58,3 +58,4 @@ class State(TypedDict, total=False):
     final_text: str
     final_data: dict[str, Any]
     answer_streamed: bool
+    direct_reply: bool

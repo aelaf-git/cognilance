@@ -42,12 +42,78 @@ export function useOrchestrator(
   const [conversationLoading, setConversationLoading] = useState(true);
   const conversationIdRef = useRef(conversationId);
   const liveSessionRef = useRef<string | null>(null);
+  const lastNotificationIdRef = useRef(0);
+  const notificationAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     conversationIdRef.current = conversationId;
     if (conversationId) {
       localStorage.setItem(CONVERSATION_KEY, conversationId);
     }
+    lastNotificationIdRef.current = 0;
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    const controller = new AbortController();
+    notificationAbortRef.current = controller;
+
+    async function watchNotifications() {
+      try {
+        const res = await fetch(
+          `/conversations/${conversationId}/notifications?after=${lastNotificationIdRef.current}`,
+          { signal: controller.signal },
+        );
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (!controller.signal.aborted) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() ?? "";
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const data = JSON.parse(line.slice(6)) as {
+                id?: number;
+                summary?: string;
+                event?: string;
+              };
+              if (data.id) lastNotificationIdRef.current = Math.max(lastNotificationIdRef.current, data.id);
+              const summary = data.summary?.trim();
+              if (!summary) continue;
+              setChatMessages((prev) => {
+                if (prev.some((m) => m.content === summary && m.role === "assistant")) {
+                  return prev;
+                }
+                return [
+                  ...prev,
+                  {
+                    id: `notif-${data.id ?? uid()}`,
+                    role: "assistant",
+                    content: summary,
+                  },
+                ];
+              });
+            } catch {
+              continue;
+            }
+          }
+        }
+      } catch {
+        /* aborted or network */
+      }
+    }
+
+    void watchNotifications();
+    return () => {
+      controller.abort();
+      notificationAbortRef.current = null;
+    };
   }, [conversationId]);
 
   const loadConversation = useCallback(async (id: string) => {

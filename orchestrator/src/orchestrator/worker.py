@@ -12,6 +12,7 @@ from orchestrator.apps.store import init_all_stores
 from orchestrator.graph import init_graph
 from orchestrator.mission_runner import run_mission
 from orchestrator.missions.store import MissionStore
+from orchestrator.subscriptions.ticker import tick_subscriptions
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,10 @@ async def worker_loop(*, poll_interval: float = 1.0) -> None:
                 logger.info("Mission %s finished with status %s", mission.id, store.get_mission(mission.id).status)
             except Exception:
                 logger.exception("Mission %s failed", mission.id)
+        try:
+            await tick_subscriptions()
+        except Exception:
+            logger.exception("Subscription tick failed")
         await asyncio.sleep(poll_interval)
 
 

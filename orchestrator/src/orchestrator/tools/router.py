@@ -10,8 +10,15 @@ from cognilance import CognilanceManager
 from orchestrator.context import current_user_id
 from orchestrator.integrations.client import IntegrationClient
 from orchestrator.integrations.doc_params import prepare_google_doc_params
+from orchestrator.integrations.calendar_params import prepare_calendar_list_params
 from orchestrator.integrations.registry import INTEGRATIONS
-from orchestrator.integrations.routing import format_document_result
+from orchestrator.integrations.routing import format_document_result, format_subscription_result
+from orchestrator.tools.web import (
+    format_web_fetch_result,
+    format_web_search_result,
+    web_fetch,
+    web_search,
+)
 from orchestrator.registry_cache import find_agent_by_skill
 from orchestrator.streaming import emit
 
@@ -127,9 +134,20 @@ class ToolRouter:
                     params,
                     conversation=conversation,
                 )
+            if action == "list_events" and integration_id == "google-calendar":
+                params = prepare_calendar_list_params(instruction, params)
+            if action in {"subscribe_inbox", "unsubscribe_inbox"}:
+                from orchestrator.context import current_conversation_id
+
+                if not params.get("conversation_id"):
+                    conv = current_conversation_id.get()
+                    if conv:
+                        params["conversation_id"] = conv
             result = await self._integrations.run(user_id, integration_id, action, params)
             if action in {"create_document", "write_document", "read_document"}:
                 summary = format_document_result(result)
+            elif action in {"subscribe_inbox", "unsubscribe_inbox"}:
+                summary = format_subscription_result(result)
             else:
                 summary = self._integrations.summarize_result(integration_id, action, result)
             return ToolResult(
@@ -137,6 +155,38 @@ class ToolRouter:
                 data=result,
                 assignee=integration_id,
             )
+
+        if resolved == "web" or resolved.startswith("web:"):
+            if resolved.startswith("web:"):
+                action = resolved.split(":", 1)[1].strip()
+            else:
+                action = str(payload.get("action") or "search").strip()
+            params = payload.get("params") or {}
+            if not isinstance(params, dict):
+                params = {}
+            if action == "fetch_url":
+                url = str(params.get("url") or "").strip()
+                if not url:
+                    from orchestrator.tools.web import extract_urls
+
+                    urls = extract_urls(instruction)
+                    if urls:
+                        url = urls[0]
+                if not url:
+                    raise RuntimeError("url is required for web:fetch_url")
+                emit("tool_start", tool="web:fetch", assignee="web", action=action)
+                result = await web_fetch(url)
+                summary = format_web_fetch_result(result)
+            elif action in {"search", "web_search"}:
+                query = str(params.get("query") or instruction).strip()
+                max_results = int(params.get("max_results", 6))
+                emit("tool_start", tool="web:search", assignee="web", action=action)
+                result = await web_search(query, max_results=max_results)
+                summary = format_web_search_result(result)
+            else:
+                raise RuntimeError(f"Unknown web action: {action}")
+            emit("tool_done", tool=f"web:{action}", assignee="web", status="completed")
+            return ToolResult(text=summary, data=result, assignee="web")
 
         if resolved == "thinking":
             from orchestrator.nodes.thinking import run_thinking

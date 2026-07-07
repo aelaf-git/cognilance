@@ -170,6 +170,9 @@ export default function App() {
     if (modalSessionId === sessionId) {
       void loadSessionHistory(sessionId);
     }
+    if (activeConversationId) {
+      await loadConversationSessions(activeConversationId);
+    }
   };
 
   return (
@@ -248,6 +251,7 @@ export default function App() {
               <SessionListPanel
                 sessions={conversationSessions}
                 onSelectSession={handleOpenSession}
+                onAbortSession={(id) => void handleAbortSession(id)}
                 onCollapse={toggleDetail}
               />
             </div>

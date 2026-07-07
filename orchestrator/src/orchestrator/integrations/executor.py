@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -435,22 +437,54 @@ class IntegrationExecutor:
     async def _action_google_calendar(
         self, token: str, action: str, params: dict[str, Any]
     ) -> dict[str, Any]:
-        calendar_id = str(params.get("calendar_id", "primary"))
+        calendar_id = quote(str(params.get("calendar_id", "primary")), safe="@")
         base = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}"
 
         if action == "list_events":
+            time_min = params.get("time_min")
+            if not time_min:
+                time_min = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+            query_params: dict[str, Any] = {
+                "maxResults": int(params.get("max_results", 25)),
+                "singleEvents": "true",
+                "orderBy": "startTime",
+                "timeMin": str(time_min),
+            }
+            time_max = params.get("time_max")
+            if time_max:
+                query_params["timeMax"] = str(time_max)
+            search_q = params.get("q")
+            if search_q:
+                query_params["q"] = str(search_q)
+
             data = await self._google_request(
                 token,
                 "GET",
                 f"{base}/events",
-                params={
-                    "maxResults": int(params.get("max_results", 10)),
-                    "singleEvents": "true",
-                    "orderBy": "startTime",
-                    "timeMin": params.get("time_min"),
-                },
+                params=query_params,
             )
-            return {"events": data.get("items", [])}
+            events: list[dict[str, Any]] = []
+            for item in data.get("items", []) or []:
+                start = item.get("start") or {}
+                end = item.get("end") or {}
+                events.append(
+                    {
+                        "id": item.get("id"),
+                        "summary": item.get("summary") or "(no title)",
+                        "start": start.get("dateTime") or start.get("date"),
+                        "end": end.get("dateTime") or end.get("date"),
+                        "location": item.get("location") or "",
+                        "description": (item.get("description") or "")[:300],
+                        "html_link": item.get("htmlLink") or "",
+                    }
+                )
+            return {
+                "events": events,
+                "count": len(events),
+                "time_min": str(time_min),
+                "time_max": str(time_max) if time_max else None,
+            }
 
         if action == "create_event":
             summary = str(params.get("summary", "New event"))
