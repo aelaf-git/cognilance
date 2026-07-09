@@ -308,6 +308,7 @@ export function useOrchestrator(
           body: JSON.stringify({
             text,
             conversation_id: convId,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           }),
         });
         if (!res.ok || !res.body) throw new Error("Stream request failed");

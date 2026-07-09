@@ -6,8 +6,14 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage
 
+from orchestrator.conversation.ack import is_acknowledgment
 from orchestrator.integrations.client import IntegrationClient
 from orchestrator.integrations.doc_params import google_docs_action, is_google_docs_task
+from orchestrator.integrations.gmail_params import (
+    is_email_compose_request,
+    is_email_send_approval,
+)
+from orchestrator.drafts.store import DraftStore
 from orchestrator.integrations.calendar_params import prepare_calendar_list_params
 from orchestrator.subscriptions.monitor_intent import (
     is_monitor_request,
@@ -30,9 +36,12 @@ def integration_subtasks_for_query(
     conversation: list[BaseMessage] | None = None,
 ) -> list[Subtask] | None:
     """Return forced subtasks when a connected integration should run immediately."""
-    from orchestrator.conversation.ack import is_acknowledgment
+    from orchestrator.context import current_conversation_id
 
-    if is_acknowledgment(query):
+    conv_id = current_conversation_id.get() or ""
+    has_pending_email = DraftStore().has_pending_email(conv_id) if conv_id else False
+
+    if is_acknowledgment(query) and not has_pending_email:
         return None
 
     q = query.lower()
@@ -92,6 +101,48 @@ def integration_subtasks_for_query(
             }
         ]
 
+    if client.is_connected(user_id, "gmail") and has_pending_email:
+        if is_email_send_approval(query, has_pending_draft=True):
+            return [
+                {
+                    "id": "gmail-send",
+                    "title": "Send approved email",
+                    "instruction": query,
+                    "tool": "app:gmail",
+                    "action": "send_email",
+                    "params": {},
+                    "assignee": "gmail",
+                    "depends_on": [],
+                }
+            ]
+
+    if client.is_connected(user_id, "gmail") and is_email_compose_request(query):
+        if is_email_send_approval(query, has_pending_draft=has_pending_email):
+            return [
+                {
+                    "id": "gmail-send",
+                    "title": "Send approved email",
+                    "instruction": query,
+                    "tool": "app:gmail",
+                    "action": "send_email",
+                    "params": {},
+                    "assignee": "gmail",
+                    "depends_on": [],
+                }
+            ]
+        return [
+            {
+                "id": "gmail-compose",
+                "title": "Compose email draft for review",
+                "instruction": query,
+                "tool": "app:gmail",
+                "action": "compose_email",
+                "params": {},
+                "assignee": "gmail",
+                "depends_on": [],
+            }
+        ]
+
     if client.is_connected(user_id, "gmail") and _query_mentions(
         q, "email", "emails", "inbox", "gmail", "mailbox", "mail"
     ):
@@ -100,7 +151,7 @@ def integration_subtasks_for_query(
         if _query_mentions(q, "send", "compose", "write") and _query_mentions(
             q, "email", "mail"
         ):
-            return None  # send needs structured params — let planner handle
+            return None  # handled by compose_email routing above
         action = "search_emails" if _query_mentions(q, "search", "find") else "list_emails"
         params: dict[str, Any] = {"max_results": 10}
         if action == "search_emails":
@@ -121,7 +172,7 @@ def integration_subtasks_for_query(
     if client.is_connected(user_id, "google-calendar") and _query_mentions(
         q, "calendar", "event", "events", "meeting", "meetings", "schedule"
     ):
-        cal_params = prepare_calendar_list_params(query, {"max_results": 25})
+        cal_params = prepare_calendar_list_params(query, {"max_results": 25}, user_id=user_id)
         return [
             {
                 "id": "calendar",
@@ -269,8 +320,12 @@ def format_calendar_list_result(result: dict[str, Any]) -> str:
 
 def format_subscription_result(result: dict[str, Any]) -> str:
     if "stopped" in result:
-        return str(result.get("message") or "Stopped listening for new emails.")
+        return str(result.get("message") or "Stopped.")
     if result.get("subscription_id"):
+        if result.get("message"):
+            return str(result["message"])
+        if result.get("kind") == "recurring_task":
+            return str(result.get("message") or "Recurring task scheduled.")
         interval = int(result.get("poll_interval_seconds") or 90)
         return (
             f"I'm listening for new Gmail messages and will check every {interval} seconds. "
@@ -279,3 +334,11 @@ def format_subscription_result(result: dict[str, Any]) -> str:
     if result.get("message"):
         return str(result["message"])
     return str(result)
+
+
+def format_recurring_result(result: dict[str, Any]) -> str:
+    if result.get("message"):
+        return str(result["message"])
+    if "stopped" in result:
+        return str(result.get("message") or "Stopped the recurring task.")
+    return format_subscription_result(result)

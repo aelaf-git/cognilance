@@ -11,10 +11,13 @@ from pydantic import BaseModel, Field
 
 from orchestrator.context import current_user_id
 from orchestrator.conversation.ack import acknowledgment_reply, is_acknowledgment
+from orchestrator.drafts.store import DraftStore
 from orchestrator.integrations.client import IntegrationClient
 from orchestrator.integrations.routing import integration_subtasks_for_query
+from orchestrator.tools.time_routing import time_subtasks_for_query
 from orchestrator.tools.web_routing import web_subtasks_for_query
-from orchestrator.llm import get_llm, last_user_text
+from orchestrator.subscriptions.recurring_routing import recurring_subtasks_for_query
+from orchestrator.llm import get_llm, last_user_text, to_chat_messages
 from orchestrator.registry_cache import find_agent_by_skill, get_catalog, has_agent_for_skill
 from orchestrator.state import Plan, State, Subtask
 from orchestrator.streaming import emit, emit_status, stream_llm
@@ -236,6 +239,18 @@ def _resolve_subtasks(
                 tool = "web"
             assignee = "web"
             action = action or "search"
+        elif tool == "time" or (tool and tool.startswith("time:")):
+            if tool.startswith("time:"):
+                action = action or tool.split(":", 1)[1]
+                tool = "time"
+            assignee = "time"
+            action = action or "now"
+        elif tool == "recurring" or (tool and tool.startswith("recurring:")):
+            if tool.startswith("recurring:"):
+                action = action or tool.split(":", 1)[1]
+                tool = "recurring"
+            assignee = "recurring"
+            action = action or "subscribe"
         elif tool and tool.startswith("hire:"):
             hire_skill = tool.split(":", 1)[1]
             match = find_agent_by_skill(agents, hire_skill)
@@ -279,6 +294,29 @@ def _resolve_subtasks(
     return resolved
 
 
+def _conversation_snippet(messages: list, *, limit: int = 10) -> str:
+    if not messages:
+        return ""
+    recent = messages[-limit:]
+    lines: list[str] = []
+    for msg in to_chat_messages(recent):
+        role = msg.get("role", "user")
+        content = str(msg.get("content", "")).strip()
+        if content:
+            lines.append(f"{role}: {content[:800]}")
+    return "\n\n".join(lines)
+
+
+def _subtasks_have_doc_content(subtasks: list[Subtask]) -> bool:
+    for item in subtasks:
+        if item.get("tool") == "app:google-drive":
+            params = item.get("params") or {}
+            content = str(params.get("content") or "").strip()
+            if content and len(content) > 40:
+                return True
+    return False
+
+
 async def planner(state: State) -> dict:
     query = last_user_text(state.get("messages", []))
     emit_status("Planning…")
@@ -296,28 +334,29 @@ async def planner(state: State) -> dict:
         )
 
     if is_acknowledgment(query):
-        reply = acknowledgment_reply(listener_active=listener_active)
-        plan: Plan = {
-            "reasoning": "Brief acknowledgment — no further action needed.",
-            "suggested_ui": None,
-            "thinking": "",
-            "steps": [],
-        }
-        emit("plan", data={**plan, "complexity": "simple", "route": "simple", "subtasks": []})
-        emit("route_decision", route="simple", complexity="simple")
-        emit("direct_reply", text=reply)
-        return {
-            "complexity": "simple",
-            "route": "simple",
-            "thinking": "",
-            "plan": plan,
-            "subtasks": [],
-            "subtask_results": [],
-            "final_text": reply,
-            "final_data": {},
-            "answer_streamed": False,
-            "direct_reply": True,
-        }
+        if not (conversation_id and DraftStore().has_pending_email(conversation_id)):
+            reply = acknowledgment_reply(listener_active=listener_active)
+            plan: Plan = {
+                "reasoning": "Brief acknowledgment — no further action needed.",
+                "suggested_ui": None,
+                "thinking": "",
+                "steps": [],
+            }
+            emit("plan", data={**plan, "complexity": "simple", "route": "simple", "subtasks": []})
+            emit("route_decision", route="simple", complexity="simple")
+            emit("direct_reply", text=reply)
+            return {
+                "complexity": "simple",
+                "route": "simple",
+                "thinking": "",
+                "plan": plan,
+                "subtasks": [],
+                "subtask_results": [],
+                "final_text": reply,
+                "final_data": {},
+                "answer_streamed": False,
+                "direct_reply": True,
+            }
 
     if is_monitor_request(query) and listener_active:
         reply = (
@@ -370,6 +409,7 @@ async def planner(state: State) -> dict:
                     "role": "user",
                     "content": (
                         f"User request:\n{query}\n\n"
+                        f"Recent conversation:\n{_conversation_snippet(state.get('messages', []))}\n\n"
                         f"Complexity: {complexity_decision.complexity}\n\n"
                         f"Tool access:\n{capabilities}\n\n"
                         f"Marketplace catalog:\n{catalog_text}"
@@ -399,9 +439,15 @@ async def planner(state: State) -> dict:
                         "content (actual document body, not the user's command); use write_document "
                         "with document_id, content, mode=append, and optional style "
                         "(bold, font_size, font_family). Reuse document_id from prior messages. "
+                        "For Gmail (app:gmail): ALWAYS use compose_email first to draft for review. "
+                        "Only use send_email after the user approves a pending draft and provides recipient. "
+                        "Never send_email on the first request. send_email params: {to}. "
                         "For ongoing monitoring (notify me when, keep listening, watch inbox): "
                         "use app:gmail action=subscribe_inbox — NOT list_emails. "
                         "To stop: app:gmail action=unsubscribe_inbox. "
+                        "For scheduled/repeated tasks (every day, hourly, weekly, automate): "
+                        "use tool=recurring action=subscribe with params {instruction, poll_interval_seconds}. "
+                        "To stop recurring tasks: tool=recurring action=unsubscribe. "
                         "Use exact skill slugs from the catalog for hire tools. "
                         "If a needed integration is NOT CONNECTED, use thinking and tell the user to connect it. "
                         "If no agent matches a needed skill, use tool=thinking — the orchestrator "
@@ -416,6 +462,7 @@ async def planner(state: State) -> dict:
                     "role": "user",
                     "content": (
                         f"User request:\n{query}\n\n"
+                        f"Recent conversation:\n{_conversation_snippet(state.get('messages', []))}\n\n"
                         f"Complexity: {complexity_decision.complexity}\n"
                         f"Complexity reasoning: {complexity_decision.reasoning}\n\n"
                         f"Planner thinking:\n{thinking}"
@@ -444,15 +491,34 @@ async def planner(state: State) -> dict:
             conversation=state.get("messages", []),
         )
         if forced_integration:
-            complexity = "complex"
-            route = "complex"
-            subtasks = forced_integration
-        else:
-            forced_web = web_subtasks_for_query(query)
-            if forced_web:
+            doc_forced = (
+                len(forced_integration) == 1
+                and forced_integration[0].get("tool") == "app:google-drive"
+            )
+            if doc_forced and _subtasks_have_doc_content(subtasks):
+                pass
+            else:
                 complexity = "complex"
                 route = "complex"
-                subtasks = forced_web
+                subtasks = forced_integration
+        else:
+            forced_time = time_subtasks_for_query(query)
+            if forced_time:
+                complexity = "complex"
+                route = "complex"
+                subtasks = forced_time
+            else:
+                forced_recurring = recurring_subtasks_for_query(query)
+                if forced_recurring:
+                    complexity = "complex"
+                    route = "complex"
+                    subtasks = forced_recurring
+                else:
+                    forced_web = web_subtasks_for_query(query)
+                    if forced_web:
+                        complexity = "complex"
+                        route = "complex"
+                        subtasks = forced_web
 
         if route == "complex" and not subtasks:
             subtasks = [

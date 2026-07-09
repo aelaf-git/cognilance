@@ -26,6 +26,7 @@ Two classes, two roles. Pick the one that matches what your code does.
 - [A2A protocol](#a2a-protocol)
 - [Registry](#registry)
 - [Agents](#agents)
+- [Agent Host (developer portal)](#agent-host-developer-portal)
 - [Orchestrator (generative UI)](#orchestrator-generative-ui)
 - [CLI reference](#cli-reference)
 - [Local development](#local-development)
@@ -403,6 +404,42 @@ The script checks registry health before launching agents on ports `8101`–`810
 
 ---
 
+## Agent Host (developer portal)
+
+The [`agent-host/`](agent-host/) service lets developers **upload agent ZIPs**, run them locally on dynamic ports (`8104`–`8199`), and auto-register with the registry — the orchestrator discovers them like built-in agents in `agents/`.
+
+| URL | Description |
+|-----|-------------|
+| http://127.0.0.1:8300/ | Developer portal (upload, start/stop, logs) |
+| http://127.0.0.1:8300/health | Health check |
+| http://127.0.0.1:8300/api/agents | Hosted agent list (JSON) |
+
+### Host your agent
+
+1. Copy [`agents/TEMPLATE.md`](agents/TEMPLATE.md) or zip [`agents/template_agent/`](agents/template_agent/) as a starting point
+2. Start registry, then Agent Host:
+
+```bash
+cd registry && docker compose watch   # :8088
+./scripts/start_agent_host.sh         # :8300
+```
+
+3. Open http://127.0.0.1:8300 — upload your `.zip`, **configure environment variables** (e.g. `GROQ_API_KEY`), then click **Upload agent** and **Start**
+4. Confirm the agent appears on the [registry dashboard](http://127.0.0.1:8088/dashboard)
+5. Start the orchestrator and ask for a task matching your agent's skill
+
+Uploaded agents are launched via `cognilance run <entry> --port <allocated>` so ports do not collide with built-ins on `8101`–`8103`.
+
+**Security:** the Agent Host executes arbitrary Python on your machine with no sandbox — local development only.
+
+Rebuild the portal UI after frontend changes:
+
+```bash
+cd agent-host/developer-ui && npm install && npm run build
+```
+
+---
+
 ## Orchestrator (generative UI)
 
 The [`orchestrator/`](orchestrator/) implements the **Cognilance Orchestrator execution algorithm** as a LangGraph pipeline with per-thread sessions (`thread_id` + `MemorySaver` checkpointer) and registry catalog caching (60s TTL per thread).
@@ -630,15 +667,18 @@ The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
 # Terminal 1 — registry
 cd registry && docker compose watch
 
-# Terminal 2-4 — agents
+# Terminal 2 — agent host (optional — upload custom agents)
+./scripts/start_agent_host.sh
+
+# Terminal 3-5 — built-in agents
 python agents/research_agent.py
 python agents/data_analyst.py
 python agents/python_code_writer.py
 
-# Terminal 5 — verify discovery
+# Terminal 6 — verify discovery
 cognilance discover
 
-# Terminal 6 — orchestrator (chat UI on :8200)
+# Terminal 7 — orchestrator (chat UI on :8200)
 python -m orchestrator
 ```
 
@@ -650,6 +690,9 @@ python -m orchestrator
 |----------|----------|---------|-------------|
 | `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL |
 | `COGNILANCE_PORT` | No | `8000` | Default port for workers |
+| `COGNILANCE_AGENT_HOST_PORT` | No | `8300` | Agent Host developer portal port |
+| `COGNILANCE_AGENT_HOST_DATA_DIR` | No | `data/hosted-agents` | Extracted agent ZIPs and SQLite DB |
+| `AGENT_HOST_ENCRYPTION_KEY` | No | falls back to `INTEGRATION_ENCRYPTION_KEY` | Encrypts per-agent secrets at rest |
 | `GROQ_API_KEY` | For agents/orchestrator | — | Groq API key used by the agents and the orchestrator |
 | `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | Groq model for agents and the orchestrator |
 | `VITE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL for the chat UI sidebar (build-time) |
@@ -681,7 +724,15 @@ cognilance/
 │   ├── research_agent.py    # skill: research      → research-sources UI
 │   ├── data_analyst.py      # skill: data-analysis → data-chart UI
 │   ├── python_code_writer.py  # skill: python-code  → python-code UI
+│   ├── template_agent/      # ZIP template for Agent Host uploads
+│   ├── template_agent.zip
+│   ├── TEMPLATE.md          # Agent ZIP contract docs
 │   ├── requirements.txt
+├── agent-host/              # Developer portal — upload & run agents locally
+│   ├── developer-ui/        # React portal (Vite + Tailwind)
+│   ├── pyproject.toml
+│   └── src/agent_host/      # FastAPI server, runner, ZIP handler
+├── data/hosted-agents/      # Uploaded agent extracts (gitignored at runtime)
 ├── orchestrator/            # LangGraph supervisor + React chat UI + generative UI
 │   ├── langgraph.json       # graphs + ui bundle config (env: ../.env)
 │   ├── chat-ui/             # React chat app (Vite + Tailwind + Framer Motion)
@@ -710,6 +761,7 @@ cognilance/
 │       └── python-code/
 ├── scripts/
 │   ├── start_agents.sh      # registry check + run all three agents
+│   ├── start_agent_host.sh  # developer portal on :8300
 │   └── e2e_smoke_test.py    # registry + agents + orchestrator smoke test
 ├── registry/                # Registry API (FastAPI + Prisma + SQLite)
 │   ├── prisma/

@@ -194,6 +194,14 @@ export default function App() {
           <a href="/integrations" className="text-xs text-registry hover:underline">
             Integrations
           </a>
+          <a
+            href="http://127.0.0.1:8300"
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-registry hover:underline"
+          >
+            Developer portal
+          </a>
         </div>
       </header>
 

@@ -7,12 +7,19 @@ from typing import Any, Protocol
 
 from cognilance import CognilanceManager
 
-from orchestrator.context import current_user_id
+from orchestrator.context import current_mission_id, current_user_id
+from orchestrator.datetime_util import current_time_context, format_current_time_summary
+from orchestrator.integrations.calendar_params import prepare_calendar_list_params
 from orchestrator.integrations.client import IntegrationClient
 from orchestrator.integrations.doc_params import prepare_google_doc_params
-from orchestrator.integrations.calendar_params import prepare_calendar_list_params
+from orchestrator.subscriptions.recurring_params import prepare_recurring_subscribe_params
 from orchestrator.integrations.registry import INTEGRATIONS
-from orchestrator.integrations.routing import format_document_result, format_subscription_result
+from orchestrator.integrations.gmail_params import format_email_draft, format_send_email_result
+from orchestrator.integrations.routing import (
+    format_document_result,
+    format_recurring_result,
+    format_subscription_result,
+)
 from orchestrator.tools.web import (
     format_web_fetch_result,
     format_web_search_result,
@@ -58,6 +65,7 @@ class HireAgentTool:
                 instruction,
                 stream=False,
                 capabilities=caps,
+                conversation=input.get("conversation"),
             )
             emit("tool_done", tool=f"hire:{skill}", assignee="thinking", status="fallback")
             return ToolResult(
@@ -106,7 +114,12 @@ class ToolRouter:
 
                 caps = self._integrations.capabilities_context(current_user_id.get())
                 emit("tool_start", tool=resolved, assignee="thinking")
-                text, data = await run_thinking(instruction, stream=False, capabilities=caps)
+                text, data = await run_thinking(
+                    instruction,
+                    stream=False,
+                    capabilities=caps,
+                    conversation=payload.get("conversation"),
+                )
                 emit("tool_done", tool=resolved, assignee="thinking", status="fallback")
                 return ToolResult(text=text, data=data, assignee="thinking", status="fallback")
             return await self._hire.run(manager, {**payload, "skill": hire_skill})
@@ -124,18 +137,48 @@ class ToolRouter:
             params = payload.get("params") or {}
             if not isinstance(params, dict):
                 params = {}
-            if not params and instruction:
+            if not params and instruction and action not in {"compose_email", "send_email"}:
                 params = {"query": instruction, "text": instruction, "body": instruction}
+            conversation = payload.get("conversation")
+            if integration_id == "gmail" and action in {"compose_email", "send_email"}:
+                from orchestrator.context import current_conversation_id
+                from orchestrator.integrations.gmail_params import (
+                    mark_email_draft_sent,
+                    prepare_compose_email,
+                    prepare_send_email_params,
+                )
+
+                conv_id = current_conversation_id.get() or ""
+                if action == "compose_email":
+                    params = await prepare_compose_email(
+                        instruction,
+                        params,
+                        conversation=conversation,
+                        conversation_id=conv_id,
+                    )
+                    summary = format_email_draft(params)
+                    emit("tool_done", tool="app:gmail", assignee="gmail", status="completed")
+                    return ToolResult(
+                        text=summary,
+                        data={**params, "draft": True},
+                        assignee="gmail",
+                    )
+                params = await prepare_send_email_params(
+                    instruction,
+                    params,
+                    conversation=conversation,
+                    conversation_id=conv_id,
+                )
             if action in {"create_document", "write_document", "read_document"}:
-                conversation = payload.get("conversation")
                 params = await prepare_google_doc_params(
                     action,
                     instruction,
                     params,
                     conversation=conversation,
+                    plan_context=str(payload.get("plan_context") or ""),
                 )
             if action == "list_events" and integration_id == "google-calendar":
-                params = prepare_calendar_list_params(instruction, params)
+                params = prepare_calendar_list_params(instruction, params, user_id=user_id)
             if action in {"subscribe_inbox", "unsubscribe_inbox"}:
                 from orchestrator.context import current_conversation_id
 
@@ -146,6 +189,18 @@ class ToolRouter:
             result = await self._integrations.run(user_id, integration_id, action, params)
             if action in {"create_document", "write_document", "read_document"}:
                 summary = format_document_result(result)
+            elif action == "send_email" and integration_id == "gmail":
+                from orchestrator.context import current_conversation_id
+
+                mark_email_draft_sent(current_conversation_id.get() or "")
+                sent = {
+                    **result,
+                    "sent_body": params.get("body"),
+                    "subject": params.get("subject"),
+                    "to": params.get("to"),
+                }
+                summary = format_send_email_result(sent)
+                result = sent
             elif action in {"subscribe_inbox", "unsubscribe_inbox"}:
                 summary = format_subscription_result(result)
             else:
@@ -188,11 +243,78 @@ class ToolRouter:
             emit("tool_done", tool=f"web:{action}", assignee="web", status="completed")
             return ToolResult(text=summary, data=result, assignee="web")
 
+        if resolved == "recurring" or resolved.startswith("recurring:"):
+            if resolved.startswith("recurring:"):
+                action = resolved.split(":", 1)[1].strip()
+            else:
+                action = str(payload.get("action") or "subscribe").strip()
+            params = payload.get("params") or {}
+            if not isinstance(params, dict):
+                params = {}
+            from orchestrator.context import current_conversation_id
+            from orchestrator.subscriptions.service import SubscriptionService
+
+            conversation_id = str(
+                params.get("conversation_id") or current_conversation_id.get() or ""
+            ).strip()
+            user_id = current_user_id.get()
+            service = SubscriptionService(integration_client=self._integrations)
+            emit("tool_start", tool=f"recurring:{action}", assignee="recurring", action=action)
+
+            if action == "subscribe":
+                if not conversation_id:
+                    raise RuntimeError("conversation_id is required for recurring subscribe")
+                params = prepare_recurring_subscribe_params(instruction, params)
+                result = await service.subscribe_recurring_task(
+                    user_id,
+                    conversation_id=conversation_id,
+                    instruction=str(params.get("instruction") or instruction),
+                    poll_interval_seconds=int(params.get("poll_interval_seconds", 86_400)),
+                    mission_id=current_mission_id.get() or None,
+                )
+            elif action == "unsubscribe":
+                if not conversation_id:
+                    raise RuntimeError("conversation_id is required for recurring unsubscribe")
+                result = await service.unsubscribe_recurring_task(
+                    user_id,
+                    conversation_id=conversation_id,
+                    subscription_id=str(params.get("subscription_id", "")).strip() or None,
+                )
+            else:
+                raise RuntimeError(f"Unknown recurring action: {action}")
+
+            emit("tool_done", tool=f"recurring:{action}", assignee="recurring", status="completed")
+            summary = format_recurring_result(result)
+            return ToolResult(text=summary, data=result, assignee="recurring")
+
+        if resolved == "time" or resolved.startswith("time:"):
+            user_id = current_user_id.get()
+            action = (
+                resolved.split(":", 1)[1].strip()
+                if resolved.startswith("time:")
+                else str(payload.get("action") or "now").strip()
+            )
+            if action != "now":
+                raise RuntimeError(f"Unknown time action: {action}")
+            emit("tool_start", tool="time:now", assignee="time", action=action)
+            ctx = current_time_context(
+                user_id=user_id,
+                tz=str((payload.get("params") or {}).get("timezone", "")).strip() or None,
+            )
+            summary = format_current_time_summary(ctx, user_id=user_id)
+            emit("tool_done", tool="time:now", assignee="time", status="completed")
+            return ToolResult(text=summary, data=ctx, assignee="time")
+
         if resolved == "thinking":
             from orchestrator.nodes.thinking import run_thinking
 
             caps = self._integrations.capabilities_context(current_user_id.get())
-            text, data = await run_thinking(instruction, stream=False, capabilities=caps)
+            text, data = await run_thinking(
+                instruction,
+                stream=False,
+                capabilities=caps,
+                conversation=payload.get("conversation"),
+            )
             return ToolResult(text=text, data=data, assignee="thinking")
 
         if skill:
@@ -201,11 +323,21 @@ class ToolRouter:
             from orchestrator.nodes.thinking import run_thinking
 
             caps = self._integrations.capabilities_context(current_user_id.get())
-            text, data = await run_thinking(instruction, stream=False, capabilities=caps)
+            text, data = await run_thinking(
+                instruction,
+                stream=False,
+                capabilities=caps,
+                conversation=payload.get("conversation"),
+            )
             return ToolResult(text=text, data=data, assignee="thinking", status="fallback")
 
         from orchestrator.nodes.thinking import run_thinking
 
         caps = self._integrations.capabilities_context(current_user_id.get())
-        text, data = await run_thinking(instruction, stream=False, capabilities=caps)
+        text, data = await run_thinking(
+            instruction,
+            stream=False,
+            capabilities=caps,
+            conversation=payload.get("conversation"),
+        )
         return ToolResult(text=text, data=data, assignee="thinking")

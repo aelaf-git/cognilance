@@ -421,7 +421,7 @@ class IntegrationExecutor:
             body = str(params.get("body", params.get("content", "")))
             if not to_addr:
                 raise RuntimeError("to is required")
-            message = MIMEText(body)
+            message = MIMEText(body, "plain", "utf-8")
             message["to"] = to_addr
             message["subject"] = subject
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
@@ -431,7 +431,18 @@ class IntegrationExecutor:
                 f"{base}/messages/send",
                 json_body={"raw": raw},
             )
-            return data
+            message_id = str(data.get("id") or "").strip()
+            if not message_id:
+                raise RuntimeError("Gmail API did not return a message id — email may not have been sent.")
+            return {
+                "id": message_id,
+                "gmail_message_id": message_id,
+                "threadId": data.get("threadId"),
+                "to": to_addr,
+                "subject": subject,
+                "sent_body": body,
+                "labelIds": data.get("labelIds") or [],
+            }
         raise RuntimeError(f"Unhandled action: {action}")
 
     async def _action_google_calendar(

@@ -8,6 +8,7 @@ from typing import Any, Literal
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, Field
 
+from orchestrator.integrations.project_context import COGNILANCE_DESCRIPTION, project_context_for_composition
 from orchestrator.llm import get_llm, to_chat_messages
 
 _DOC_URL_RE = re.compile(r"docs\.google\.com/document/d/([a-zA-Z0-9_-]+)")
@@ -46,6 +47,13 @@ class GoogleDocActionParams(BaseModel):
     )
     mode: Literal["append", "replace"] = "append"
     style: DocTextStyle | None = None
+
+
+class DocumentContent(BaseModel):
+    content: str = Field(
+        description="Full document body text — substantive prose, not the user's command"
+    )
+    name: str | None = Field(default=None, description="Document title if not already set")
 
 
 def extract_document_id(text: str) -> str | None:
@@ -183,7 +191,9 @@ def google_docs_action(
 
 def _fallback_create_content(instruction: str, name: str | None) -> str:
     lower = instruction.lower()
-    title = name or "Meeting Notes"
+    title = name or "Document"
+    if "cognilance" in lower:
+        return f"{title}\n\n{COGNILANCE_DESCRIPTION}"
     if "goal" in lower or "summary" in lower:
         return (
             f"{title}\n\n"
@@ -192,7 +202,49 @@ def _fallback_create_content(instruction: str, name: str | None) -> str:
             "2. Let agents execute real tasks (email, calendar, documents)\n"
             "3. Add specialized marketplace agents for advanced workflows\n"
         )
-    return f"{title}\n\n(Notes created by Cognilance.)"
+    return (
+        f"{title}\n\n"
+        "This document was created by Cognilance based on your request. "
+        "Add or edit sections as needed."
+    )
+
+
+async def compose_document_content(
+    instruction: str,
+    *,
+    conversation: list[BaseMessage] | None = None,
+    plan_context: str = "",
+    name: str | None = None,
+) -> str:
+    """Write substantive document body text."""
+    context = _conversation_context(conversation)
+    project_ctx = project_context_for_composition(instruction + " " + context + " " + plan_context)
+    try:
+        llm = get_llm(temperature=0.5).with_structured_output(DocumentContent)
+        system = (
+            "You are a professional document writer for Cognilance.\n"
+            "Write clear, substantive document content with headings and paragraphs as appropriate.\n"
+            "CRITICAL: output only the document body — never repeat the user's command verbatim."
+            f"{project_ctx}"
+        )
+        user_parts = [f"User request:\n{instruction}"]
+        if plan_context.strip():
+            user_parts.append(f"Planner context:\n{plan_context}")
+        if context:
+            user_parts.append(f"Conversation:\n{context}")
+        if name:
+            user_parts.append(f"Document title: {name}")
+        result: DocumentContent = await llm.ainvoke(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": "\n\n".join(user_parts)},
+            ]
+        )  # type: ignore[assignment]
+        return result.content.strip() or _fallback_create_content(instruction, name)
+    except Exception as exc:
+        if _is_rate_limit_error(exc):
+            return _fallback_create_content(instruction, name)
+        raise
 
 
 def _is_rate_limit_error(exc: BaseException) -> bool:
@@ -274,6 +326,7 @@ async def prepare_google_doc_params(
     params: dict[str, Any],
     *,
     conversation: list[BaseMessage] | None = None,
+    plan_context: str = "",
 ) -> dict[str, Any]:
     """Fill in Google Docs params: rules first, then LLM when needed."""
     merged = dict(params)
@@ -292,6 +345,16 @@ async def prepare_google_doc_params(
         if action == "write_document":
             _validate_write_params(merged)
         return merged
+
+    content = str(merged.get("content", "")).strip()
+    if not content or content == instruction.strip():
+        composed = await compose_document_content(
+            instruction,
+            conversation=conversation,
+            plan_context=plan_context,
+            name=str(merged.get("name") or "") or None,
+        )
+        merged["content"] = composed
 
     try:
         context = _conversation_context(conversation)

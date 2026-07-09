@@ -11,11 +11,13 @@ from cognilance import CognilanceManager
 from langchain_core.messages import BaseMessage
 
 from orchestrator.integrations.client import IntegrationClient
+from orchestrator.integrations.gmail_params import format_email_draft, format_send_email_result
 from orchestrator.integrations.routing import (
     format_document_result,
     format_gmail_list_result,
     format_subscription_result,
     format_calendar_list_result,
+    format_recurring_result,
 )
 from orchestrator.tools.web import format_web_fetch_result, format_web_search_result
 from orchestrator.llm import get_llm, last_user_text, to_chat_messages
@@ -68,9 +70,15 @@ async def _run_subtask(
     router: ToolRouter,
     *,
     conversation: list[BaseMessage] | None = None,
+    prior_results: dict[str, SubtaskResult] | None = None,
 ) -> SubtaskResult:
     subtask_id = subtask["id"]
     instruction = subtask.get("instruction") or ""
+    if prior_results:
+        for dep_id in subtask.get("depends_on") or []:
+            prior = prior_results.get(dep_id)
+            if prior and prior.get("text"):
+                instruction = f"{instruction}\n\nContext from prior step:\n{prior['text']}"
     skill = subtask.get("skill")
     tool = subtask.get("tool")
     assignee = subtask.get("assignee") or "thinking"
@@ -94,6 +102,7 @@ async def _run_subtask(
                 "action": subtask.get("action"),
                 "params": subtask.get("params"),
                 "conversation": conversation,
+                "plan_context": subtask.get("plan_context") or "",
             },
         )
         payload: SubtaskResult = {
@@ -153,12 +162,19 @@ def _result_facts(results: list[SubtaskResult]) -> str:
             parts.append(format_web_search_result(data))
         elif data.get("url") and data.get("content") is not None:
             parts.append(format_web_fetch_result(data))
+        elif data.get("draft"):
+            parts.append(format_email_draft(data))
+        elif data.get("gmail_message_id") or (data.get("id") and data.get("sent_body")):
+            parts.append(format_send_email_result(data))
         elif data.get("document_id") or str(data.get("url", "")).startswith(
             "https://docs.google.com/document/"
         ):
             parts.append(format_document_result(data))
         elif data.get("subscription_id") or "stopped" in data:
-            parts.append(format_subscription_result(data))
+            if data.get("kind") == "recurring_task" or data.get("instruction"):
+                parts.append(format_recurring_result(data))
+            else:
+                parts.append(format_subscription_result(data))
         elif result.get("text"):
             parts.append(f"[{result.get('assignee', 'agent')}] {result.get('text')}")
     return "\n\n".join(parts).strip()
@@ -182,7 +198,13 @@ async def _synthesize_final(
 
     if len(results) == 1:
         data = results[0].get("data") or {}
+        if data.get("draft"):
+            return format_email_draft(data)
+        if data.get("gmail_message_id") or (data.get("id") and data.get("sent_body")):
+            return format_send_email_result(data)
         if data.get("subscription_id") or "stopped" in data:
+            if data.get("kind") == "recurring_task" or data.get("instruction"):
+                return format_recurring_result(data)
             return format_subscription_result(data)
         if data.get("sources") and data.get("query"):
             return format_web_search_result(data)
@@ -199,7 +221,9 @@ async def _synthesize_final(
                 "Preserve links, counts, and facts exactly. "
                 "Never mention tools, APIs, subscribe_inbox, or internal orchestration. "
                 "Never claim an action succeeded if results say FAILED. "
-                "One to three sentences unless listing emails or documents."
+                "Never claim an email was sent unless execution results include a Gmail message ID. "
+                "For email drafts or sent emails, include the full subject and body exactly as shown. "
+                "One to three sentences unless listing emails, documents, or showing an email draft."
             ),
         },
     ]
@@ -234,20 +258,28 @@ async def task_agent(state: State) -> dict:
     router = ToolRouter(catalog_agents=catalog_agents, integration_client=IntegrationClient())
     layers = _dependency_layers(subtasks)
     all_results: list[SubtaskResult] = []
+    plan_context = str((state.get("thinking") or "")).strip()
 
     async with CognilanceManager(agent_name="Orchestrator") as manager:
+        results_by_id: dict[str, SubtaskResult] = {}
         for layer in layers:
             layer_results = await asyncio.gather(
                 *[
                     _run_subtask(
-                        item,
+                        {
+                            **item,
+                            "plan_context": item.get("plan_context") or plan_context,
+                        },
                         manager,
                         router,
                         conversation=state.get("messages", []),
+                        prior_results=results_by_id,
                     )
                     for item in layer
                 ]
             )
+            for item, result in zip(layer, layer_results):
+                results_by_id[item["id"]] = result
             all_results.extend(layer_results)
 
     emit_status("Aggregating results…")

@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from langchain_core.messages import HumanMessage
 
 from orchestrator.auth.session import get_user_id, resolve_user_id, set_user_cookie
-from orchestrator.context import current_conversation_id, current_mission_id, current_user_id
+from orchestrator.context import current_conversation_id, current_mission_id, current_user_id, current_user_timezone
 from orchestrator.graph import ensure_graph, init_graph
 from orchestrator.integrations.oauth import OAuthService
 from orchestrator.conversations.store import ConversationStore
@@ -25,6 +25,7 @@ from orchestrator.missions.store import MissionStore
 from orchestrator.subscriptions.store import SubscriptionStore
 from orchestrator.subscriptions.session_sync import enrich_session_dict, stop_listener_for_mission
 from orchestrator.subscriptions.ticker import tick_subscriptions
+from orchestrator.users.timezone import activate_user_timezone, client_timezone_from_request
 from orchestrator.ui.chat import orchestrator_chat_html
 from orchestrator.apps.store import init_all_stores
 
@@ -60,11 +61,16 @@ def create_app() -> FastAPI:
     async def session_middleware(request: Request, call_next):
         user_id = get_user_id(request) or resolve_user_id(request)
         request.state.user_id = user_id
-        token = current_user_id.set(user_id)
+        user_token = current_user_id.set(user_id)
+        tz_token = activate_user_timezone(
+            user_id,
+            from_client=client_timezone_from_request(request),
+        )
         try:
             response = await call_next(request)
         finally:
-            current_user_id.reset(token)
+            current_user_timezone.reset(tz_token)
+            current_user_id.reset(user_token)
         if not get_user_id(request):
             set_user_cookie(response, user_id)
         return response
@@ -481,6 +487,9 @@ def create_app() -> FastAPI:
         mission_id = mission.id
         user_id = _user(request)
         current_user_id.set(user_id)
+        client_tz = client_timezone_from_request(request, payload)
+        if client_tz:
+            activate_user_timezone(user_id, from_client=client_tz)
 
         async def persist(event: dict[str, Any]) -> None:
             store.append_event(mission_id, event)
