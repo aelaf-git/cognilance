@@ -1,0 +1,45 @@
+# Git & CI
+.git
+.gitignore
+.github
+
+# Secrets
+.env
+.env.*
+
+# Python caches & virtualenvs
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Local SQLite (schema + migrations are copied; DB is created at runtime)
+prisma/dev.db
+prisma/dev.db-journal
+prisma/*.db
+prisma/*.db-journal
+*.db
+*.db-shm
+*.db-wal
+
+# Compose & local dev (not needed in image)
+docker-compose.yml
+docker-compose.override.yml
+.docker/
+
+# Docs & editor
+README.md
+*.md
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
