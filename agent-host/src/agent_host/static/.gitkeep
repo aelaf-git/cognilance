@@ -1,0 +1,2 @@
+# Built by: cd agent-host/developer-ui && npm run build
+# Output: index.html (single-file React bundle; gitignored)

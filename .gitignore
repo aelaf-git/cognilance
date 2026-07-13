@@ -107,6 +107,10 @@ pnpm-debug.log*
 .vite/
 *.local
 
+# Generated single-file UI bundles (build from chat-ui / developer-ui)
+orchestrator/src/orchestrator/ui/static/index.html
+agent-host/src/agent_host/static/index.html
+
 # --- Cognilance runtime data ---
 data/hosted-agents/
 orchestrator/data/*
