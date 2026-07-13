@@ -14,6 +14,32 @@ import httpx
 from orchestrator.integrations.registry import INTEGRATIONS
 
 
+def _body_looks_like_html(body: str) -> bool:
+    text = (body or "").strip().lower()
+    if not text or "<" not in text:
+        return False
+    markers = (
+        "<p",
+        "<br",
+        "<div",
+        "<span",
+        "<h1",
+        "<h2",
+        "<h3",
+        "<ul",
+        "<ol",
+        "<li",
+        "<a ",
+        "<strong",
+        "<em",
+        "<b>",
+        "<i>",
+        "font-family",
+        "style=",
+    )
+    return any(m in text for m in markers)
+
+
 class IntegrationExecutor:
     async def execute(
         self,
@@ -421,7 +447,8 @@ class IntegrationExecutor:
             body = str(params.get("body", params.get("content", "")))
             if not to_addr:
                 raise RuntimeError("to is required")
-            message = MIMEText(body, "plain", "utf-8")
+            subtype = "html" if _body_looks_like_html(body) else "plain"
+            message = MIMEText(body, subtype, "utf-8")
             message["to"] = to_addr
             message["subject"] = subject
             raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
