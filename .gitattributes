@@ -1,0 +1,4 @@
+# Built UI bundles: Vite single-file inlines all JS/CSS into one HTML file.
+# These are generated artifacts — exclude from GitHub language stats.
+orchestrator/src/orchestrator/ui/static/index.html linguist-generated=true
+agent-host/src/agent_host/static/index.html linguist-generated=true
