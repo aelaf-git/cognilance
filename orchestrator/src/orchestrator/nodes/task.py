@@ -24,6 +24,75 @@ from orchestrator.llm import get_llm, last_user_text, to_chat_messages
 from orchestrator.state import State, Subtask, SubtaskResult
 from orchestrator.streaming import emit, emit_status
 from orchestrator.tools.router import ToolRouter
+from orchestrator.drafts.store import DraftStore
+from orchestrator.integrations.gmail_params import mark_email_draft_sent
+
+
+def _conversation_history(
+    messages: list[BaseMessage] | None,
+    *,
+    limit: int = 24,
+) -> list[dict[str, str]]:
+    if not messages:
+        return []
+    return to_chat_messages(messages[-limit:])
+
+
+def _resolve_prior_email_draft(
+    *,
+    prior_results: dict[str, SubtaskResult] | None,
+) -> dict[str, Any] | None:
+    if prior_results:
+        for pr in prior_results.values():
+            draft_data = pr.get("data") or {}
+            if draft_data.get("body") and draft_data.get("status") in {None, "draft", "sent"}:
+                if draft_data.get("status") == "sent":
+                    continue
+                return {
+                    "to": draft_data.get("to") or "",
+                    "subject": draft_data.get("subject") or "",
+                    "body": draft_data.get("body") or "",
+                    "tone": draft_data.get("tone") or "professional",
+                    "status": "draft",
+                }
+    from orchestrator.context import current_conversation_id
+
+    conv_id = current_conversation_id.get() or ""
+    if not conv_id:
+        return None
+    pending = DraftStore().get_pending_email(conv_id)
+    if not pending or not pending.get("body"):
+        return None
+    return {
+        "to": pending.get("to") or "",
+        "subject": pending.get("subject") or "",
+        "body": pending.get("body") or "",
+        "tone": pending.get("tone") or "professional",
+        "status": "draft",
+    }
+
+
+def _persist_email_hire_result(data: dict[str, Any] | None) -> None:
+    if not data or not data.get("body"):
+        return
+    from orchestrator.context import current_conversation_id
+
+    conv_id = current_conversation_id.get() or ""
+    if not conv_id:
+        return
+    status = str(data.get("status") or "")
+    if status == "draft":
+        DraftStore().save_email_draft(
+            conv_id,
+            {
+                "to": data.get("to") or "",
+                "subject": data.get("subject") or "",
+                "body": data.get("body") or "",
+                "tone": data.get("tone") or "professional",
+            },
+        )
+    elif status == "sent":
+        mark_email_draft_sent(conv_id)
 
 
 def _dependency_layers(subtasks: list[Subtask]) -> list[list[Subtask]]:
@@ -99,18 +168,17 @@ async def _run_subtask(
             "action": subtask.get("action"),
             "params": subtask.get("params"),
             "conversation": conversation,
+            "conversation_history": _conversation_history(conversation),
             "plan_context": subtask.get("plan_context") or "",
             "subtask_id": subtask_id,
         }
         hire_skill = skill
         if not hire_skill and tool and str(tool).startswith("hire:"):
             hire_skill = str(tool).split(":", 1)[1]
-        if hire_skill == "email-writing" and prior_results:
-            for pr in prior_results.values():
-                draft_data = pr.get("data") or {}
-                if draft_data.get("status") == "draft" and draft_data.get("body"):
-                    extra_input["prior_draft"] = draft_data
-                    break
+        if hire_skill == "email-writing":
+            prior_draft = _resolve_prior_email_draft(prior_results=prior_results)
+            if prior_draft:
+                extra_input["prior_draft"] = prior_draft
         result = await router.execute(
             manager,
             tool=tool,
@@ -118,6 +186,8 @@ async def _run_subtask(
             instruction=instruction,
             input_data=extra_input,
         )
+        if hire_skill == "email-writing" and result.status != "failed":
+            _persist_email_hire_result(result.data)
         payload: SubtaskResult = {
             "subtask_id": subtask_id,
             "text": result.text,

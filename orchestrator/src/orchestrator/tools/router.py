@@ -87,7 +87,7 @@ class HireAgentTool:
                 scopes=proxy_scopes,
             )
             hire_input["orchestrator"] = grant.to_input_data()
-        for key in ("prior_draft", "params", "action", "plan_context"):
+        for key in ("prior_draft", "params", "action", "plan_context", "conversation_history"):
             if key in input and input[key] is not None:
                 hire_input[key] = input[key]
         result = await manager.hire(

@@ -1,4 +1,4 @@
-"""Email Writer Agent — Gemini + LangChain + CognilanceWorker."""
+"""Email Writer Agent — Groq + LangChain + CognilanceWorker."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from pathlib import Path
 
 from cognilance import CognilanceWorker
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field
 
 from proxy import OrchestratorProxyError, gmail_list, gmail_search, gmail_send
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(_REPO_ROOT / ".env")
+_AGENT_DIR = Path(__file__).resolve().parent
+load_dotenv(_AGENT_DIR / ".env")
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _SEND_PHRASES = (
@@ -26,12 +26,18 @@ _SEND_PHRASES = (
     "send now",
     "approved",
     "yes send",
+    "please send!",
 )
 
-SYSTEM = """You are a professional email writer on the Cognilance marketplace.
-Write complete emails with greeting, substantive body paragraphs, and sign-off.
-CRITICAL: `body` must be the actual email text — never repeat the user's command verbatim.
-Extract recipient email when mentioned. Use a clear, professional tone unless asked otherwise."""
+SYSTEM = """You write emails on behalf of the end user — never about yourself or Cognilance.
+You receive their conversation history and optional prior draft. Follow their topic, recipient,
+tone, length, and formatting requests exactly.
+CRITICAL:
+- `body` is the actual email text only (greeting, paragraphs, sign-off).
+- Never invent an email about being an "email writer", marketplace services, or your own identity.
+- Never repeat the user's command verbatim as the body.
+- Prefer continuing/revising a prior draft when one is provided.
+- Extract recipient email when mentioned."""
 
 
 class EmailDraft(BaseModel):
@@ -45,19 +51,19 @@ worker = CognilanceWorker(
     name="Email Writer Agent",
     skills=["email-writing"],
     description="Composes, revises, and sends professional emails via orchestrator Gmail proxy.",
-    tags=["worker", "langchain", "gemini", "email", "automation"],
+    tags=["worker", "langchain", "groq", "email", "automation"],
     port=8101,
 )
 
 
 def _llm():
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY or GOOGLE_API_KEY is required")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    return ChatGoogleGenerativeAI(
+        raise RuntimeError("GROQ_API_KEY is required")
+    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    return ChatGroq(
         model=model,
-        google_api_key=api_key,
+        api_key=api_key,
         temperature=0.4,
     ).with_structured_output(EmailDraft)
 
@@ -67,8 +73,34 @@ def _extract_emails(text: str) -> list[str]:
 
 
 def _wants_send(text: str) -> bool:
-    q = text.lower().strip()
-    return any(p in q for p in _SEND_PHRASES) or (q in {"send", "please send"})
+    q = text.lower().strip().rstrip(".!")
+    if q in {"send", "please send", "yes", "ok", "okay", "approved", "approve"}:
+        return True
+    return any(p in text.lower() for p in _SEND_PHRASES)
+
+
+def _is_pure_send_approval(text: str) -> bool:
+    q = text.lower().strip().rstrip(".!")
+    approvals = {
+        "send",
+        "please send",
+        "send it",
+        "send the email",
+        "send now",
+        "yes",
+        "ok",
+        "okay",
+        "yep",
+        "yeah",
+        "approved",
+        "approve",
+        "go ahead",
+        "do it",
+        "yes send",
+    }
+    return q in approvals or (
+        len(q.split()) <= 6 and any(p in q for p in ("send", "approve", "go ahead"))
+    )
 
 
 def _wants_list(text: str) -> bool:
@@ -81,24 +113,66 @@ def _wants_search(text: str) -> bool:
     return any(t in q for t in ("search email", "find email", "look for email"))
 
 
-async def _compose(instruction: str, *, prior: EmailDraft | None = None) -> EmailDraft:
+def _history_messages(history: list | None) -> list[dict[str, str]]:
+    messages: list[dict[str, str]] = []
+    if not isinstance(history, list):
+        return messages
+    for item in history[-20:]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "user")
+        content = str(item.get("content") or "").strip()
+        if not content:
+            continue
+        if role not in {"user", "assistant", "system"}:
+            role = "user"
+        messages.append({"role": role, "content": content})
+    return messages
+
+
+async def _compose(
+    instruction: str,
+    *,
+    prior: EmailDraft | None = None,
+    history: list | None = None,
+) -> EmailDraft:
     llm = _llm()
-    user = instruction
+    msgs: list[dict[str, str]] = [{"role": "system", "content": SYSTEM}]
+    msgs.extend(_history_messages(history))
     if prior:
-        user = (
-            f"Revise this email.\n\nOriginal:\nTo: {prior.to}\nSubject: {prior.subject}\n\n"
-            f"{prior.body}\n\nRevision request:\n{instruction}"
+        msgs.append(
+            {
+                "role": "user",
+                "content": (
+                    "Here is the current email draft to revise or finalize:\n"
+                    f"To: {prior.to or '(unknown)'}\n"
+                    f"Subject: {prior.subject}\n\n"
+                    f"{prior.body}\n\n"
+                    f"User request:\n{instruction}"
+                ),
+            }
         )
-    result = await llm.ainvoke(
-        [
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": user},
-        ]
-    )
+    else:
+        msgs.append(
+            {
+                "role": "user",
+                "content": (
+                    "Compose the email the user asked for based on this conversation.\n"
+                    f"Latest request:\n{instruction}"
+                ),
+            }
+        )
+    result = await llm.ainvoke(msgs)
     draft = result  # type: ignore[assignment]
     emails = _extract_emails(instruction)
+    if history:
+        for item in reversed(history):
+            if isinstance(item, dict):
+                emails.extend(_extract_emails(str(item.get("content") or "")))
     if emails and not draft.to:
         draft.to = emails[-1]
+    if prior and not draft.to and prior.to:
+        draft.to = prior.to
     return draft
 
 
@@ -127,8 +201,9 @@ async def handle(task):
     text = task.input.text.strip()
     data = task.input.data or {}
     prior = data.get("prior_draft")
+    history = data.get("conversation_history")
 
-    task.think("Understanding email request")
+    task.think("Understanding email request with conversation context")
 
     if _wants_list(text):
         task.think("Fetching recent emails via orchestrator proxy")
@@ -163,16 +238,25 @@ async def handle(task):
             tone=str(prior.get("tone") or "professional"),
         )
 
-    task.think("Composing email with Gemini")
-    try:
-        draft = await _compose(text, prior=prior_draft)
-    except Exception as exc:
-        return task.fail(message=f"Composition failed: {exc}")
+    # Pure send approval: use pending draft as-is — do not invent a new email.
+    if _wants_send(text) and prior_draft and _is_pure_send_approval(text):
+        draft = prior_draft
+        task.think("Using pending draft from conversation — sending without rewrite")
+    else:
+        task.think("Composing email with Groq using full conversation context")
+        try:
+            draft = await _compose(text, prior=prior_draft, history=history)
+        except Exception as exc:
+            return task.fail(message=f"Composition failed: {exc}")
 
     if _wants_send(text):
         to_addr = (draft.to or "").strip()
         if not to_addr:
             emails = _extract_emails(text)
+            if history:
+                for item in reversed(history):
+                    if isinstance(item, dict):
+                        emails.extend(_extract_emails(str(item.get("content") or "")))
             to_addr = emails[-1] if emails else ""
         if not to_addr:
             return task.complete(
