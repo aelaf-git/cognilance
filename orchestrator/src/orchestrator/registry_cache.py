@@ -49,9 +49,11 @@ def _cache_valid(state: State) -> bool:
 async def get_catalog(
     state: State,
     manager: CognilanceManager,
+    *,
+    force_refresh: bool = False,
 ) -> tuple[list[AgentCard], str, dict[str, Any]]:
     """Return catalog agents and text, refreshing from registry when cache is stale."""
-    if _cache_valid(state):
+    if not force_refresh and _cache_valid(state):
         agents = _deserialize_agents(state.get("catalog_agents") or [])
         catalog_text = state.get("catalog_text") or _format_catalog(agents)
         return agents, catalog_text, {}
@@ -64,6 +66,22 @@ async def get_catalog(
         "catalog_fetched_at": time.time(),
     }
     return agents, catalog_text, updates
+
+
+def catalog_snapshot(agents: list[AgentCard]) -> list[dict[str, Any]]:
+    """Compact agent list for session UI / stream events."""
+    rows: list[dict[str, Any]] = []
+    for agent in agents:
+        skills = [skill.id or skill.name for skill in agent.skills]
+        rows.append(
+            {
+                "name": agent.name,
+                "online": bool(agent.online),
+                "skills": skills,
+                "url": getattr(agent, "url", None),
+            }
+        )
+    return rows
 
 
 def _normalize_skill(skill: str) -> str:

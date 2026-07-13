@@ -2,6 +2,7 @@ export type StepStatus = "pending" | "running" | "done" | "fallback";
 
 export type FeedCardType =
   | "user"
+  | "registry"
   | "planner"
   | "routing"
   | "delegation"
@@ -18,6 +19,15 @@ export type SubtaskItem = {
   instruction?: string;
   detail?: string;
   status: StepStatus;
+  result?: string;
+  toolLabel?: string;
+};
+
+export type CatalogAgent = {
+  name: string;
+  online: boolean;
+  skills: string[];
+  url?: string | null;
 };
 
 export type FeedCard = {
@@ -26,10 +36,12 @@ export type FeedCard = {
   title: string;
   status: StepStatus;
   content?: string;
+  thinking?: string;
   mono?: boolean;
   route?: string;
   complexity?: string;
   subtasks?: SubtaskItem[];
+  catalogAgents?: CatalogAgent[];
   uiComponent?: string | null;
   uiProps?: Record<string, unknown>;
 };
@@ -107,11 +119,16 @@ export const CARD_META: Record<
   { label: string; accent: string; accentClass: string }
 > = {
   user: { label: "User Prompt", accent: "#ffffff", accentClass: "border-l-white/30" },
-  planner: { label: "Planner Plan", accent: "#3b82f6", accentClass: "border-l-planner" },
+  registry: {
+    label: "Marketplace Lookup",
+    accent: "#14b8a6",
+    accentClass: "border-l-registry",
+  },
+  planner: { label: "Thinking & Plan", accent: "#3b82f6", accentClass: "border-l-planner" },
   routing: { label: "Routing", accent: "#a855f7", accentClass: "border-l-thinking" },
   delegation: { label: "Delegation", accent: "#f97316", accentClass: "border-l-task" },
   "agent-exec": {
-    label: "Agent Execution",
+    label: "Hired Agents",
     accent: "#14b8a6",
     accentClass: "border-l-registry",
   },

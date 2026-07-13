@@ -88,22 +88,35 @@ async def _run_subtask(
         id=subtask_id,
         title=subtask.get("title", ""),
         assignee=assignee,
+        skill=skill,
         tool=tool or (f"hire:{skill}" if skill else "thinking"),
+        instruction=instruction,
     )
     emit_status(f"Running: {subtask.get('title', subtask_id)}")
 
     try:
+        extra_input: dict[str, Any] = {
+            "action": subtask.get("action"),
+            "params": subtask.get("params"),
+            "conversation": conversation,
+            "plan_context": subtask.get("plan_context") or "",
+            "subtask_id": subtask_id,
+        }
+        hire_skill = skill
+        if not hire_skill and tool and str(tool).startswith("hire:"):
+            hire_skill = str(tool).split(":", 1)[1]
+        if hire_skill == "email-writing" and prior_results:
+            for pr in prior_results.values():
+                draft_data = pr.get("data") or {}
+                if draft_data.get("status") == "draft" and draft_data.get("body"):
+                    extra_input["prior_draft"] = draft_data
+                    break
         result = await router.execute(
             manager,
             tool=tool,
             skill=skill,
             instruction=instruction,
-            input_data={
-                "action": subtask.get("action"),
-                "params": subtask.get("params"),
-                "conversation": conversation,
-                "plan_context": subtask.get("plan_context") or "",
-            },
+            input_data=extra_input,
         )
         payload: SubtaskResult = {
             "subtask_id": subtask_id,
@@ -117,6 +130,7 @@ async def _run_subtask(
             id=subtask_id,
             status=result.status,
             assignee=result.assignee,
+            text=(result.text or "")[:500],
         )
         return payload
     except Exception as exc:
@@ -127,7 +141,13 @@ async def _run_subtask(
             "assignee": assignee,
             "status": "failed",
         }
-        emit("subtask_done", id=subtask_id, status="failed", assignee=assignee)
+        emit(
+            "subtask_done",
+            id=subtask_id,
+            status="failed",
+            assignee=assignee,
+            text=str(exc)[:500],
+        )
         return payload
 
 
@@ -162,9 +182,11 @@ def _result_facts(results: list[SubtaskResult]) -> str:
             parts.append(format_web_search_result(data))
         elif data.get("url") and data.get("content") is not None:
             parts.append(format_web_fetch_result(data))
-        elif data.get("draft"):
+        elif data.get("draft") or (data.get("status") == "draft" and data.get("body")):
             parts.append(format_email_draft(data))
-        elif data.get("gmail_message_id") or (data.get("id") and data.get("sent_body")):
+        elif data.get("gmail_message_id") or data.get("status") == "sent" or (
+            data.get("id") and data.get("sent_body")
+        ):
             parts.append(format_send_email_result(data))
         elif data.get("document_id") or str(data.get("url", "")).startswith(
             "https://docs.google.com/document/"
@@ -198,9 +220,11 @@ async def _synthesize_final(
 
     if len(results) == 1:
         data = results[0].get("data") or {}
-        if data.get("draft"):
+        if data.get("draft") or (data.get("status") == "draft" and data.get("body")):
             return format_email_draft(data)
-        if data.get("gmail_message_id") or (data.get("id") and data.get("sent_body")):
+        if data.get("gmail_message_id") or data.get("status") == "sent" or (
+            data.get("id") and data.get("sent_body")
+        ):
             return format_send_email_result(data)
         if data.get("subscription_id") or "stopped" in data:
             if data.get("kind") == "recurring_task" or data.get("instruction"):

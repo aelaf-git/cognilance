@@ -1,4 +1,5 @@
 import type {
+  CatalogAgent,
   FeedCard,
   FeedCardType,
   OrchestrationTurn,
@@ -9,6 +10,7 @@ import type {
 import { CARD_META } from "@/types";
 
 export const PROCESS_CARD_TYPES: FeedCardType[] = [
+  "registry",
   "planner",
   "routing",
   "delegation",
@@ -46,11 +48,35 @@ function ensureCard(turn: OrchestrationTurn, type: FeedCardType): OrchestrationT
   return { ...turn, cards: [...turn.cards, makeCard(type, { status: "running" })] };
 }
 
+function parseHireSkill(tool?: string | null, skill?: string | null): string | null {
+  if (skill) return skill;
+  if (tool?.startsWith("hire:")) return tool.slice(5);
+  return null;
+}
+
+function normalizeSubtask(raw: Partial<SubtaskItem> & { id: string }): SubtaskItem {
+  const tool = raw.tool ?? null;
+  const skill = parseHireSkill(tool, raw.skill ?? null);
+  return {
+    id: raw.id,
+    title: raw.title || "Task",
+    assignee: raw.assignee,
+    skill,
+    tool,
+    instruction: raw.instruction,
+    detail: raw.detail,
+    status: raw.status ?? "pending",
+    result: raw.result,
+    toolLabel: raw.toolLabel,
+  };
+}
+
 export type EventContext = {
   route?: string;
   subtasks: SubtaskItem[];
   answer: string;
   uiItems: UiItem[];
+  activeSubtaskId?: string;
 };
 
 export function createEventContext(): EventContext {
@@ -64,34 +90,62 @@ export function applySessionEvent(
 ): OrchestrationTurn {
   const event = data.event as string;
 
+  if (event === "catalog") {
+    const agents = (data.agents as CatalogAgent[] | undefined) ?? [];
+    const onlineCount = Number(data.online_count ?? agents.filter((a) => a.online).length);
+    const totalCount = Number(data.total_count ?? agents.length);
+    const summary =
+      totalCount === 0
+        ? "Registry queried — no marketplace agents registered."
+        : `Registry queried — ${onlineCount} online / ${totalCount} total.`;
+    let next = ensureCard(turn, "registry");
+    return updateCard(next, "registry", {
+      status: "done",
+      catalogAgents: agents,
+      content: summary,
+    });
+  }
   if (event === "thinking" && data.delta) {
-    const content =
-      (turn.cards.find((c) => c.type === "planner")?.content ?? "") + String(data.delta);
-    return updateCard(turn, "planner", { status: "running", content });
+    const thinking =
+      (turn.cards.find((c) => c.type === "planner")?.thinking ?? "") + String(data.delta);
+    return updateCard(turn, "planner", { status: "running", thinking });
   }
   if (event === "thinking_done") {
-    return updateCard(turn, "planner", { status: "done" });
+    const planner = turn.cards.find((c) => c.type === "planner");
+    const streamed = planner?.thinking ?? "";
+    const finalText = data.text ? String(data.text) : streamed;
+    return updateCard(turn, "planner", {
+      status: planner?.content ? "done" : "running",
+      thinking: finalText || streamed,
+    });
   }
   if (event === "plan" && data.data) {
     const plan = data.data as Record<string, unknown>;
     ctx.route = (plan.route as string) ?? ctx.route;
     const steps = (plan.steps as { title: string; detail: string }[]) ?? [];
-    const rawSubtasks = (plan.subtasks as SubtaskItem[]) ?? [];
-    ctx.subtasks = rawSubtasks.map((s) => ({ ...s, status: "pending" as StepStatus }));
+    const rawSubtasks = (plan.subtasks as Partial<SubtaskItem>[]) ?? [];
+    ctx.subtasks = rawSubtasks.map((s) =>
+      normalizeSubtask({
+        ...s,
+        id: String(s.id || uid()),
+        status: "pending",
+      }),
+    );
     const reasoning = (plan.reasoning as string) ?? "";
-    const thinking = (plan.thinking as string) ?? "";
+    const planThinking = (plan.thinking as string) ?? "";
+    const existingThinking = turn.cards.find((c) => c.type === "planner")?.thinking ?? "";
     const planText = [
       reasoning && `Reasoning:\n${reasoning}`,
       steps.length
         ? `Steps:\n${steps.map((s, i) => `${i + 1}. ${s.title}\n   ${s.detail}`).join("\n")}`
         : "",
-      thinking && `Thinking:\n${thinking}`,
     ]
       .filter(Boolean)
       .join("\n\n");
     return updateCard(turn, "planner", {
       status: "done",
-      content: planText || turn.cards.find((c) => c.type === "planner")?.content,
+      thinking: existingThinking || planThinking || undefined,
+      content: planText || undefined,
     });
   }
   if (event === "route_decision") {
@@ -115,29 +169,43 @@ export function applySessionEvent(
       content:
         ctx.route === "simple"
           ? "Simple route — thinking agent will answer directly."
-          : `Delegating ${ctx.subtasks.length || 1} subtask(s).`,
+          : `Delegating ${ctx.subtasks.length || 1} subtask(s) to specialists.`,
     });
     return ensureCard(next, "agent-exec");
   }
   if (event === "subtask_start") {
-    const id = data.id as string;
-    const title = data.title as string;
-    const assignee = data.assignee as string;
+    const id = String(data.id ?? "");
+    const title = String(data.title ?? "Task");
+    const assignee = data.assignee ? String(data.assignee) : undefined;
+    const tool = data.tool ? String(data.tool) : undefined;
+    const skill = parseHireSkill(tool, data.skill ? String(data.skill) : null);
+    const instruction = data.instruction ? String(data.instruction) : undefined;
+    ctx.activeSubtaskId = id;
     let next = ensureCard(turn, "agent-exec");
     const existing = next.cards.find((c) => c.type === "agent-exec");
     const list = [...(existing?.subtasks ?? ctx.subtasks)];
     const idx = list.findIndex((s) => s.id === id);
-    const item: SubtaskItem = { id, title, assignee, status: "running" };
-    if (idx >= 0) list[idx] = { ...list[idx], ...item, status: "running" };
+    const item = normalizeSubtask({
+      ...(idx >= 0 ? list[idx] : {}),
+      id,
+      title,
+      assignee,
+      tool: tool ?? (idx >= 0 ? list[idx].tool : null),
+      skill,
+      instruction: instruction ?? (idx >= 0 ? list[idx].instruction : undefined),
+      status: "running",
+    });
+    if (idx >= 0) list[idx] = { ...list[idx], ...item };
     else list.push(item);
     ctx.subtasks = list;
     return updateCard(next, "agent-exec", { status: "running", subtasks: list });
   }
   if (event === "subtask_done") {
-    const id = data.id as string;
-    const assignee = data.assignee as string;
+    const id = String(data.id ?? "");
+    const assignee = data.assignee ? String(data.assignee) : undefined;
     const st = data.status as string;
-    const isFallback = assignee === "thinking";
+    const isFallback = assignee === "thinking" || st === "fallback";
+    const resultText = data.text ? String(data.text) : undefined;
     let next = ensureCard(turn, "agent-exec");
     const card = next.cards.find((c) => c.type === "agent-exec");
     const list = (card?.subtasks ?? ctx.subtasks).map((s) =>
@@ -145,10 +213,13 @@ export function applySessionEvent(
         ? {
             ...s,
             status: (isFallback ? "fallback" : st === "failed" ? "fallback" : "done") as StepStatus,
-            assignee,
+            assignee: assignee ?? s.assignee,
+            result: resultText ?? s.result,
           }
         : s,
     );
+    ctx.subtasks = list;
+    if (ctx.activeSubtaskId === id) ctx.activeSubtaskId = undefined;
     const allDone = list.every((s) => s.status === "done" || s.status === "fallback");
     next = updateCard(next, "agent-exec", {
       status: allDone ? "done" : "running",
@@ -168,8 +239,67 @@ export function applySessionEvent(
     }
     return next;
   }
-  if (event === "tool_start" || event === "tool_done") {
-    return turn;
+  if (event === "tool_start") {
+    const tool = String(data.tool ?? "");
+    const assignee = data.assignee ? String(data.assignee) : undefined;
+    let next = ensureCard(turn, "agent-exec");
+    const card = next.cards.find((c) => c.type === "agent-exec");
+    const list = [...(card?.subtasks ?? ctx.subtasks)];
+    const targetIdx =
+      list.findIndex((s) => s.status === "running") >= 0
+        ? list.findIndex((s) => s.status === "running")
+        : list.findIndex((s) => s.assignee === assignee);
+    if (targetIdx >= 0) {
+      list[targetIdx] = {
+        ...list[targetIdx],
+        tool: tool || list[targetIdx].tool,
+        skill: parseHireSkill(tool, list[targetIdx].skill),
+        assignee: assignee ?? list[targetIdx].assignee,
+        toolLabel: tool || list[targetIdx].toolLabel,
+        status: "running",
+      };
+      ctx.subtasks = list;
+      return updateCard(next, "agent-exec", { status: "running", subtasks: list });
+    }
+    if (tool || assignee) {
+      list.push(
+        normalizeSubtask({
+          id: uid(),
+          title: tool.startsWith("hire:")
+            ? `Hire ${assignee || tool.slice(5)}`
+            : tool || "Tool call",
+          assignee,
+          tool,
+          skill: parseHireSkill(tool, null),
+          toolLabel: tool,
+          status: "running",
+        }),
+      );
+      ctx.subtasks = list;
+      return updateCard(next, "agent-exec", { status: "running", subtasks: list });
+    }
+    return next;
+  }
+  if (event === "tool_done") {
+    const tool = String(data.tool ?? "");
+    const assignee = data.assignee ? String(data.assignee) : undefined;
+    const st = String(data.status ?? "completed");
+    let next = ensureCard(turn, "agent-exec");
+    const card = next.cards.find((c) => c.type === "agent-exec");
+    const list = (card?.subtasks ?? ctx.subtasks).map((s) => {
+      const matches =
+        (tool && (s.tool === tool || s.toolLabel === tool)) ||
+        (assignee && s.assignee === assignee && s.status === "running");
+      if (!matches) return s;
+      return {
+        ...s,
+        toolLabel: tool || s.toolLabel,
+        assignee: assignee ?? s.assignee,
+        status: (st === "fallback" || st === "failed" ? "fallback" : s.status === "pending" ? "done" : s.status) as StepStatus,
+      };
+    });
+    ctx.subtasks = list;
+    return updateCard(next, "agent-exec", { subtasks: list });
   }
   if (event === "ui" && data.name !== "text-card") {
     ctx.uiItems.push({

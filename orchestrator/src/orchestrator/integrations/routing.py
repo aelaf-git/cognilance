@@ -14,6 +14,7 @@ from orchestrator.integrations.gmail_params import (
     is_email_send_approval,
 )
 from orchestrator.drafts.store import DraftStore
+from orchestrator.registry_cache import has_agent_for_skill
 from orchestrator.integrations.calendar_params import prepare_calendar_list_params
 from orchestrator.subscriptions.monitor_intent import (
     is_monitor_request,
@@ -34,12 +35,14 @@ def integration_subtasks_for_query(
     user_id: str,
     *,
     conversation: list[BaseMessage] | None = None,
+    catalog_agents: list | None = None,
 ) -> list[Subtask] | None:
     """Return forced subtasks when a connected integration should run immediately."""
     from orchestrator.context import current_conversation_id
 
     conv_id = current_conversation_id.get() or ""
     has_pending_email = DraftStore().has_pending_email(conv_id) if conv_id else False
+    email_agent_available = has_agent_for_skill(catalog_agents or [], "email-writing")
 
     if is_acknowledgment(query) and not has_pending_email:
         return None
@@ -100,6 +103,12 @@ def integration_subtasks_for_query(
                 "depends_on": [],
             }
         ]
+
+    if email_agent_available and client.is_connected(user_id, "gmail"):
+        if has_pending_email and is_email_send_approval(query, has_pending_draft=True):
+            return None
+        if is_email_compose_request(query):
+            return None
 
     if client.is_connected(user_id, "gmail") and has_pending_email:
         if is_email_send_approval(query, has_pending_draft=True):

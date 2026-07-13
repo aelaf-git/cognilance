@@ -28,6 +28,7 @@ from orchestrator.subscriptions.ticker import tick_subscriptions
 from orchestrator.users.timezone import activate_user_timezone, client_timezone_from_request
 from orchestrator.ui.chat import orchestrator_chat_html
 from orchestrator.apps.store import init_all_stores
+from orchestrator.tool_proxy import gmail_router
 
 
 def _thread_config(thread_id: str) -> dict[str, Any]:
@@ -56,6 +57,7 @@ def create_app() -> FastAPI:
         description="Autonomous agent with missions, OAuth integrations, and marketplace hiring",
         version="0.3.0",
     )
+    app.include_router(gmail_router)
 
     @app.middleware("http")
     async def session_middleware(request: Request, call_next):

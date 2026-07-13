@@ -1,2 +1,0 @@
-# No extra dependencies for the template agent.
-# Add packages here if your agent needs them (installed into the repo venv on start).

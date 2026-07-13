@@ -1,6 +1,0 @@
-# Install the Cognilance SDK first from the repo root: pip install -e .
-
-# LLM provider
-langchain-core>=0.3.0
-langchain-groq>=0.2.0
-python-dotenv>=1.0.0

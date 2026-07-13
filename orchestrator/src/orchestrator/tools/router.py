@@ -28,6 +28,7 @@ from orchestrator.tools.web import (
 )
 from orchestrator.registry_cache import find_agent_by_skill
 from orchestrator.streaming import emit
+from orchestrator.tool_proxy.grants import issue_grant, scopes_for_skill
 
 
 @dataclass
@@ -75,7 +76,25 @@ class HireAgentTool:
                 status="fallback",
             )
         emit("tool_start", tool=f"hire:{skill}", assignee=agent.name)
-        result = await manager.hire(agent, input_text=instruction)
+        hire_input: dict[str, Any] = {}
+        proxy_scopes = scopes_for_skill(skill)
+        if proxy_scopes:
+            subtask_id = str(input.get("subtask_id") or manager._task_id)
+            grant = issue_grant(
+                user_id=current_user_id.get() or "",
+                task_id=subtask_id,
+                trace_id=manager.trace_id,
+                scopes=proxy_scopes,
+            )
+            hire_input["orchestrator"] = grant.to_input_data()
+        for key in ("prior_draft", "params", "action", "plan_context"):
+            if key in input and input[key] is not None:
+                hire_input[key] = input[key]
+        result = await manager.hire(
+            agent,
+            input_text=instruction,
+            input_data=hire_input or None,
+        )
         emit("tool_done", tool=f"hire:{skill}", assignee=agent.name, status="completed")
         return ToolResult(
             text=result.output.text or "",

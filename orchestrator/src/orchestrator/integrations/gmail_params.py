@@ -292,9 +292,14 @@ def is_email_compose_request(query: str) -> bool:
             "introduc",
             "email about",
             "mail about",
+            "another email",
+            "an email",
+            "the email",
             "show me",
             "review",
             "let me review",
+            "revise",
+            "rewrite",
         )
     )
 

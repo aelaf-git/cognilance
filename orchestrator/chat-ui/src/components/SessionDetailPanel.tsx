@@ -1,6 +1,7 @@
 import { FeedCardView } from "@/components/FeedCard";
 import { PROCESS_CARD_TYPES } from "@/lib/sessionEvents";
 import type { OrchestrationTurn, SessionSummary } from "@/types";
+import { CARD_META } from "@/types";
 
 export function isProcessingSession(session: SessionSummary): boolean {
   return (
@@ -152,7 +153,7 @@ export function SessionDetailModal({
         aria-modal="true"
         aria-labelledby="session-detail-title"
       >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-5 py-4 pr-12">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border bg-gradient-to-b from-surface/80 to-background px-5 py-4 pr-12">
           <div className="min-w-0">
             <p
               id="session-detail-title"
@@ -160,10 +161,17 @@ export function SessionDetailModal({
             >
               Session detail
             </p>
-            <p className="mt-1 text-sm text-white">{session.instruction}</p>
-            <span className="mt-1 inline-block text-[10px] uppercase tracking-wide text-dim">
-              {sessionStatusLabel(session)}
-            </span>
+            <p className="mt-1 text-sm leading-relaxed text-white">{session.instruction}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex rounded-md border border-border bg-background/80 px-2 py-0.5 text-[10px] uppercase tracking-wide text-dim">
+                {sessionStatusLabel(session)}
+              </span>
+              {processCards.length > 0 ? (
+                <span className="text-[10px] text-dim">
+                  {processCards.length} step{processCards.length === 1 ? "" : "s"}
+                </span>
+              ) : null}
+            </div>
           </div>
           <button
             type="button"
@@ -197,9 +205,19 @@ export function SessionDetailModal({
                   : "No process steps recorded."}
             </p>
           ) : (
-            <div className="space-y-3">
+            <div className="relative space-y-4">
+              <div
+                className="absolute bottom-4 left-[7px] top-4 w-px bg-gradient-to-b from-planner/50 via-registry/30 to-genui/40"
+                aria-hidden
+              />
               {processCards.map((card, i) => (
-                <FeedCardView key={card.id} card={card} index={i} />
+                <div key={card.id} className="relative pl-6">
+                  <span
+                    className="absolute left-0 top-5 h-3.5 w-3.5 rounded-full border-2 border-background"
+                    style={{ backgroundColor: CARD_META[card.type].accent }}
+                  />
+                  <FeedCardView card={card} index={i} />
+                </div>
               ))}
             </div>
           )}

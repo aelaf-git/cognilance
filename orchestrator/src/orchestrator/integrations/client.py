@@ -68,8 +68,15 @@ class IntegrationClient:
                     )
                 if integration_id == "gmail":
                     lines.append(
-                        "  Gmail compose: compose_email — draft email for user review (always before send); "
-                        "send_email {to} — send the approved pending draft only"
+                        "  Gmail: When Email Writer (hire:email-writing) is in the marketplace "
+                        "catalog, that agent owns compose/revise/send via the orchestrator proxy — "
+                        "do NOT plan app:gmail compose_email or send_email in that case. "
+                        "Use app:gmail for inbox list/search/monitor only when the specialist is absent "
+                        "or for subscribe_inbox / unsubscribe_inbox."
+                    )
+                    lines.append(
+                        "  Fallback (no email-writing agent): compose_email — draft for user review "
+                        "(always before send); send_email {to} — send the approved pending draft only"
                     )
                     lines.append(
                         "  Gmail monitor: subscribe_inbox (notify on new mail); "
@@ -82,9 +89,12 @@ class IntegrationClient:
                 )
             lines.append("")
         lines.append(
-            "Decision rules: Use web:search for current events, facts, or anything needing "
-            "the public internet. Use web:fetch_url when the user gives a URL to read or summarize. "
-            "For email: ALWAYS compose_email first and show the draft; only send_email after user approval. "
+            "Decision rules: Prefer hire:<skill> whenever a marketplace agent matches the task. "
+            "Use web:search for current events, facts, or anything needing "
+            "the public internet when no specialist agent covers it. Use web:fetch_url when the user "
+            "gives a URL to read or summarize. "
+            "For email: if hire:email-writing is available, use that agent; otherwise ALWAYS "
+            "compose_email first and show the draft; only send_email after user approval. "
             "Never send_email on the first request — even if a recipient is given. "
             "Only route to app:* tools that are CONNECTED. "
             "If the user needs a disconnected integration, use thinking and explain how to connect."
