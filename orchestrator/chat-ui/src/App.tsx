@@ -74,9 +74,14 @@ export default function App() {
   const handleSelectConversation = useCallback(
     async (conversationId: string) => {
       setModalSessionId(null);
+      const ok = await selectConversation(conversationId);
+      if (!ok) {
+        setActiveConversationId(null);
+        localStorage.removeItem(CONVERSATION_KEY);
+        return;
+      }
       setActiveConversationId(conversationId);
       localStorage.setItem(CONVERSATION_KEY, conversationId);
-      await selectConversation(conversationId);
       await selectConversationMeta(conversationId);
     },
     [selectConversation, selectConversationMeta, setActiveConversationId],
@@ -118,7 +123,10 @@ export default function App() {
       if (!activeConversationId) void handleNewChat();
       return;
     }
-    if (activeConversationId) return;
+    const activeStillValid =
+      !!activeConversationId && conversations.some((c) => c.id === activeConversationId);
+    if (activeStillValid) return;
+
     const saved = localStorage.getItem(CONVERSATION_KEY);
     const match = saved ? conversations.find((c) => c.id === saved) : null;
     void handleSelectConversation(match?.id ?? conversations[0].id);
@@ -132,12 +140,23 @@ export default function App() {
 
   useEffect(() => {
     if (!activeConversationId) return;
-    void loadConversationSessions(activeConversationId);
-    const interval = window.setInterval(() => {
-      void loadConversationSessions(activeConversationId);
-    }, 4000);
-    return () => window.clearInterval(interval);
-  }, [activeConversationId, loadConversationSessions]);
+    let cancelled = false;
+
+    const tick = async () => {
+      const result = await loadConversationSessions(activeConversationId);
+      if (cancelled || result !== null) return;
+      // Stale / deleted conversation — drop it so the picker effect can recover.
+      setActiveConversationId(null);
+      localStorage.removeItem(CONVERSATION_KEY);
+    };
+
+    void tick();
+    const interval = window.setInterval(() => void tick(), 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeConversationId, loadConversationSessions, setActiveConversationId]);
 
   const handleOpenSession = (sessionId: string) => {
     const session = conversationSessions.find((s) => s.id === sessionId);
@@ -193,6 +212,14 @@ export default function App() {
           ) : null}
           <a href="/integrations" className="text-xs text-registry hover:underline">
             Integrations
+          </a>
+          <a
+            href="http://127.0.0.1:8300"
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-registry hover:underline"
+          >
+            Developer portal
           </a>
         </div>
       </header>

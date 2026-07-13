@@ -20,20 +20,14 @@ export function useConversations() {
 
   const loadConversationSessions = useCallback(async (conversationId: string) => {
     try {
-      let res = await fetch(`/conversations/${conversationId}/sessions`);
+      const res = await fetch(`/conversations/${conversationId}/sessions`);
+      if (res.status === 404) {
+        setConversationSessions([]);
+        return null;
+      }
       if (!res.ok) {
-        res = await fetch(`/conversations/${conversationId}`);
-        if (!res.ok) {
-          setConversationSessions([]);
-          return [];
-        }
-        const fallback = await res.json();
-        const sessions = (fallback.sessions ?? []).map((s: SessionSummary) => ({
-          ...s,
-          session_type: s.session_type ?? "once",
-        }));
-        setConversationSessions(sessions);
-        return sessions;
+        setConversationSessions([]);
+        return [];
       }
       const data = await res.json();
       const sessions = (data.sessions ?? []).map((s: SessionSummary) => ({
@@ -56,9 +50,13 @@ export function useConversations() {
 
   const selectConversation = useCallback(
     async (conversationId: string) => {
-      setActiveConversationId(conversationId);
       setActiveSessionId(null);
       const sessions = await loadConversationSessions(conversationId);
+      if (sessions === null) {
+        setActiveConversationId(null);
+        return null;
+      }
+      setActiveConversationId(conversationId);
       return sessions;
     },
     [loadConversationSessions],

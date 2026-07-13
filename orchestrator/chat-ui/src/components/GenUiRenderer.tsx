@@ -113,8 +113,65 @@ function PythonCode({
   );
 }
 
+function EmailDraft({
+  to,
+  subject,
+  body,
+  tone,
+  status,
+  gmail_message_id,
+}: {
+  to?: string;
+  subject?: string;
+  body?: string;
+  tone?: string;
+  status?: string;
+  gmail_message_id?: string | null;
+}) {
+  const sent = status === "sent" || Boolean(gmail_message_id);
+  return (
+    <div className="space-y-3">
+      {to ? (
+        <p className="text-sm text-white/90">
+          <span className="text-muted">To:</span> {to}
+        </p>
+      ) : null}
+      {subject ? (
+        <p className="text-sm font-semibold text-white">{subject}</p>
+      ) : null}
+      {tone ? <p className="text-xs text-dim">Tone: {tone}</p> : null}
+      {body ? (
+        <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-background p-3 font-sans text-sm leading-relaxed text-white/90 scrollbar-thin">
+          {body}
+        </pre>
+      ) : (
+        <p className="text-sm text-muted">No body returned.</p>
+      )}
+      {sent ? (
+        <p className="text-xs text-registry">
+          {gmail_message_id ? `Sent — Gmail ID: ${gmail_message_id}` : "Sent"}
+        </p>
+      ) : (
+        <p className="text-xs text-dim">Draft — reply to approve and send.</p>
+      )}
+    </div>
+  );
+}
+
 export function GenUiRenderer({ item }: { item: UiItem }) {
   const { name, props } = item;
+  if (name === "email-draft") {
+    return (
+      <EmailDraft
+        to={props.to as string}
+        subject={props.subject as string}
+        body={props.body as string}
+        tone={props.tone as string}
+        status={props.status as string}
+        gmail_message_id={props.gmail_message_id as string | null}
+      />
+    );
+  }
   if (name === "research-sources") {
     return <ResearchSources summary={props.summary as string} sources={props.sources as Source[]} />;
   }

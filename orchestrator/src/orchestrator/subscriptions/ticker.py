@@ -34,6 +34,13 @@ async def tick_subscriptions(*, limit: int = 20) -> int:
                         len(new_emails),
                         sub.id,
                     )
+            elif sub.integration == "task" and sub.kind == "recurring_task":
+                run_result = await service.run_recurring_task(sub)
+                logger.info(
+                    "Recurring task run for subscription %s: %s",
+                    sub.id,
+                    run_result,
+                )
             else:
                 interval = int(sub.config.get("poll_interval_seconds") or 90)
                 store.update_cursor(sub.id, sub.cursor, poll_interval_seconds=interval)

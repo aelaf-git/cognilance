@@ -11,17 +11,88 @@ from cognilance import CognilanceManager
 from langchain_core.messages import BaseMessage
 
 from orchestrator.integrations.client import IntegrationClient
+from orchestrator.integrations.gmail_params import format_email_draft, format_send_email_result
 from orchestrator.integrations.routing import (
     format_document_result,
     format_gmail_list_result,
     format_subscription_result,
     format_calendar_list_result,
+    format_recurring_result,
 )
 from orchestrator.tools.web import format_web_fetch_result, format_web_search_result
 from orchestrator.llm import get_llm, last_user_text, to_chat_messages
 from orchestrator.state import State, Subtask, SubtaskResult
 from orchestrator.streaming import emit, emit_status
 from orchestrator.tools.router import ToolRouter
+from orchestrator.drafts.store import DraftStore
+from orchestrator.integrations.gmail_params import mark_email_draft_sent
+
+
+def _conversation_history(
+    messages: list[BaseMessage] | None,
+    *,
+    limit: int = 24,
+) -> list[dict[str, str]]:
+    if not messages:
+        return []
+    return to_chat_messages(messages[-limit:])
+
+
+def _resolve_prior_email_draft(
+    *,
+    prior_results: dict[str, SubtaskResult] | None,
+) -> dict[str, Any] | None:
+    if prior_results:
+        for pr in prior_results.values():
+            draft_data = pr.get("data") or {}
+            if draft_data.get("body") and draft_data.get("status") in {None, "draft", "sent"}:
+                if draft_data.get("status") == "sent":
+                    continue
+                return {
+                    "to": draft_data.get("to") or "",
+                    "subject": draft_data.get("subject") or "",
+                    "body": draft_data.get("body") or "",
+                    "tone": draft_data.get("tone") or "professional",
+                    "status": "draft",
+                }
+    from orchestrator.context import current_conversation_id
+
+    conv_id = current_conversation_id.get() or ""
+    if not conv_id:
+        return None
+    pending = DraftStore().get_pending_email(conv_id)
+    if not pending or not pending.get("body"):
+        return None
+    return {
+        "to": pending.get("to") or "",
+        "subject": pending.get("subject") or "",
+        "body": pending.get("body") or "",
+        "tone": pending.get("tone") or "professional",
+        "status": "draft",
+    }
+
+
+def _persist_email_hire_result(data: dict[str, Any] | None) -> None:
+    if not data or not data.get("body"):
+        return
+    from orchestrator.context import current_conversation_id
+
+    conv_id = current_conversation_id.get() or ""
+    if not conv_id:
+        return
+    status = str(data.get("status") or "")
+    if status == "draft":
+        DraftStore().save_email_draft(
+            conv_id,
+            {
+                "to": data.get("to") or "",
+                "subject": data.get("subject") or "",
+                "body": data.get("body") or "",
+                "tone": data.get("tone") or "professional",
+            },
+        )
+    elif status == "sent":
+        mark_email_draft_sent(conv_id)
 
 
 def _dependency_layers(subtasks: list[Subtask]) -> list[list[Subtask]]:
@@ -68,9 +139,15 @@ async def _run_subtask(
     router: ToolRouter,
     *,
     conversation: list[BaseMessage] | None = None,
+    prior_results: dict[str, SubtaskResult] | None = None,
 ) -> SubtaskResult:
     subtask_id = subtask["id"]
     instruction = subtask.get("instruction") or ""
+    if prior_results:
+        for dep_id in subtask.get("depends_on") or []:
+            prior = prior_results.get(dep_id)
+            if prior and prior.get("text"):
+                instruction = f"{instruction}\n\nContext from prior step:\n{prior['text']}"
     skill = subtask.get("skill")
     tool = subtask.get("tool")
     assignee = subtask.get("assignee") or "thinking"
@@ -80,22 +157,37 @@ async def _run_subtask(
         id=subtask_id,
         title=subtask.get("title", ""),
         assignee=assignee,
+        skill=skill,
         tool=tool or (f"hire:{skill}" if skill else "thinking"),
+        instruction=instruction,
     )
     emit_status(f"Running: {subtask.get('title', subtask_id)}")
 
     try:
+        extra_input: dict[str, Any] = {
+            "action": subtask.get("action"),
+            "params": subtask.get("params"),
+            "conversation": conversation,
+            "conversation_history": _conversation_history(conversation),
+            "plan_context": subtask.get("plan_context") or "",
+            "subtask_id": subtask_id,
+        }
+        hire_skill = skill
+        if not hire_skill and tool and str(tool).startswith("hire:"):
+            hire_skill = str(tool).split(":", 1)[1]
+        if hire_skill == "email-writing":
+            prior_draft = _resolve_prior_email_draft(prior_results=prior_results)
+            if prior_draft:
+                extra_input["prior_draft"] = prior_draft
         result = await router.execute(
             manager,
             tool=tool,
             skill=skill,
             instruction=instruction,
-            input_data={
-                "action": subtask.get("action"),
-                "params": subtask.get("params"),
-                "conversation": conversation,
-            },
+            input_data=extra_input,
         )
+        if hire_skill == "email-writing" and result.status != "failed":
+            _persist_email_hire_result(result.data)
         payload: SubtaskResult = {
             "subtask_id": subtask_id,
             "text": result.text,
@@ -108,6 +200,7 @@ async def _run_subtask(
             id=subtask_id,
             status=result.status,
             assignee=result.assignee,
+            text=(result.text or "")[:500],
         )
         return payload
     except Exception as exc:
@@ -118,7 +211,13 @@ async def _run_subtask(
             "assignee": assignee,
             "status": "failed",
         }
-        emit("subtask_done", id=subtask_id, status="failed", assignee=assignee)
+        emit(
+            "subtask_done",
+            id=subtask_id,
+            status="failed",
+            assignee=assignee,
+            text=str(exc)[:500],
+        )
         return payload
 
 
@@ -153,12 +252,21 @@ def _result_facts(results: list[SubtaskResult]) -> str:
             parts.append(format_web_search_result(data))
         elif data.get("url") and data.get("content") is not None:
             parts.append(format_web_fetch_result(data))
+        elif data.get("draft") or (data.get("status") == "draft" and data.get("body")):
+            parts.append(format_email_draft(data))
+        elif data.get("gmail_message_id") or data.get("status") == "sent" or (
+            data.get("id") and data.get("sent_body")
+        ):
+            parts.append(format_send_email_result(data))
         elif data.get("document_id") or str(data.get("url", "")).startswith(
             "https://docs.google.com/document/"
         ):
             parts.append(format_document_result(data))
         elif data.get("subscription_id") or "stopped" in data:
-            parts.append(format_subscription_result(data))
+            if data.get("kind") == "recurring_task" or data.get("instruction"):
+                parts.append(format_recurring_result(data))
+            else:
+                parts.append(format_subscription_result(data))
         elif result.get("text"):
             parts.append(f"[{result.get('assignee', 'agent')}] {result.get('text')}")
     return "\n\n".join(parts).strip()
@@ -182,7 +290,15 @@ async def _synthesize_final(
 
     if len(results) == 1:
         data = results[0].get("data") or {}
+        if data.get("draft") or (data.get("status") == "draft" and data.get("body")):
+            return format_email_draft(data)
+        if data.get("gmail_message_id") or data.get("status") == "sent" or (
+            data.get("id") and data.get("sent_body")
+        ):
+            return format_send_email_result(data)
         if data.get("subscription_id") or "stopped" in data:
+            if data.get("kind") == "recurring_task" or data.get("instruction"):
+                return format_recurring_result(data)
             return format_subscription_result(data)
         if data.get("sources") and data.get("query"):
             return format_web_search_result(data)
@@ -199,7 +315,9 @@ async def _synthesize_final(
                 "Preserve links, counts, and facts exactly. "
                 "Never mention tools, APIs, subscribe_inbox, or internal orchestration. "
                 "Never claim an action succeeded if results say FAILED. "
-                "One to three sentences unless listing emails or documents."
+                "Never claim an email was sent unless execution results include a Gmail message ID. "
+                "For email drafts or sent emails, include the full subject and body exactly as shown. "
+                "One to three sentences unless listing emails, documents, or showing an email draft."
             ),
         },
     ]
@@ -234,20 +352,28 @@ async def task_agent(state: State) -> dict:
     router = ToolRouter(catalog_agents=catalog_agents, integration_client=IntegrationClient())
     layers = _dependency_layers(subtasks)
     all_results: list[SubtaskResult] = []
+    plan_context = str((state.get("thinking") or "")).strip()
 
     async with CognilanceManager(agent_name="Orchestrator") as manager:
+        results_by_id: dict[str, SubtaskResult] = {}
         for layer in layers:
             layer_results = await asyncio.gather(
                 *[
                     _run_subtask(
-                        item,
+                        {
+                            **item,
+                            "plan_context": item.get("plan_context") or plan_context,
+                        },
                         manager,
                         router,
                         conversation=state.get("messages", []),
+                        prior_results=results_by_id,
                     )
                     for item in layer
                 ]
             )
+            for item, result in zip(layer, layer_results):
+                results_by_id[item["id"]] = result
             all_results.extend(layer_results)
 
     emit_status("Aggregating results…")

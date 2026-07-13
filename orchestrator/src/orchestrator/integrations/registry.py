@@ -48,6 +48,7 @@ INTEGRATIONS: dict[str, IntegrationSpec] = {
         "actions": [
             "list_emails",
             "read_email",
+            "compose_email",
             "send_email",
             "search_emails",
             "subscribe_inbox",

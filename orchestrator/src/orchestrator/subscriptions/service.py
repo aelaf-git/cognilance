@@ -10,6 +10,8 @@ from orchestrator.integrations.client import IntegrationClient
 from orchestrator.missions.session_type import SessionType
 from orchestrator.missions.store import MissionStore
 from orchestrator.subscriptions.models import Subscription, SubscriptionStatus
+from orchestrator.subscriptions.recurring_params import format_interval
+from orchestrator.subscriptions.recurring_runner import run_recurring_instruction
 from orchestrator.subscriptions.session_sync import cancel_mission_for_subscription
 from orchestrator.subscriptions.store import SubscriptionStore
 
@@ -121,6 +123,150 @@ class SubscriptionService:
             if stopped
             else "No active email listener was found for this conversation.",
         }
+
+    async def subscribe_recurring_task(
+        self,
+        user_id: str,
+        *,
+        conversation_id: str,
+        instruction: str,
+        poll_interval_seconds: int = 86_400,
+        mission_id: str | None = None,
+    ) -> dict[str, Any]:
+        instruction = instruction.strip()
+        if not instruction:
+            raise RuntimeError("instruction is required for recurring tasks")
+        poll_interval_seconds = max(300, int(poll_interval_seconds))
+
+        existing = [
+            s
+            for s in self._subs.list_active_for_conversation(conversation_id)
+            if s.integration == "task" and s.kind == "recurring_task"
+        ]
+        for sub in existing:
+            self._subs.set_status(sub.id, SubscriptionStatus.STOPPED)
+            cancel_mission_for_subscription(sub)
+
+        config = {
+            "instruction": instruction,
+            "poll_interval_seconds": poll_interval_seconds,
+        }
+        sub = self._subs.create_subscription(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            integration="task",
+            kind="recurring_task",
+            config=config,
+            cursor={"run_count": 0, "last_run_at": None},
+            poll_interval_seconds=poll_interval_seconds,
+            created_from_mission_id=mission_id,
+        )
+        if mission_id:
+            mission_store = MissionStore()
+            mission = mission_store.get_mission(mission_id)
+            if mission and mission.session_type != SessionType.RECURRING:
+                mission_store.update_session_type(mission_id, SessionType.RECURRING)
+
+        interval_label = format_interval(poll_interval_seconds)
+        return {
+            "subscription_id": sub.id,
+            "integration": sub.integration,
+            "kind": sub.kind,
+            "status": sub.status.value,
+            "poll_interval_seconds": poll_interval_seconds,
+            "instruction": instruction,
+            "message": (
+                f"I'll run this every {interval_label}: {instruction[:120]}"
+                f"{'…' if len(instruction) > 120 else ''} "
+                f"Say 'stop recurring' to cancel."
+            ),
+        }
+
+    async def unsubscribe_recurring_task(
+        self,
+        user_id: str,
+        *,
+        conversation_id: str,
+        subscription_id: str | None = None,
+    ) -> dict[str, Any]:
+        stopped = 0
+        stopped_subs: list[Subscription] = []
+        if subscription_id:
+            sub = self._subs.get_subscription(subscription_id)
+            if (
+                sub
+                and sub.user_id == user_id
+                and sub.integration == "task"
+                and sub.kind == "recurring_task"
+            ):
+                self._subs.set_status(subscription_id, SubscriptionStatus.STOPPED)
+                stopped = 1
+                stopped_subs = [sub]
+        else:
+            active = [
+                s
+                for s in self._subs.list_active_for_conversation(conversation_id)
+                if s.integration == "task" and s.kind == "recurring_task"
+            ]
+            for sub in active:
+                self._subs.set_status(sub.id, SubscriptionStatus.STOPPED)
+                stopped_subs.append(sub)
+            stopped = len(stopped_subs)
+        for sub in stopped_subs:
+            cancel_mission_for_subscription(sub)
+        return {
+            "stopped": stopped,
+            "message": "Stopped the recurring background task."
+            if stopped
+            else "No active recurring task was found for this conversation.",
+        }
+
+    async def run_recurring_task(self, sub: Subscription) -> dict[str, Any]:
+        instruction = str(sub.config.get("instruction") or "").strip()
+        if not instruction:
+            self._subs.set_status(sub.id, SubscriptionStatus.ERROR, error="missing instruction")
+            return {"ran": False, "error": "missing instruction"}
+
+        result = await run_recurring_instruction(
+            user_id=sub.user_id,
+            conversation_id=sub.conversation_id,
+            instruction=instruction,
+            mission_id=sub.created_from_mission_id,
+        )
+
+        interval = int(sub.config.get("poll_interval_seconds") or 86_400)
+        run_count = int(sub.cursor.get("run_count") or 0) + 1
+        from datetime import datetime, timezone
+
+        cursor = {
+            "run_count": run_count,
+            "last_run_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        if result.get("had_error"):
+            self._subs.update_cursor(sub.id, cursor, poll_interval_seconds=interval)
+            summary = f"Scheduled task failed: {result.get('error') or 'Unknown error'}"
+            self.deliver_notification(
+                sub,
+                summary=summary,
+                payload={"error": result.get("error"), "run_count": run_count},
+            )
+            return {"ran": True, "error": result.get("error"), "run_count": run_count}
+
+        text = str(result.get("text") or "").strip()
+        if not text:
+            text = "Scheduled task completed (no summary returned)."
+            self._subs.update_cursor(sub.id, cursor, poll_interval_seconds=interval)
+            return {"ran": True, "empty": True, "run_count": run_count}
+
+        summary = f"Scheduled update: {text}"
+        self._subs.update_cursor(sub.id, cursor, poll_interval_seconds=interval)
+        self.deliver_notification(
+            sub,
+            summary=summary,
+            payload={"text": text, "run_count": run_count},
+        )
+        return {"ran": True, "text": text, "run_count": run_count}
 
     async def check_gmail_subscription(self, sub: Subscription) -> list[dict[str, Any]]:
         if not self._integrations.is_connected(sub.user_id, "gmail"):

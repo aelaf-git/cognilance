@@ -14,13 +14,15 @@ from orchestrator.llm import get_llm
 from orchestrator.state import State
 from orchestrator.streaming import emit, emit_status, reveal_text
 
-ComponentName = Literal["research-sources", "data-chart", "python-code"]
+ComponentName = Literal["email-draft", "research-sources", "data-chart", "python-code"]
 
-UI_COMPONENTS = """- research-sources: research summaries with linked sources
+UI_COMPONENTS = """- email-draft: composed email with to, subject, body, and send status
+- research-sources: research summaries with linked sources
 - data-chart: bar or line charts for numeric series
 - python-code: Python source code with filename and summary"""
 
 SKILL_DEFAULT_UI: dict[str, ComponentName] = {
+    "email-writing": "email-draft",
     "research": "research-sources",
     "data-analysis": "data-chart",
     "python-code": "python-code",
@@ -58,8 +60,6 @@ def _gather_data(state: State) -> dict[str, Any]:
     merged: dict[str, Any] = dict(state.get("final_data") or {})
     for result in state.get("subtask_results") or []:
         for key, value in (result.get("data") or {}).items():
-            if key == "body":
-                continue
             if key not in merged or merged[key] in (None, "", [], {}):
                 merged[key] = value
             elif isinstance(merged[key], list) and isinstance(value, list):
@@ -77,12 +77,21 @@ def _gather_data(state: State) -> dict[str, Any]:
 def _normalize_suggested(name: str | None) -> ComponentName | None:
     if not name:
         return None
-    if name in {"research-sources", "data-chart", "python-code"}:
+    if name in {"email-draft", "research-sources", "data-chart", "python-code"}:
         return name  # type: ignore[return-value]
     return SUGGESTED_UI_ALIASES.get(name)
 
 
 def _props_for_component(component: ComponentName, data: dict[str, Any], text: str) -> dict:
+    if component == "email-draft":
+        return {
+            "to": data.get("to") or "",
+            "subject": data.get("subject") or "",
+            "body": data.get("body") or text,
+            "tone": data.get("tone") or "professional",
+            "status": data.get("status") or "draft",
+            "gmail_message_id": data.get("gmail_message_id"),
+        }
     if component == "research-sources":
         return {
             "summary": data.get("summary") or text,
@@ -105,6 +114,8 @@ def _props_for_component(component: ComponentName, data: dict[str, Any], text: s
 
 
 def _props_have_content(component: ComponentName, props: dict[str, Any]) -> bool:
+    if component == "email-draft":
+        return bool(str(props.get("body") or "").strip())
     if component == "research-sources":
         return bool(props.get("sources"))
     if component == "data-chart":
@@ -120,6 +131,8 @@ def _heuristic_component(state: State, data: dict[str, Any]) -> ComponentName | 
     if suggested:
         return suggested
 
+    if data.get("body") and data.get("subject"):
+        return "email-draft"
     if data.get("sources"):
         return "research-sources"
     if data.get("series"):
@@ -129,6 +142,8 @@ def _heuristic_component(state: State, data: dict[str, Any]) -> ComponentName | 
 
     for result in state.get("subtask_results") or []:
         result_data = result.get("data") or {}
+        if result_data.get("body") and result_data.get("subject"):
+            return "email-draft"
         if result_data.get("sources"):
             return "research-sources"
         if result_data.get("series"):
@@ -148,6 +163,8 @@ def _heuristic_component(state: State, data: dict[str, Any]) -> ComponentName | 
 
 
 def _data_suggests_rich_ui(data: dict[str, Any]) -> bool:
+    if data.get("body") and data.get("subject"):
+        return True
     if data.get("sources") or data.get("series") or data.get("code"):
         return True
     return isinstance(data.get("chartType"), str)

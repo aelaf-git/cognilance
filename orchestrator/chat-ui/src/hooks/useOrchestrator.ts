@@ -57,13 +57,22 @@ export function useOrchestrator(
     if (!conversationId) return;
     const controller = new AbortController();
     notificationAbortRef.current = controller;
+    const watchingId = conversationId;
 
     async function watchNotifications() {
       try {
         const res = await fetch(
-          `/conversations/${conversationId}/notifications?after=${lastNotificationIdRef.current}`,
+          `/conversations/${watchingId}/notifications?after=${lastNotificationIdRef.current}`,
           { signal: controller.signal },
         );
+        if (res.status === 404) {
+          if (conversationIdRef.current === watchingId) {
+            conversationIdRef.current = "";
+            setConversationId("");
+            localStorage.removeItem(CONVERSATION_KEY);
+          }
+          return;
+        }
         if (!res.ok || !res.body) return;
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -137,11 +146,20 @@ export function useOrchestrator(
 
   const selectConversation = useCallback(
     async (id: string) => {
+      const ok = await loadConversation(id);
+      if (!ok) {
+        conversationIdRef.current = "";
+        setConversationId("");
+        localStorage.removeItem(CONVERSATION_KEY);
+        setChatMessages([]);
+        setSessionTurns({});
+        return false;
+      }
       conversationIdRef.current = id;
       setConversationId(id);
       localStorage.setItem(CONVERSATION_KEY, id);
-      await loadConversation(id);
       setSessionTurns({});
+      return true;
     },
     [loadConversation],
   );
@@ -308,6 +326,7 @@ export function useOrchestrator(
           body: JSON.stringify({
             text,
             conversation_id: convId,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           }),
         });
         if (!res.ok || !res.body) throw new Error("Stream request failed");

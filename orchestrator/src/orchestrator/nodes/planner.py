@@ -1,8 +1,7 @@
-"""Planner — parallel complexity classification + registry catalog; builds dynamic plan."""
+"""Planner — registry catalog first, then complexity/thinking; builds dynamic plan."""
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Literal
 
 from cognilance import CognilanceManager
@@ -11,17 +10,30 @@ from pydantic import BaseModel, Field
 
 from orchestrator.context import current_user_id
 from orchestrator.conversation.ack import acknowledgment_reply, is_acknowledgment
+from orchestrator.drafts.store import DraftStore
 from orchestrator.integrations.client import IntegrationClient
+from orchestrator.integrations.gmail_params import (
+    is_email_compose_request,
+    is_email_send_approval,
+)
 from orchestrator.integrations.routing import integration_subtasks_for_query
+from orchestrator.tools.time_routing import time_subtasks_for_query
 from orchestrator.tools.web_routing import web_subtasks_for_query
-from orchestrator.llm import get_llm, last_user_text
-from orchestrator.registry_cache import find_agent_by_skill, get_catalog, has_agent_for_skill
+from orchestrator.subscriptions.recurring_routing import recurring_subtasks_for_query
+from orchestrator.llm import get_llm, last_user_text, to_chat_messages
+from orchestrator.registry_cache import (
+    catalog_snapshot,
+    find_agent_by_skill,
+    get_catalog,
+    has_agent_for_skill,
+)
 from orchestrator.state import Plan, State, Subtask
 from orchestrator.streaming import emit, emit_status, stream_llm
 from orchestrator.subscriptions.store import SubscriptionStore
-from orchestrator.subscriptions.monitor_intent import is_monitor_request
+from orchestrator.subscriptions.monitor_intent import is_monitor_request, is_stop_monitor_request
 
-UI_COMPONENTS = """- research-sources: research summaries with linked sources
+UI_COMPONENTS = """- email-draft: composed email with to, subject, body, and send status
+- research-sources: research summaries with linked sources
 - data-chart: bar or line charts for numeric series
 - python-code: Python source code with filename and summary"""
 
@@ -29,11 +41,14 @@ THINKING_SYSTEM = """You are the Cognilance planner — like Cursor's agent plan
 
 Think out loud before acting. Write in clear prose (not JSON). Cover:
 1. What the user is asking for and any constraints
-2. What capabilities or tools are needed — check which integrations are CONNECTED vs NOT CONNECTED
-3. Which marketplace agents could help (reference the catalog by name and skill)
-4. Whether the task is simple (self-contained) or complex (needs specialists or integrations)
-5. Your step-by-step plan; if a required integration is not connected, say the user must connect it first
-6. Never plan to use app:* tools that are NOT CONNECTED
+2. FIRST list marketplace agents from the catalog that match (name + skill). Prefer hiring them.
+3. Use thinking / app:* / web ONLY when no matching hireable agent exists in the catalog
+4. Which CONNECTED integrations are needed for tasks that have no specialist agent
+5. Whether the task is simple (self-contained) or complex (needs specialists)
+6. Your step-by-step plan — hire specialists whenever they are available
+7. Never plan to use app:* tools that are NOT CONNECTED
+8. For email compose/send/revise: if email-writing is in the catalog, plan hire:email-writing only —
+   do NOT plan app:gmail compose_email/send_email or a separate web+thinking draft pipeline
 
 Be concise but thorough."""
 
@@ -99,11 +114,13 @@ async def _classify_complexity(
                 "content": (
                     "Classify whether the user's task is simple (answer directly) "
                     "or complex (requires specialist agents or connected integrations). "
+                    "Prefer classifying as complex when a marketplace agent skill matches "
+                    "(e.g. email-writing for compose/send email) so the orchestrator can hire it. "
                     "Tasks that need research, data analysis, charts, generating Python code, "
                     "or calling external services (email, calendar, Slack, Google Docs, etc.) "
                     "are complex. "
                     "Questions needing current web information (news, lookups, public facts) "
-                    "are complex — use tool=web action=search. "
+                    "are complex — use tool=web action=search when no specialist covers it. "
                     "Reading a specific URL uses tool=web action=fetch_url. "
                     "Creating or editing Google Docs is ALWAYS complex. "
                     "If the marketplace catalog is empty or no agent has the required skill, "
@@ -163,6 +180,42 @@ def _force_python_subtask(query: str, agents: list[AgentCard]) -> list[Subtask] 
             "skill": None,
             "tool": "thinking",
             "assignee": "thinking",
+            "depends_on": [],
+        }
+    ]
+
+
+def _force_email_hire_subtask(
+    query: str,
+    agents: list[AgentCard],
+    *,
+    conversation_id: str = "",
+) -> list[Subtask] | None:
+    """When email-writing is online, hire it for compose/send — never app:gmail compose."""
+    if is_monitor_request(query) or is_stop_monitor_request(query):
+        return None
+    match = find_agent_by_skill(agents, "email-writing")
+    if not match:
+        return None
+
+    has_pending = False
+    if conversation_id:
+        has_pending = bool(DraftStore().has_pending_email(conversation_id))
+
+    wants_email = is_email_compose_request(query) or is_email_send_approval(
+        query, has_pending_draft=has_pending
+    )
+    if not wants_email:
+        return None
+
+    return [
+        {
+            "id": "email-writing",
+            "title": "Compose and handle email",
+            "instruction": query,
+            "skill": "email-writing",
+            "tool": "hire:email-writing",
+            "assignee": match.name,
             "depends_on": [],
         }
     ]
@@ -236,6 +289,18 @@ def _resolve_subtasks(
                 tool = "web"
             assignee = "web"
             action = action or "search"
+        elif tool == "time" or (tool and tool.startswith("time:")):
+            if tool.startswith("time:"):
+                action = action or tool.split(":", 1)[1]
+                tool = "time"
+            assignee = "time"
+            action = action or "now"
+        elif tool == "recurring" or (tool and tool.startswith("recurring:")):
+            if tool.startswith("recurring:"):
+                action = action or tool.split(":", 1)[1]
+                tool = "recurring"
+            assignee = "recurring"
+            action = action or "subscribe"
         elif tool and tool.startswith("hire:"):
             hire_skill = tool.split(":", 1)[1]
             match = find_agent_by_skill(agents, hire_skill)
@@ -279,6 +344,29 @@ def _resolve_subtasks(
     return resolved
 
 
+def _conversation_snippet(messages: list, *, limit: int = 10) -> str:
+    if not messages:
+        return ""
+    recent = messages[-limit:]
+    lines: list[str] = []
+    for msg in to_chat_messages(recent):
+        role = msg.get("role", "user")
+        content = str(msg.get("content", "")).strip()
+        if content:
+            lines.append(f"{role}: {content[:800]}")
+    return "\n\n".join(lines)
+
+
+def _subtasks_have_doc_content(subtasks: list[Subtask]) -> bool:
+    for item in subtasks:
+        if item.get("tool") == "app:google-drive":
+            params = item.get("params") or {}
+            content = str(params.get("content") or "").strip()
+            if content and len(content) > 40:
+                return True
+    return False
+
+
 async def planner(state: State) -> dict:
     query = last_user_text(state.get("messages", []))
     emit_status("Planning…")
@@ -296,28 +384,29 @@ async def planner(state: State) -> dict:
         )
 
     if is_acknowledgment(query):
-        reply = acknowledgment_reply(listener_active=listener_active)
-        plan: Plan = {
-            "reasoning": "Brief acknowledgment — no further action needed.",
-            "suggested_ui": None,
-            "thinking": "",
-            "steps": [],
-        }
-        emit("plan", data={**plan, "complexity": "simple", "route": "simple", "subtasks": []})
-        emit("route_decision", route="simple", complexity="simple")
-        emit("direct_reply", text=reply)
-        return {
-            "complexity": "simple",
-            "route": "simple",
-            "thinking": "",
-            "plan": plan,
-            "subtasks": [],
-            "subtask_results": [],
-            "final_text": reply,
-            "final_data": {},
-            "answer_streamed": False,
-            "direct_reply": True,
-        }
+        if not (conversation_id and DraftStore().has_pending_email(conversation_id)):
+            reply = acknowledgment_reply(listener_active=listener_active)
+            plan: Plan = {
+                "reasoning": "Brief acknowledgment — no further action needed.",
+                "suggested_ui": None,
+                "thinking": "",
+                "steps": [],
+            }
+            emit("plan", data={**plan, "complexity": "simple", "route": "simple", "subtasks": []})
+            emit("route_decision", route="simple", complexity="simple")
+            emit("direct_reply", text=reply)
+            return {
+                "complexity": "simple",
+                "route": "simple",
+                "thinking": "",
+                "plan": plan,
+                "subtasks": [],
+                "subtask_results": [],
+                "final_text": reply,
+                "final_data": {},
+                "answer_streamed": False,
+                "direct_reply": True,
+            }
 
     if is_monitor_request(query) and listener_active:
         reply = (
@@ -347,20 +436,88 @@ async def planner(state: State) -> dict:
         }
 
     async with CognilanceManager(agent_name="Orchestrator") as manager:
-        preview_catalog = state.get("catalog_text") or "Catalog not yet loaded."
+        emit_status("Discovering marketplace agents…")
         try:
-            complexity_decision, (catalog_agents, catalog_text, cache_updates) = await asyncio.gather(
-                _classify_complexity(query, preview_catalog, capabilities),
-                get_catalog(state, manager),
+            # Always refresh so newly started agents are hireable immediately.
+            catalog_agents, catalog_text, cache_updates = await get_catalog(
+                state, manager, force_refresh=True
             )
         except Exception:
-            complexity_decision = ComplexityDecision(
-                complexity="simple",
-                reasoning="Registry unavailable; answering directly.",
-            )
             catalog_agents = []
             catalog_text = "No agents are registered in the marketplace."
             cache_updates = {}
+
+        online = [a for a in catalog_agents if a.online]
+        emit(
+            "catalog",
+            agents=catalog_snapshot(catalog_agents),
+            online_count=len(online),
+            total_count=len(catalog_agents),
+            text=catalog_text,
+        )
+
+        # Hard agent-first: skip LLM planning when a specialist must be hired.
+        forced_email_early = _force_email_hire_subtask(
+            query,
+            catalog_agents,
+            conversation_id=conversation_id,
+        )
+        if forced_email_early:
+            match = forced_email_early[0]
+            thinking = (
+                f"Looked up the marketplace registry first.\n"
+                f"Catalog:\n{catalog_text}\n\n"
+                f"Found online specialist {match['assignee']} "
+                f"(skill={match['skill']}). Hiring it for this email task — "
+                f"not using app:gmail compose or the thinking agent."
+            )
+            emit("thinking_done", text=thinking)
+            plan: Plan = {
+                "reasoning": (
+                    f"Registry listed {match['assignee']} online with skill "
+                    f"{match['skill']}; force-hiring that agent."
+                ),
+                "suggested_ui": "email-draft",
+                "thinking": thinking,
+                "steps": [
+                    {
+                        "title": f"Hire {match['assignee']}",
+                        "detail": f"Delegate via {match['tool']}",
+                    }
+                ],
+            }
+            emit(
+                "plan",
+                data={
+                    **plan,
+                    "complexity": "complex",
+                    "route": "complex",
+                    "subtasks": forced_email_early,
+                },
+            )
+            emit("route_decision", route="complex", complexity="complex")
+            emit("capabilities", text=capabilities)
+            return {
+                **cache_updates,
+                "complexity": "complex",
+                "route": "complex",
+                "thinking": thinking,
+                "plan": plan,
+                "subtasks": forced_email_early,
+                "subtask_results": [],
+                "final_text": "",
+                "final_data": {},
+                "answer_streamed": False,
+            }
+
+        emit_status("Planning…")
+        try:
+            complexity_decision = await _classify_complexity(query, catalog_text, capabilities)
+        except Exception:
+            complexity_decision = ComplexityDecision(
+                complexity="simple",
+                reasoning="Complexity classification failed; answering directly.",
+            )
 
         thinking = await stream_llm(
             get_llm(temperature=0.3),
@@ -370,6 +527,7 @@ async def planner(state: State) -> dict:
                     "role": "user",
                     "content": (
                         f"User request:\n{query}\n\n"
+                        f"Recent conversation:\n{_conversation_snippet(state.get('messages', []))}\n\n"
                         f"Complexity: {complexity_decision.complexity}\n\n"
                         f"Tool access:\n{capabilities}\n\n"
                         f"Marketplace catalog:\n{catalog_text}"
@@ -387,26 +545,39 @@ async def planner(state: State) -> dict:
                 {
                     "role": "system",
                     "content": (
+                        "AGENT-FIRST POLICY: Read the marketplace catalog before planning. "
+                        "Whenever a catalog agent has a matching skill, you MUST use hire:<skill> "
+                        "for that work. Use thinking, app:*, or web ONLY when no matching "
+                        "hireable skill exists in the catalog.\n\n"
                         "Build an execution plan using ONLY agents that exist in the catalog "
                         "and ONLY CONNECTED integrations from the tool access list. "
                         "For complex tasks, define subtasks with ids and dependency edges. "
                         "Set tool to hire:<skill>, app:<integration-id>, web, or thinking. "
                         "For web: action=search with params {query}; action=fetch_url with params {url}. "
-                        "Use web:search for current events, public facts, or anything on the internet. "
+                        "Use web:search for current events, public facts, or anything on the internet "
+                        "only when no specialist agent covers it. "
                         "Use web:fetch_url when the user shares a URL to read or summarize. "
                         "For app tools, set action to a supported action and params as needed. "
                         "For Google Docs (app:google-drive): use create_document with name + "
                         "content (actual document body, not the user's command); use write_document "
                         "with document_id, content, mode=append, and optional style "
                         "(bold, font_size, font_family). Reuse document_id from prior messages. "
-                        "For ongoing monitoring (notify me when, keep listening, watch inbox): "
+                        "EMAIL: If email-writing is in the catalog, plan EXACTLY one subtask "
+                        "hire:email-writing for compose, revise, or send — never app:gmail "
+                        "compose_email/send_email, and never prepend web or thinking draft steps. "
+                        "For Gmail inbox monitoring (notify me when, keep listening, watch inbox): "
                         "use app:gmail action=subscribe_inbox — NOT list_emails. "
                         "To stop: app:gmail action=unsubscribe_inbox. "
+                        "If email-writing is NOT in the catalog, use app:gmail compose_email first "
+                        "to draft for review; only send_email after user approves. "
+                        "For scheduled/repeated tasks (every day, hourly, weekly, automate): "
+                        "use tool=recurring action=subscribe with params {instruction, poll_interval_seconds}. "
+                        "To stop recurring tasks: tool=recurring action=unsubscribe. "
                         "Use exact skill slugs from the catalog for hire tools. "
                         "If a needed integration is NOT CONNECTED, use thinking and tell the user to connect it. "
                         "If no agent matches a needed skill, use tool=thinking — the orchestrator "
-                    "will handle the task itself. Never assign hire:<skill> unless that skill "
-                    "appears in the marketplace catalog.\n\n"
+                        "will handle the task itself. Never assign hire:<skill> unless that skill "
+                        "appears in the marketplace catalog.\n\n"
                         f"{capabilities}\n\n"
                         f"Rich UI components:\n{UI_COMPONENTS}\n\n"
                         f"Marketplace catalog:\n{catalog_text}"
@@ -416,6 +587,7 @@ async def planner(state: State) -> dict:
                     "role": "user",
                     "content": (
                         f"User request:\n{query}\n\n"
+                        f"Recent conversation:\n{_conversation_snippet(state.get('messages', []))}\n\n"
                         f"Complexity: {complexity_decision.complexity}\n"
                         f"Complexity reasoning: {complexity_decision.reasoning}\n\n"
                         f"Planner thinking:\n{thinking}"
@@ -442,17 +614,37 @@ async def planner(state: State) -> dict:
             app_service,
             user_id,
             conversation=state.get("messages", []),
+            catalog_agents=catalog_agents,
         )
         if forced_integration:
-            complexity = "complex"
-            route = "complex"
-            subtasks = forced_integration
-        else:
-            forced_web = web_subtasks_for_query(query)
-            if forced_web:
+            doc_forced = (
+                len(forced_integration) == 1
+                and forced_integration[0].get("tool") == "app:google-drive"
+            )
+            if doc_forced and _subtasks_have_doc_content(subtasks):
+                pass
+            else:
                 complexity = "complex"
                 route = "complex"
-                subtasks = forced_web
+                subtasks = forced_integration
+        else:
+            forced_time = time_subtasks_for_query(query)
+            if forced_time:
+                complexity = "complex"
+                route = "complex"
+                subtasks = forced_time
+            else:
+                forced_recurring = recurring_subtasks_for_query(query)
+                if forced_recurring:
+                    complexity = "complex"
+                    route = "complex"
+                    subtasks = forced_recurring
+                else:
+                    forced_web = web_subtasks_for_query(query)
+                    if forced_web:
+                        complexity = "complex"
+                        route = "complex"
+                        subtasks = forced_web
 
         if route == "complex" and not subtasks:
             subtasks = [
@@ -475,10 +667,22 @@ async def planner(state: State) -> dict:
             if not decision.suggested_ui:
                 decision.suggested_ui = "python-code"
 
+        forced_email = _force_email_hire_subtask(
+            query,
+            catalog_agents,
+            conversation_id=conversation_id,
+        )
+        if forced_email:
+            complexity = "complex"
+            route = "complex"
+            subtasks = forced_email
+            if not decision.suggested_ui:
+                decision.suggested_ui = "email-draft"
+
         if route == "complex" and subtasks:
             subtasks = _apply_orchestrator_fallback(subtasks, catalog_agents)
 
-        plan: Plan = {
+        plan = {
             "reasoning": decision.reasoning,
             "suggested_ui": decision.suggested_ui,
             "thinking": thinking,

@@ -71,9 +71,14 @@ def init_all_stores() -> None:
     from orchestrator.conversations.store import ConversationStore
     from orchestrator.integrations.store import IntegrationStore
     from orchestrator.subscriptions.store import SubscriptionStore
+    from orchestrator.users.store import UserPreferencesStore
 
     MissionStore().init_db()
     AppStore().init_db()
     IntegrationStore().init_db()
     ConversationStore().init_db()
     SubscriptionStore().init_db()
+    UserPreferencesStore().init_db()
+    from orchestrator.drafts.store import DraftStore
+
+    DraftStore().init_db()

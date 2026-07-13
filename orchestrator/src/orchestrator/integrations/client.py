@@ -9,6 +9,8 @@ from orchestrator.context import current_conversation_id, current_mission_id, cu
 from orchestrator.integrations.executor import IntegrationExecutor
 from orchestrator.integrations.registry import INTEGRATIONS, list_integrations
 from orchestrator.integrations.token_manager import TokenManager
+from orchestrator.datetime_util import time_context_for_planner
+from orchestrator.drafts.store import DraftStore
 from orchestrator.streaming import emit
 
 
@@ -25,14 +27,26 @@ class IntegrationClient:
         from orchestrator.tools.web import search_provider_status
 
         connected = set(self._tokens.list_connected(user_id))
+        conv_id = current_conversation_id.get() or ""
+        draft_block = ""
+        if conv_id:
+            draft_ctx = DraftStore().draft_context_for_planner(conv_id)
+            if draft_ctx:
+                draft_block = f"\n{draft_ctx}\n"
         lines = [
             "=== Orchestrator capabilities ===",
             "",
+            time_context_for_planner(user_id=user_id),
+            draft_block,
             "Always available:",
             "- thinking — reason and answer directly (no external APIs)",
+            "- time — current date/time in the user's timezone (action: now)",
             "- web — search the web and fetch/scrape pages (no OAuth required)",
             "  Actions: search {query, max_results?}; fetch_url {url}",
             f"  Search provider: {search_provider_status()}",
+            "- recurring — run a task on a schedule in the background (no OAuth required)",
+            "  Actions: subscribe {instruction, poll_interval_seconds?}; unsubscribe",
+            "  Examples: every day / hourly / weekly tasks; say 'stop recurring' to cancel",
             "- hire:<skill> — delegate to a marketplace agent (skill must exist in catalog)",
             "",
             "OAuth integrations (only usable when CONNECTED):",
@@ -54,6 +68,17 @@ class IntegrationClient:
                     )
                 if integration_id == "gmail":
                     lines.append(
+                        "  Gmail: When Email Writer (hire:email-writing) is in the marketplace "
+                        "catalog, that agent owns compose/revise/send via the orchestrator proxy — "
+                        "do NOT plan app:gmail compose_email or send_email in that case. "
+                        "Use app:gmail for inbox list/search/monitor only when the specialist is absent "
+                        "or for subscribe_inbox / unsubscribe_inbox."
+                    )
+                    lines.append(
+                        "  Fallback (no email-writing agent): compose_email — draft for user review "
+                        "(always before send); send_email {to} — send the approved pending draft only"
+                    )
+                    lines.append(
                         "  Gmail monitor: subscribe_inbox (notify on new mail); "
                         "unsubscribe_inbox (stop listening)"
                     )
@@ -64,8 +89,13 @@ class IntegrationClient:
                 )
             lines.append("")
         lines.append(
-            "Decision rules: Use web:search for current events, facts, or anything needing "
-            "the public internet. Use web:fetch_url when the user gives a URL to read or summarize. "
+            "Decision rules: Prefer hire:<skill> whenever a marketplace agent matches the task. "
+            "Use web:search for current events, facts, or anything needing "
+            "the public internet when no specialist agent covers it. Use web:fetch_url when the user "
+            "gives a URL to read or summarize. "
+            "For email: if hire:email-writing is available, use that agent; otherwise ALWAYS "
+            "compose_email first and show the draft; only send_email after user approval. "
+            "Never send_email on the first request — even if a recipient is given. "
             "Only route to app:* tools that are CONNECTED. "
             "If the user needs a disconnected integration, use thinking and explain how to connect."
         )

@@ -26,6 +26,7 @@ Two classes, two roles. Pick the one that matches what your code does.
 - [A2A protocol](#a2a-protocol)
 - [Registry](#registry)
 - [Agents](#agents)
+- [Agent Host (developer portal)](#agent-host-developer-portal)
 - [Orchestrator (generative UI)](#orchestrator-generative-ui)
 - [CLI reference](#cli-reference)
 - [Local development](#local-development)
@@ -372,34 +373,64 @@ python agents/research_agent.py
 
 ## Agents
 
-Reusable Python agents live in [`agents/`](agents/). Each one is a `CognilanceWorker` backed by [Groq](https://groq.com), registers itself on the registry on startup, and returns **structured `output.data`** that the orchestrator renders as generative UI.
+The [`agents/`](agents/) folder contains independent `CognilanceWorker` processes that register on the marketplace and are hired by the orchestrator via the registry.
 
 | Agent | Skill | Port | Output shape | UI component |
 |-------|-------|------|--------------|--------------|
-| `research_agent.py` | `research` | 8101 | `{ summary, sources[] }` | `research-sources` |
-| `data_analyst.py` | `data-analysis` | 8102 | `{ title, chartType, series[] }` | `data-chart` |
-| `python_code_writer.py` | `python-code` | 8103 | `{ summary, filename, code }` | `python-code` |
+| `email_writer/agent.py` | `email-writing` | 8101 | `{ to, subject, body, status }` | `email-draft` |
 
-### Run the agents
+The Email Writer uses **Gemini** for composition and calls back into the orchestrator Gmail **proxy** for send/read (no OAuth in the agent). See [`agents/README.md`](agents/README.md).
+
+### Run the agent
 
 ```bash
-pip install -r agents/requirements.txt
+pip install -r agents/email_writer/requirements.txt
 
-# Groq + registry settings live in the repo root .env
-python agents/research_agent.py      # :8101
-python agents/data_analyst.py        # :8102  (separate terminal)
-python agents/python_code_writer.py   # :8103  (separate terminal)
+# GEMINI_API_KEY + registry in repo root .env
+python agents/email_writer/agent.py      # :8101
 ```
 
-Each agent reads `GROQ_API_KEY` and `COGNILANCE_REGISTRY_URL` from the **repo root** `.env` (default registry `http://127.0.0.1:8088`).
-
-Start all three at once (requires registry on `:8088`):
+Start with registry check:
 
 ```bash
 ./scripts/start_agents.sh
 ```
 
-The script checks registry health before launching agents on ports `8101`–`8103`.
+---
+
+## Agent Host (developer portal)
+
+The [`agent-host/`](agent-host/) service lets developers **upload agent ZIPs**, run them locally on dynamic ports (`8104`–`8199`), and auto-register with the registry — the orchestrator discovers them like built-in agents in `agents/`.
+
+| URL | Description |
+|-----|-------------|
+| http://127.0.0.1:8300/ | Developer portal (upload, start/stop, logs) |
+| http://127.0.0.1:8300/health | Health check |
+| http://127.0.0.1:8300/api/agents | Hosted agent list (JSON) |
+
+### Host your agent
+
+1. Package your agent as a ZIP (see [`agents/README.md`](agents/README.md) for the Email Writer pattern)
+2. Start registry, then Agent Host:
+
+```bash
+cd registry && docker compose watch   # :8088
+./scripts/start_agent_host.sh         # :8300
+```
+
+3. Open http://127.0.0.1:8300 — upload your `.zip`, **configure environment variables** (e.g. `GROQ_API_KEY`), then click **Upload agent** and **Start**
+4. Confirm the agent appears on the [registry dashboard](http://127.0.0.1:8088/dashboard)
+5. Start the orchestrator and ask for a task matching your agent's skill
+
+Uploaded agents are launched via `cognilance run <entry> --port <allocated>` so ports do not collide with built-ins on `8101`–`8103`.
+
+**Security:** the Agent Host executes arbitrary Python on your machine with no sandbox — local development only.
+
+Rebuild the portal UI after frontend changes:
+
+```bash
+cd agent-host/developer-ui && npm install && npm run build
+```
 
 ---
 
@@ -467,7 +498,7 @@ cd registry && docker compose watch
 
 ```bash
 source .venv/bin/activate
-pip install -e . -e "./orchestrator[dev]" -r agents/requirements.txt
+pip install -e . -e "./orchestrator[dev]" -r agents/email_writer/requirements.txt
 python -m orchestrator
 ```
 
@@ -630,15 +661,18 @@ The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
 # Terminal 1 — registry
 cd registry && docker compose watch
 
-# Terminal 2-4 — agents
+# Terminal 2 — agent host (optional — upload custom agents)
+./scripts/start_agent_host.sh
+
+# Terminal 3-5 — built-in agents
 python agents/research_agent.py
 python agents/data_analyst.py
 python agents/python_code_writer.py
 
-# Terminal 5 — verify discovery
+# Terminal 6 — verify discovery
 cognilance discover
 
-# Terminal 6 — orchestrator (chat UI on :8200)
+# Terminal 7 — orchestrator (chat UI on :8200)
 python -m orchestrator
 ```
 
@@ -650,8 +684,12 @@ python -m orchestrator
 |----------|----------|---------|-------------|
 | `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL |
 | `COGNILANCE_PORT` | No | `8000` | Default port for workers |
-| `GROQ_API_KEY` | For agents/orchestrator | — | Groq API key used by the agents and the orchestrator |
-| `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | Groq model for agents and the orchestrator |
+| `COGNILANCE_AGENT_HOST_PORT` | No | `8300` | Agent Host developer portal port |
+| `COGNILANCE_AGENT_HOST_DATA_DIR` | No | `data/hosted-agents` | Extracted agent ZIPs and SQLite DB |
+| `AGENT_HOST_ENCRYPTION_KEY` | No | falls back to `INTEGRATION_ENCRYPTION_KEY` | Encrypts per-agent secrets at rest |
+| `GROQ_API_KEY` | For orchestrator | — | Groq API key for the orchestrator planner |
+| `GEMINI_API_KEY` | For agents | — | Google Gemini API key for marketplace agents |
+| `GEMINI_MODEL` | No | `gemini-2.0-flash` | Gemini model for agents |
 | `VITE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL for the chat UI sidebar (build-time) |
 
 ---
@@ -677,11 +715,18 @@ cognilance/
 │   │   └── a2a.py           # A2AServer + A2AClient
 │   └── cli/
 │       └── main.py          # cognilance CLI entry point
-├── agents/                  # Groq-backed CognilanceWorker agents
-│   ├── research_agent.py    # skill: research      → research-sources UI
-│   ├── data_analyst.py      # skill: data-analysis → data-chart UI
-│   ├── python_code_writer.py  # skill: python-code  → python-code UI
-│   ├── requirements.txt
+├── agents/                  # Marketplace CognilanceWorker agents (one folder per agent)
+│   ├── email_writer/
+│   │   ├── agent.py         # skill: email-writing → email-draft UI
+│   │   ├── proxy.py
+│   │   ├── requirements.txt
+│   │   └── cognilance.json
+│   └── README.md
+├── agent-host/              # Developer portal — upload & run agents locally
+│   ├── developer-ui/        # React portal (Vite + Tailwind)
+│   ├── pyproject.toml
+│   └── src/agent_host/      # FastAPI server, runner, ZIP handler
+├── data/hosted-agents/      # Uploaded agent extracts (gitignored at runtime)
 ├── orchestrator/            # LangGraph supervisor + React chat UI + generative UI
 │   ├── langgraph.json       # graphs + ui bundle config (env: ../.env)
 │   ├── chat-ui/             # React chat app (Vite + Tailwind + Framer Motion)
@@ -710,6 +755,7 @@ cognilance/
 │       └── python-code/
 ├── scripts/
 │   ├── start_agents.sh      # registry check + run all three agents
+│   ├── start_agent_host.sh  # developer portal on :8300
 │   └── e2e_smoke_test.py    # registry + agents + orchestrator smoke test
 ├── registry/                # Registry API (FastAPI + Prisma + SQLite)
 │   ├── prisma/

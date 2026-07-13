@@ -23,11 +23,18 @@ def _week_bounds(now: datetime | None = None) -> tuple[datetime, datetime]:
     return week_start, week_end
 
 
-def prepare_calendar_list_params(query: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+def prepare_calendar_list_params(
+    query: str,
+    params: dict[str, Any] | None = None,
+    *,
+    user_id: str | None = None,
+) -> dict[str, Any]:
     """Fill time_min/time_max and defaults for events.list."""
+    from orchestrator.datetime_util import user_now
+
     merged = dict(params or {})
     q_lower = query.lower()
-    now = datetime.now(timezone.utc)
+    now = user_now(user_id=user_id)
 
     if not merged.get("time_min"):
         if "this week" in q_lower or ("week" in q_lower and "next week" not in q_lower):
