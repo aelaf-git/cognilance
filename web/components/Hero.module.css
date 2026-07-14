@@ -1,0 +1,127 @@
+.hero {
+  position: relative;
+  isolation: isolate;
+  min-height: min(92vh, 860px);
+  display: grid;
+  align-items: end;
+  overflow: hidden;
+  padding: 5rem 0 4.5rem;
+  color: var(--mist);
+  background: var(--ink);
+}
+
+.atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(31, 168, 154, 0.35), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 85% 10%, rgba(45, 212, 191, 0.18), transparent 50%),
+    radial-gradient(ellipse 90% 70% at 50% 100%, rgba(26, 42, 38, 0.9), transparent 60%),
+    linear-gradient(165deg, #06100e 0%, #0c1412 42%, #12241f 100%);
+  animation: heroWash 1.2s ease both;
+}
+
+.atmosphere::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(232, 244, 241, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 244, 241, 0.04) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 85%);
+}
+
+.content {
+  position: relative;
+  padding-bottom: 1rem;
+}
+
+.chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.tagline {
+  color: rgba(232, 244, 241, 0.72);
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.brand {
+  margin: 0 0 1rem;
+  font-family: var(--font-display);
+  font-size: clamp(3.2rem, 10vw, 6.5rem);
+  font-weight: 800;
+  letter-spacing: -0.055em;
+  line-height: 0.92;
+}
+
+.headline {
+  max-width: 14ch;
+  font-size: clamp(1.85rem, 4.6vw, 3.15rem);
+  font-weight: 700;
+  color: rgba(232, 244, 241, 0.94);
+}
+
+.sub {
+  margin: 1.25rem 0 0;
+  max-width: 34rem;
+  color: rgba(232, 244, 241, 0.7);
+  font-size: clamp(1.05rem, 2vw, 1.2rem);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.actions :global(.btnGhost) {
+  border-color: rgba(232, 244, 241, 0.25);
+  color: var(--mist);
+}
+
+.actions :global(.btnGhost:hover) {
+  border-color: var(--mint-bright);
+  color: #fff;
+}
+
+.actions :global(.btnPrimary) {
+  background: var(--mint);
+  color: var(--ink);
+}
+
+.actions :global(.btnPrimary:hover) {
+  background: var(--mint-bright);
+}
+
+.rise1 {
+  animation: heroRise 0.8s ease 0.05s both;
+}
+.rise2 {
+  animation: heroRise 0.85s ease 0.15s both;
+}
+.rise3 {
+  animation: heroRise 0.9s ease 0.28s both;
+}
+.rise4 {
+  animation: heroRise 0.9s ease 0.4s both;
+}
+.rise5 {
+  animation: heroRise 0.9s ease 0.52s both;
+}
+
+@media (max-width: 640px) {
+  .hero {
+    align-items: center;
+    min-height: 88vh;
+    padding-top: 4rem;
+  }
+}

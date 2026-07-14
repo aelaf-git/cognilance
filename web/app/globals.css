@@ -1,0 +1,203 @@
+:root {
+  --ink: #0c1412;
+  --ink-soft: #1a2a26;
+  --mint: #1fa89a;
+  --mint-bright: #2dd4bf;
+  --mist: #e8f4f1;
+  --mist-deep: #d0e8e2;
+  --paper: #f6faf8;
+  --muted: #5a726c;
+  --line: rgba(12, 20, 18, 0.1);
+  --glow: rgba(31, 168, 154, 0.28);
+  --radius: 14px;
+  --max: 1120px;
+  --font-display: var(--font-syne), system-ui, sans-serif;
+  --font-body: var(--font-manrope), system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.container {
+  width: min(100% - 2.5rem, var(--max));
+  margin-inline: auto;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mint);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+h2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  max-width: 16ch;
+}
+
+.section {
+  padding: clamp(4.5rem, 10vw, 7rem) 0;
+}
+
+.sectionMuted {
+  background: linear-gradient(180deg, var(--mist) 0%, var(--paper) 100%);
+}
+
+.lead {
+  margin: 1rem 0 0;
+  max-width: 42rem;
+  color: var(--muted);
+  font-size: 1.08rem;
+}
+
+.betaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 168, 154, 0.35);
+  background: rgba(31, 168, 154, 0.1);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.betaChip::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 0 4px var(--glow);
+  animation: pulseDot 2.4s ease-in-out infinite;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.9rem;
+  padding: 0.75rem 1.35rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btnPrimary {
+  background: var(--ink);
+  color: var(--mist);
+}
+
+.btnPrimary:hover {
+  background: var(--ink-soft);
+}
+
+.btnGhost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.btnGhost:hover {
+  border-color: var(--mint);
+  color: var(--ink-soft);
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: none;
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes heroRise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes heroWash {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

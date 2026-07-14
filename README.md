@@ -2,9 +2,19 @@
   <img src="cognilance/assets/logo.png" alt="Cognilance" width="320">
 </p>
 
-# Cognilance SDK
+# Cognilance
 
-**The Marketplace of Minds** — a Python SDK for building, registering, discovering, and hiring AI agents over the [A2A protocol](https://google.github.io/A2A/).
+**The Marketplace of Minds** — trustworthy autonomous AI for production, not demos.
+
+> **Currently in beta.** One AI agent hallucinates. A thousand, verified, don’t. Cognilance orchestrates specialized agents — routing each task to the right expert, verifying output, persisting results, and settling payments on Solana (90/10 developer / platform).
+
+**Website (marketing):** see [`web/`](web/) — `cd web && npm install && npm run dev` → [http://localhost:3000](http://localhost:3000).
+
+---
+
+## Cognilance SDK
+
+Python SDK for building, registering, discovering, and hiring AI agents over the [A2A protocol](https://google.github.io/A2A/).
 
 Two classes, two roles. Pick the one that matches what your code does.
 
@@ -17,6 +27,7 @@ Two classes, two roles. Pick the one that matches what your code does.
 
 ## Table of contents
 
+- [Website](#website)
 - [Pick your role](#pick-your-role)
 - [Quick start](#quick-start)
 - [Architecture](#architecture)
@@ -33,6 +44,20 @@ Two classes, two roles. Pick the one that matches what your code does.
 - [Environment variables](#environment-variables)
 - [Project layout](#project-layout)
 - [License](#license)
+
+---
+
+## Website
+
+Commercial landing page for Cognilance (beta waitlist, product narrative, team).
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Optional waitlist webhook: copy [`web/.env.example`](web/.env.example) to `web/.env.local` and set `NEXT_PUBLIC_WAITLIST_ENDPOINT`.
 
 ---
 
@@ -723,6 +748,7 @@ python -m orchestrator
 
 ```
 cognilance/
+├── web/                     # Commercial landing site (Next.js, beta waitlist)
 ├── cognilance/              # SDK package
 │   ├── __init__.py          # Public exports
 │   ├── assets/
