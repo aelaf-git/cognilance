@@ -49,7 +49,7 @@ async def stream_llm(
     return "".join(parts)
 
 
-def reveal_text(text: str, *, event: str = "answer", chunk_size: int = 32) -> None:
+def reveal_text(text: str, *, event: str = "answer", chunk_size: int = 12) -> None:
     """Emit pre-generated text in chunks (for hired agent responses)."""
     if not text:
         return

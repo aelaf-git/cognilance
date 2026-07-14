@@ -47,6 +47,8 @@ class _CognilanceRuntime(ABC):
         host: str = "0.0.0.0",
         port: int | None = None,
         config: Config | None = None,
+        payout_wallet: str | None = None,
+        price_usd_cents: int = 0,
     ) -> None:
         self.name = name
         self.skill_names = skills
@@ -59,6 +61,14 @@ class _CognilanceRuntime(ABC):
         self.host = host
         self._config = config or Config.from_env(port=port)
         self._port = port or self._config.port
+        import os
+
+        self.payout_wallet = payout_wallet or os.environ.get("PAYOUT_WALLET")
+        self.price_usd_cents = price_usd_cents
+        if price_usd_cents == 0:
+            raw = os.environ.get("PRICE_USD_CENTS")
+            if raw is not None:
+                self.price_usd_cents = int(raw)
         self._agent_id: str | None = None
         self._agent_card: AgentCard | None = None
         self._heartbeat_task: asyncio.Task[None] | None = None
@@ -124,6 +134,8 @@ class _CognilanceRuntime(ABC):
             skills=[Skill.from_name(s) for s in self.skill_names],
             visibility=self.visibility,
             tags=self._registration_tags(),
+            payout_wallet=self.payout_wallet,
+            price_usd_cents=self.price_usd_cents,
         )
 
     async def _heartbeat_loop(self, registry: RegistryClient) -> None:
@@ -160,6 +172,8 @@ class _CognilanceRuntime(ABC):
                     description=self.description,
                     visibility=self.visibility,
                     tags=self._registration_tags(),
+                    payout_wallet=self.payout_wallet,
+                    price_usd_cents=self.price_usd_cents,
                 )
                 self._agent_id = card.id
                 self._agent_card.id = card.id

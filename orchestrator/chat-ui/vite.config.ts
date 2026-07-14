@@ -12,7 +12,8 @@ export default defineConfig({
   },
   build: {
     outDir: "../src/orchestrator/ui/static",
-    emptyOutDir: true,
+    // Keep .gitkeep; only replace index.html each build.
+    emptyOutDir: false,
     cssCodeSplit: false,
   },
 });

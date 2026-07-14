@@ -4,6 +4,9 @@ Skill: `email-writing` · Port: `8101`
 
 Independent `CognilanceWorker` using Groq for composition and orchestrator Gmail proxy for send/read.
 
+Bodies are **Gmail-ready HTML** (fonts, sizes, colors, lists, etc. via inline styles). The
+orchestrator sends `text/html` when the body looks like HTML so recipients see formatting.
+
 ## Run
 
 ```bash

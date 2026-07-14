@@ -28,6 +28,8 @@ export type CatalogAgent = {
   online: boolean;
   skills: string[];
   url?: string | null;
+  price_usd_cents?: number;
+  payout_wallet?: string | null;
 };
 
 export type FeedCard = {
@@ -60,6 +62,7 @@ export type ChatMessage = {
   streaming?: boolean;
   error?: boolean;
   sessionId?: string;
+  ui?: UiItem | null;
 };
 
 export type ConversationSummary = {
@@ -110,6 +113,7 @@ export type AppIntegration = {
   logo?: string;
   category?: string;
   connected: boolean;
+  coming_soon?: boolean;
   auth_type?: string;
   actions?: string[];
 };

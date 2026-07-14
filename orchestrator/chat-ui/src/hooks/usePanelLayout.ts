@@ -36,12 +36,18 @@ function readWidth(key: string, fallback: number) {
 }
 
 export function usePanelLayout() {
-  const [sidebarExpanded, setSidebarExpanded] = useState(() =>
-    readBool(KEYS.sidebarExpanded, true),
-  );
-  const [detailExpanded, setDetailExpanded] = useState(() =>
-    readBool(KEYS.detailExpanded, true),
-  );
+  const [sidebarExpanded, setSidebarExpanded] = useState(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      return false;
+    }
+    return readBool(KEYS.sidebarExpanded, true);
+  });
+  const [detailExpanded, setDetailExpanded] = useState(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      return false;
+    }
+    return readBool(KEYS.detailExpanded, true);
+  });
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     readWidth(KEYS.sidebarWidth, DEFAULT_SIDEBAR_W),
   );

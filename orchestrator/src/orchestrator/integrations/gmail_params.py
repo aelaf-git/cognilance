@@ -237,20 +237,37 @@ def mark_email_draft_sent(conversation_id: str) -> None:
         DraftStore().mark_sent(conversation_id, "email")
 
 
+_TAG_RE = re.compile(r"<[^>]+>")
+_BLOCK_BREAK_RE = re.compile(r"</(?:p|div|h[1-6]|li|tr)>|<br\s*/?>", re.IGNORECASE)
+
+
+def email_body_preview(body: str, *, max_chars: int = 220) -> str:
+    """Plain-text preview of an email body — HTML stripped, whitespace collapsed."""
+    text = _BLOCK_BREAK_RE.sub(" ", body)
+    text = _TAG_RE.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) > max_chars:
+        text = text[: max_chars].rstrip() + "…"
+    return text
+
+
 def format_email_draft(payload: dict[str, Any]) -> str:
+    """Short markdown summary — the email-draft card shows the full formatted email."""
     subject = str(payload.get("subject") or "(no subject)")
     to_addr = str(payload.get("to") or "").strip()
-    body = str(payload.get("body") or "")
+    preview = email_body_preview(str(payload.get("body") or ""))
     lines = [
-        "Email draft for your review:",
+        "Here's your email draft:",
         "",
-        f"Subject: {subject}",
+        f"- **To:** {to_addr or '_add a recipient when you approve_'}",
+        f"- **Subject:** {subject}",
     ]
-    if to_addr:
-        lines.append(f"To: {to_addr}")
-    else:
-        lines.append("To: (provide recipient when you approve)")
-    lines.extend(["", body, "", "Reply with approval and the recipient address to send."])
+    if preview:
+        lines.append(f"- **Preview:** {preview}")
+    notes = str(payload.get("format_notes") or "").strip()
+    if notes:
+        lines.append(f"- **Formatting:** {notes}")
+    lines.extend(["", "Reply with your approval (and the recipient address if missing) to send."])
     return "\n".join(lines)
 
 
@@ -263,18 +280,15 @@ def format_send_email_result(payload: dict[str, Any]) -> str:
         )
     subject = str(payload.get("subject") or "(no subject)")
     to_addr = str(payload.get("to") or "")
-    body = str(payload.get("body") or payload.get("sent_body") or "")
+    preview = email_body_preview(str(payload.get("body") or payload.get("sent_body") or ""))
     lines = [
-        f"Email sent to {to_addr}.",
-        f"Gmail message ID: {message_id}",
+        f"Your email is on its way to **{to_addr}**.",
         "",
-        f"Subject: {subject}",
-        "",
-        "Body:",
-        body,
-        "",
-        "If you do not see it in the inbox, check Spam or Promotions.",
+        f"- **Subject:** {subject}",
     ]
+    if preview:
+        lines.append(f"- **Preview:** {preview}")
+    lines.extend(["", "If it doesn't show up in the inbox, check Spam or Promotions."])
     return "\n".join(lines)
 
 

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import type { AppIntegration } from "@/types";
 
-const LOGO_STYLES: Record<string, { bg: string; label: string }> = {
+/** Fallback initials when an image fails to load. */
+const LOGO_FALLBACK: Record<string, { bg: string; label: string }> = {
   drive: { bg: "bg-blue-500/20 text-blue-400", label: "GD" },
   gmail: { bg: "bg-red-500/20 text-red-400", label: "GM" },
   calendar: { bg: "bg-sky-500/20 text-sky-400", label: "GC" },
@@ -10,12 +12,29 @@ const LOGO_STYLES: Record<string, { bg: string; label: string }> = {
 };
 
 export function IntegrationLogo({ logo }: { logo: string }) {
-  const style = LOGO_STYLES[logo] ?? { bg: "bg-surface text-muted", label: "?" };
+  const id = logo.trim().toLowerCase();
+  const fallback = LOGO_FALLBACK[id] ?? { bg: "bg-surface text-muted", label: "?" };
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${fallback.bg}`}
+      >
+        {fallback.label}
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${style.bg}`}
-    >
-      {style.label}
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-white/5 p-1.5">
+      <img
+        src={`/integrations/logos/${encodeURIComponent(id)}`}
+        alt=""
+        className="h-full w-full object-contain"
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
     </div>
   );
 }
@@ -37,40 +56,40 @@ export function IntegrationsPage({
 }: IntegrationsPageProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 items-center gap-4 border-b border-border px-6 py-4">
-        <img src="/logo.png" alt="Cognilance" className="h-7 w-auto object-contain" />
-        <div>
+      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
+        <img src="/logo.png" alt="Cognilance" className="h-6 w-auto object-contain sm:h-7" />
+        <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
             Integrations
           </p>
           <p className="text-sm text-dim">Connect apps for the orchestrator agent</p>
         </div>
-        <a href="/chat" className="ml-auto text-xs text-registry hover:underline">
+        <a href="/chat" className="text-xs text-registry hover:underline sm:ml-auto">
           Back to chat
         </a>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto p-4 scrollbar-thin sm:p-6">
         {banner ? (
           <div className="mb-4 rounded-lg border border-registry/30 bg-registry/10 px-4 py-3 text-sm text-registry">
             {banner}
           </div>
         ) : null}
 
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted">
             OAuth connections — tokens are stored encrypted server-side and never shown here.
           </p>
           <button
             type="button"
             onClick={onRefresh}
-            className="text-xs text-dim hover:text-white"
+            className="self-start text-xs text-dim hover:text-white"
           >
             Refresh
           </button>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {integrations.map((item) => (
             <div
               key={item.id}
@@ -83,16 +102,22 @@ export function IntegrationsPage({
                     <h3 className="font-medium text-white">{item.name}</h3>
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                        item.connected
-                          ? "bg-genui/10 text-genui"
-                          : "bg-background text-dim border border-border"
+                        item.coming_soon
+                          ? "border border-border bg-background text-muted"
+                          : item.connected
+                            ? "bg-genui/10 text-genui"
+                            : "border border-border bg-background text-dim"
                       }`}
                     >
-                      {item.connected ? "Connected" : "Disconnected"}
+                      {item.coming_soon
+                        ? "Coming soon"
+                        : item.connected
+                          ? "Connected"
+                          : "Disconnected"}
                     </span>
                   </div>
                   <p className="mt-2 text-sm leading-relaxed text-muted">{item.description}</p>
-                  {item.actions?.length ? (
+                  {!item.coming_soon && item.actions?.length ? (
                     <p className="mt-2 text-[11px] text-dim">
                       Agent actions: {item.actions.join(", ")}
                     </p>
@@ -100,7 +125,9 @@ export function IntegrationsPage({
                 </div>
               </div>
               <div className="mt-4">
-                {item.connected ? (
+                {item.coming_soon ? (
+                  <span className="text-xs text-dim">Coming soon</span>
+                ) : item.connected ? (
                   <button
                     type="button"
                     onClick={() => onDisconnect(item.id)}

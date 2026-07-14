@@ -11,7 +11,7 @@ from prisma import Prisma
 from prisma.models import Agent
 
 from app.config import get_settings
-from app.schemas import AgentResponse, RegisterAgentRequest
+from app.schemas import AgentResponse, RegisterAgentRequest, UpdateAgentPaymentRequest
 
 
 def _skill_objects(names: list[str]) -> list[dict[str, Any]]:
@@ -45,6 +45,8 @@ def agent_to_response(agent: Agent) -> AgentResponse:
         online=agent.online,
         last_heartbeat=agent.lastHeartbeat,
         version=agent.version,
+        payout_wallet=getattr(agent, "payoutWallet", None),
+        price_usd_cents=int(getattr(agent, "priceUsdCents", 0) or 0),
     )
 
 
@@ -54,6 +56,8 @@ async def register_agent(
     body: RegisterAgentRequest,
 ) -> AgentResponse:
     now = datetime.now(timezone.utc)
+    if body.price_usd_cents > 0 and not body.payout_wallet:
+        raise ValueError("payout_wallet is required when price_usd_cents > 0")
     agent = await db.agent.create(
         data={
             "name": body.name,
@@ -64,9 +68,36 @@ async def register_agent(
             "tags": json.dumps(body.tags),
             "online": True,
             "lastHeartbeat": now,
+            "payoutWallet": body.payout_wallet,
+            "priceUsdCents": body.price_usd_cents,
         }
     )
     return agent_to_response(agent)
+
+
+async def update_agent_payment(
+    db: Prisma,
+    *,
+    agent_id: UUID | str,
+    body: UpdateAgentPaymentRequest,
+) -> AgentResponse:
+    agent = await db.agent.find_first(where={"id": str(agent_id)})
+    if agent is None:
+        raise LookupError("Agent not found")
+
+    data: dict[str, Any] = {"updatedAt": datetime.now(timezone.utc)}
+    if body.payout_wallet is not None:
+        data["payoutWallet"] = body.payout_wallet or None
+    if body.price_usd_cents is not None:
+        data["priceUsdCents"] = body.price_usd_cents
+
+    next_price = data.get("priceUsdCents", agent.priceUsdCents or 0)
+    next_wallet = data.get("payoutWallet", agent.payoutWallet)
+    if next_price > 0 and not next_wallet:
+        raise ValueError("payout_wallet is required when price_usd_cents > 0")
+
+    updated = await db.agent.update(where={"id": str(agent_id)}, data=data)
+    return agent_to_response(updated)
 
 
 async def heartbeat(db: Prisma, *, agent_id: UUID | str) -> None:

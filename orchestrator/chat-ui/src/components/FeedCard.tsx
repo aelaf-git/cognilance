@@ -174,38 +174,55 @@ function CatalogPanel({ agents }: { agents: CatalogAgent[] }) {
   }
   return (
     <div className="space-y-2">
-      {agents.map((agent) => (
-        <div
-          key={`${agent.name}-${agent.url ?? ""}`}
-          className="rounded-lg border border-registry/30 bg-registry/[0.06] px-3 py-2.5"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium text-white">{agent.name}</p>
-            <span
-              className={cn(
-                "rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                agent.online
-                  ? "border-registry/40 bg-registry/15 text-registry"
-                  : "border-border text-dim",
-              )}
-            >
-              {agent.online ? "online" : "offline"}
-            </span>
-          </div>
-          {agent.skills.length ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {agent.skills.map((skill) => (
+      {agents.map((agent) => {
+        const chatUrl = agent.url
+          ? `${String(agent.url).replace(/\/$/, "")}/chat`
+          : null;
+        return (
+          <div
+            key={`${agent.name}-${agent.url ?? ""}`}
+            className="rounded-lg border border-registry/30 bg-registry/[0.06] px-3 py-2.5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-white">{agent.name}</p>
+              <div className="flex flex-wrap items-center gap-2">
                 <span
-                  key={skill}
-                  className="rounded-md border border-border px-2 py-0.5 font-mono text-[10px] text-dim"
+                  className={cn(
+                    "rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                    agent.online
+                      ? "border-registry/40 bg-registry/15 text-registry"
+                      : "border-border text-dim",
+                  )}
                 >
-                  {skill}
+                  {agent.online ? "online" : "offline"}
                 </span>
-              ))}
+                {chatUrl && agent.online ? (
+                  <a
+                    href={chatUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md border border-registry/40 bg-registry/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-registry transition-colors hover:bg-registry/25"
+                  >
+                    Chat with agent
+                  </a>
+                ) : null}
+              </div>
             </div>
-          ) : null}
-        </div>
-      ))}
+            {agent.skills.length ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {agent.skills.map((skill) => (
+                  <span
+                    key={skill}
+                    className="rounded-md border border-border px-2 py-0.5 font-mono text-[10px] text-dim"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }

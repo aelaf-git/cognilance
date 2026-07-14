@@ -12,6 +12,7 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+!**/.env.example
 
 # --- Python ---
 __pycache__/
@@ -108,8 +109,23 @@ pnpm-debug.log*
 *.local
 
 # Generated single-file UI bundles (build from chat-ui / developer-ui)
-orchestrator/src/orchestrator/ui/static/index.html
-agent-host/src/agent_host/static/index.html
+orchestrator/src/orchestrator/ui/static/*
+!orchestrator/src/orchestrator/ui/static/.gitkeep
+agent-host/src/agent_host/static/*
+!agent-host/src/agent_host/static/.gitkeep
+
+# --- Solana / Anchor (payments/) ---
+.anchor/
+test-ledger/
+.surfpool/
+**/*-keypair.json
+**/test-wallets/
+payments/target/
+payments/test-ledger/
+payments/.anchor/
+payments/node_modules/
+payments/scripts/test-wallets/
+payments/keys/
 
 # --- Cognilance runtime data ---
 data/hosted-agents/

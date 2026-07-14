@@ -16,6 +16,7 @@ from orchestrator.integrations.gmail_params import (
 from orchestrator.drafts.store import DraftStore
 from orchestrator.registry_cache import has_agent_for_skill
 from orchestrator.integrations.calendar_params import prepare_calendar_list_params
+from orchestrator.integrations.registry import INTEGRATIONS
 from orchestrator.subscriptions.monitor_intent import (
     is_monitor_request,
     is_stop_monitor_request,
@@ -70,7 +71,10 @@ def integration_subtasks_for_query(
         from orchestrator.subscriptions.store import SubscriptionStore
 
         conv_id = current_conversation_id.get() or ""
-        if conv_id and SubscriptionStore().list_active_for_conversation(conv_id):
+        if conv_id and any(
+            s.integration == "gmail" and s.kind == "new_email"
+            for s in SubscriptionStore().list_active_for_conversation(conv_id)
+        ):
             return None
         integration = monitor_integration_for_query(query)
         if integration == "gmail" and client.is_connected(user_id, "gmail"):
@@ -211,8 +215,10 @@ def integration_subtasks_for_query(
             }
         ]
 
-    if client.is_connected(user_id, "slack") and _query_mentions(
-        q, "slack", "channel", "channels"
+    if (
+        not INTEGRATIONS.get("slack", {}).get("coming_soon")
+        and client.is_connected(user_id, "slack")
+        and _query_mentions(q, "slack", "channel", "channels")
     ):
         return [
             {
@@ -227,8 +233,12 @@ def integration_subtasks_for_query(
             }
         ]
 
-    if client.is_connected(user_id, "github") and _query_mentions(
-        q, "github", "repository", "repositories", "repo", "repos", "pull request", "issues"
+    if (
+        not INTEGRATIONS.get("github", {}).get("coming_soon")
+        and client.is_connected(user_id, "github")
+        and _query_mentions(
+            q, "github", "repository", "repositories", "repo", "repos", "pull request", "issues"
+        )
     ):
         return [
             {

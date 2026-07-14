@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatMessage, OrchestrationTurn } from "@/types";
+import type { ChatMessage, OrchestrationTurn, UiItem } from "@/types";
 import {
   applySessionEvent,
   createEventContext,
   extractChatOutput,
+  extractUiItem,
   finalizeSessionTurn,
   isOutputEvent,
   makeCard,
@@ -27,6 +28,7 @@ type ConversationMessage = {
   id: number;
   role: string;
   content: string;
+  ui?: UiItem | null;
 };
 
 export function useOrchestrator(
@@ -44,6 +46,8 @@ export function useOrchestrator(
   const liveSessionRef = useRef<string | null>(null);
   const lastNotificationIdRef = useRef(0);
   const notificationAbortRef = useRef<AbortController | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const liveAssistantIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     conversationIdRef.current = conversationId;
@@ -136,6 +140,7 @@ export function useOrchestrator(
           id: `msg-${m.id}`,
           role: m.role === "user" ? "user" : "assistant",
           content: m.content,
+          ui: m.ui ?? null,
         })),
       );
       return true;
@@ -223,11 +228,23 @@ export function useOrchestrator(
             return {
               ...m,
               content,
-              streaming: event !== "final" && event !== "answer_done" && event !== "error",
+              ui: extractUiItem(data) ?? m.ui,
+              streaming:
+                event !== "final" &&
+                event !== "answer_done" &&
+                event !== "error" &&
+                event !== "session_aborted",
               error: event === "error",
             };
           }),
         );
+      } else if (assistantId) {
+        const uiItem = extractUiItem(data);
+        if (uiItem) {
+          setChatMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, ui: uiItem } : m)),
+          );
+        }
       }
     },
     [],
@@ -238,44 +255,61 @@ export function useOrchestrator(
       body: ReadableStream<Uint8Array>,
       sessionId: string,
       assistantId: string | null,
+      signal?: AbortSignal,
     ) => {
       const ctx = createEventContext();
       const reader = body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data: ")) continue;
-          let data: Record<string, unknown>;
-          try {
-            data = JSON.parse(line.slice(6));
-          } catch {
-            continue;
-          }
-
-          if (data.event === "session_created" || data.event === "mission_created") {
-            liveSessionRef.current = String(data.session_id ?? data.mission_id);
-          }
-          if (data.conversation_id) {
-            const cid = String(data.conversation_id);
-            conversationIdRef.current = cid;
-            setConversationId(cid);
-          } else if (data.thread_id) {
-            const cid = String(data.thread_id);
-            conversationIdRef.current = cid;
-            setConversationId(cid);
-          }
-
-          processEvent(sessionId, data, assistantId, ctx);
+      const onAbort = () => {
+        void reader.cancel();
+      };
+      if (signal) {
+        if (signal.aborted) {
+          void reader.cancel();
+          return;
         }
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      try {
+        while (true) {
+          if (signal?.aborted) break;
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() ?? "";
+
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith("data: ")) continue;
+            let data: Record<string, unknown>;
+            try {
+              data = JSON.parse(line.slice(6));
+            } catch {
+              continue;
+            }
+
+            if (data.event === "session_created" || data.event === "mission_created") {
+              liveSessionRef.current = String(data.session_id ?? data.mission_id);
+            }
+            if (data.conversation_id) {
+              const cid = String(data.conversation_id);
+              conversationIdRef.current = cid;
+              setConversationId(cid);
+            } else if (data.thread_id) {
+              const cid = String(data.thread_id);
+              conversationIdRef.current = cid;
+              setConversationId(cid);
+            }
+
+            processEvent(sessionId, data, assistantId, ctx);
+          }
+        }
+      } finally {
+        signal?.removeEventListener("abort", onAbort);
       }
 
       setSessionTurns((prev) => {
@@ -285,12 +319,15 @@ export function useOrchestrator(
       });
 
       if (assistantId) {
+        const lastUi =
+          [...ctx.uiItems].reverse().find((item) => item.name !== "text-card") ?? null;
         setChatMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
               ? {
                   ...m,
                   content: m.content || ctx.answer,
+                  ui: m.ui ?? lastUi,
                   streaming: false,
                 }
               : m,
@@ -301,6 +338,42 @@ export function useOrchestrator(
     [processEvent],
   );
 
+  const stop = useCallback(async (sessionId?: string) => {
+    const liveId = liveSessionRef.current;
+    const target = sessionId ?? liveId;
+    const isLiveTarget = Boolean(liveId && (!sessionId || sessionId === liveId));
+    if (isLiveTarget) {
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
+    }
+    if (target) {
+      try {
+        await fetch(`/sessions/${target}/abort`, { method: "POST" });
+      } catch {
+        /* ignore network errors — local abort still stops the UI stream */
+      }
+    }
+    if (isLiveTarget) {
+      setIsStreaming(false);
+      const assistantId = liveAssistantIdRef.current;
+      if (assistantId) {
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  content: m.content.trim() || "Stopped.",
+                  streaming: false,
+                }
+              : m,
+          ),
+        );
+      }
+      liveAssistantIdRef.current = null;
+    }
+    onSessionUpdate?.();
+  }, [onSessionUpdate]);
+
   const send = useCallback(
     async (text: string) => {
       let convId = conversationIdRef.current;
@@ -309,6 +382,7 @@ export function useOrchestrator(
       }
       const userId = uid();
       const assistantId = uid();
+      liveAssistantIdRef.current = assistantId;
       setChatMessages((prev) => [
         ...prev,
         { id: userId, role: "user", content: text },
@@ -316,6 +390,8 @@ export function useOrchestrator(
       ]);
       setIsStreaming(true);
       liveSessionRef.current = null;
+      const controller = new AbortController();
+      streamAbortRef.current = controller;
 
       let sessionId = "";
 
@@ -328,6 +404,7 @@ export function useOrchestrator(
             conversation_id: convId,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           }),
+          signal: controller.signal,
         });
         if (!res.ok || !res.body) throw new Error("Stream request failed");
         sessionId =
@@ -335,26 +412,45 @@ export function useOrchestrator(
           res.headers.get("X-Mission-Id") ??
           liveSessionRef.current ??
           uid();
+        liveSessionRef.current = sessionId;
         setSessionTurns((prev) => ({
           ...prev,
           [sessionId]: prev[sessionId] ?? emptySessionTurn(sessionId),
         }));
         onSessionStarted?.(sessionId);
-        await processStream(res.body, sessionId, assistantId);
+        await processStream(res.body, sessionId, assistantId, controller.signal);
       } catch (err) {
-        setChatMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId
-              ? {
-                  ...m,
-                  content: err instanceof Error ? err.message : String(err),
-                  streaming: false,
-                  error: true,
-                }
-              : m,
-          ),
-        );
+        if (controller.signal.aborted) {
+          setChatMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: m.content.trim() || "Stopped.",
+                    streaming: false,
+                  }
+                : m,
+            ),
+          );
+        } else {
+          setChatMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: err instanceof Error ? err.message : String(err),
+                    streaming: false,
+                    error: true,
+                  }
+                : m,
+            ),
+          );
+        }
       } finally {
+        if (streamAbortRef.current === controller) {
+          streamAbortRef.current = null;
+        }
+        liveAssistantIdRef.current = null;
         setIsStreaming(false);
         onSessionUpdate?.();
       }
@@ -434,6 +530,7 @@ export function useOrchestrator(
     chatMessages,
     sessionTurns,
     send,
+    stop,
     loadSessionHistory,
     watchLiveSession,
     isStreaming,

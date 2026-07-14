@@ -1,0 +1,32 @@
+.pillars {
+  display: grid;
+  gap: 1.75rem;
+  margin-top: 3rem;
+  border-top: 1px solid var(--line);
+  padding-top: 2rem;
+}
+
+.pillar h3 {
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  margin: 0.35rem 0 0.75rem;
+}
+
+.pillar p {
+  margin: 0;
+  color: var(--muted);
+  max-width: 28rem;
+}
+
+.index {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--mint);
+}
+
+@media (min-width: 900px) {
+  .pillars {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2.5rem;
+  }
+}

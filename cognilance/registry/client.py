@@ -34,6 +34,8 @@ class RegistryClient:
         description: str = "",
         visibility: AgentVisibility = AgentVisibility.PUBLIC,
         tags: list[str] | None = None,
+        payout_wallet: str | None = None,
+        price_usd_cents: int = 0,
     ) -> AgentCard:
         payload = {
             "name": name,
@@ -42,10 +44,31 @@ class RegistryClient:
             "skills": skills,
             "visibility": visibility.value,
             "tags": tags or [],
+            "payout_wallet": payout_wallet,
+            "price_usd_cents": price_usd_cents,
         }
         response = await self._client.post("/v1/agents", json=payload)
         if response.status_code >= 400:
             raise RegistryError(f"Failed to register agent: {response.text}")
+        return self._parse_agent_card(response.json())
+
+    async def update_payment(
+        self,
+        agent_id: str,
+        *,
+        payout_wallet: str | None = None,
+        price_usd_cents: int | None = None,
+    ) -> AgentCard:
+        payload: dict[str, Any] = {}
+        if payout_wallet is not None:
+            payload["payout_wallet"] = payout_wallet
+        if price_usd_cents is not None:
+            payload["price_usd_cents"] = price_usd_cents
+        response = await self._client.patch(
+            f"/v1/agents/{agent_id}/payment", json=payload
+        )
+        if response.status_code >= 400:
+            raise RegistryError(f"Failed to update payment for {agent_id}: {response.text}")
         return self._parse_agent_card(response.json())
 
     async def heartbeat(self, agent_id: str) -> None:
@@ -109,4 +132,6 @@ class RegistryClient:
             visibility=visibility,
             tags=data.get("tags", []),
             online=data.get("online", True),
+            payout_wallet=data.get("payout_wallet"),
+            price_usd_cents=int(data.get("price_usd_cents") or 0),
         )

@@ -30,22 +30,50 @@ _SEND_PHRASES = (
 )
 
 SYSTEM = """You write emails on behalf of the end user — never about yourself or Cognilance.
-You receive their conversation history and optional prior draft. Follow their topic, recipient,
-tone, length, and formatting requests exactly.
-CRITICAL:
-- `body` is the actual email text only (greeting, paragraphs, sign-off).
-- Never invent an email about being an "email writer", marketplace services, or your own identity.
-- Never repeat the user's command verbatim as the body.
-- Prefer continuing/revising a prior draft when one is provided.
-- Extract recipient email when mentioned."""
+You receive their conversation history and optional prior draft. Behave like a careful human
+using Gmail: clear prose, appropriate tone, and intentional formatting.
+
+ROLE
+- Write as the user (their voice, their ask). Never invent marketplace / email-writer self-intros.
+- Infer length, tone, and structure from the conversation (e.g. three paragraphs, casual, formal).
+- Extract recipient email when mentioned. Prefer revising a prior draft when one is provided;
+  preserve its formatting unless the user asks to change style.
+
+SUBJECT
+- Plain text only (no HTML).
+
+BODY (Gmail-ready HTML)
+- `body` must be the actual email (greeting, paragraphs, sign-off) as HTML — never the user's
+  command verbatim.
+- Prefer one outer <div> wrapping the message; avoid full <html>/<body> documents.
+- Default to light professional structure (<p>, <br>, optional mild emphasis) even when the user
+  does not name a font.
+- When the user asks for font, size, color, bold/italic/underline, lists, links, or alignment —
+  apply them with inline CSS. Same when they imply style (e.g. "Times New Roman", "14pt",
+  "blue headings", "larger title").
+
+ALLOWED TAGS: p, br, div, span, strong, b, em, i, u, ul, ol, li, a, h1, h2, h3.
+ALLOWED INLINE STYLES: font-family, font-size, color, text-align, line-height.
+FORBIDDEN: script, iframe, form, remote tracking images, javascript: URLs.
+
+format_notes: short human summary of styling applied (e.g. "Times New Roman 14pt, navy headings").
+Leave empty if no special styling beyond basic paragraphs."""
 
 
 class EmailDraft(BaseModel):
     to: str | None = Field(default=None, description="Recipient email if known")
-    subject: str = Field(description="Email subject line")
-    body: str = Field(description="Full email body with greeting and sign-off")
+    subject: str = Field(description="Plain-text email subject line (no HTML)")
+    body: str = Field(
+        description=(
+            "Gmail-ready HTML email body with greeting, paragraphs, and sign-off. "
+            "Use allowed tags and inline styles for font-family, font-size, color, etc."
+        )
+    )
     tone: str = Field(default="professional", description="Tone of the email")
-
+    format_notes: str = Field(
+        default="",
+        description="Brief note on fonts/colors/layout applied, or empty if plain structure",
+    )
 
 worker = CognilanceWorker(
     name="Email Writer Agent",
@@ -64,7 +92,7 @@ def _llm():
     return ChatGroq(
         model=model,
         api_key=api_key,
-        temperature=0.4,
+        temperature=0.5,
     ).with_structured_output(EmailDraft)
 
 
@@ -191,6 +219,9 @@ def _output(
         "status": status,
         "gmail_message_id": gmail_message_id,
     }
+    notes = (draft.format_notes or "").strip()
+    if notes:
+        data["format_notes"] = notes
     if extra:
         data.update(extra)
     return data
@@ -236,6 +267,7 @@ async def handle(task):
             subject=str(prior.get("subject") or "Message"),
             body=str(prior["body"]),
             tone=str(prior.get("tone") or "professional"),
+            format_notes=str(prior.get("format_notes") or ""),
         )
 
     # Pure send approval: use pending draft as-is — do not invent a new email.

@@ -94,11 +94,29 @@ class HireAgentTool:
             agent,
             input_text=instruction,
             input_data=hire_input or None,
+            payer_user_id=current_user_id.get() or "anonymous",
+            mission_id=current_mission_id.get(),
         )
-        emit("tool_done", tool=f"hire:{skill}", assignee=agent.name, status="completed")
+        emit(
+            "tool_done",
+            tool=f"hire:{skill}",
+            assignee=agent.name,
+            status="completed",
+            escrow_hire_id=result.payment.hire_id if result.payment else None,
+        )
         return ToolResult(
             text=result.output.text or "",
-            data=result.output.data or {},
+            data={
+                **(result.output.data or {}),
+                **(
+                    {
+                        "escrow_hire_id": result.payment.hire_id,
+                        "escrow_amount_base_units": result.payment.amount_base_units,
+                    }
+                    if result.payment
+                    else {}
+                ),
+            },
             assignee=agent.name,
         )
 

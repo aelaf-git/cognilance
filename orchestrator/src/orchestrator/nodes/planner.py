@@ -12,10 +12,6 @@ from orchestrator.context import current_user_id
 from orchestrator.conversation.ack import acknowledgment_reply, is_acknowledgment
 from orchestrator.drafts.store import DraftStore
 from orchestrator.integrations.client import IntegrationClient
-from orchestrator.integrations.gmail_params import (
-    is_email_compose_request,
-    is_email_send_approval,
-)
 from orchestrator.integrations.routing import integration_subtasks_for_query
 from orchestrator.tools.time_routing import time_subtasks_for_query
 from orchestrator.tools.web_routing import web_subtasks_for_query
@@ -29,8 +25,17 @@ from orchestrator.registry_cache import (
 )
 from orchestrator.state import Plan, State, Subtask
 from orchestrator.streaming import emit, emit_status, stream_llm
+from orchestrator.subscriptions.monitor_intent import is_monitor_request
 from orchestrator.subscriptions.store import SubscriptionStore
-from orchestrator.subscriptions.monitor_intent import is_monitor_request, is_stop_monitor_request
+
+
+def _gmail_inbox_listener_active(conversation_id: str) -> bool:
+    if not conversation_id:
+        return False
+    return any(
+        s.integration == "gmail" and s.kind == "new_email"
+        for s in SubscriptionStore().list_active_for_conversation(conversation_id)
+    )
 
 UI_COMPONENTS = """- email-draft: composed email with to, subject, body, and send status
 - research-sources: research summaries with linked sources
@@ -49,6 +54,15 @@ Think out loud before acting. Write in clear prose (not JSON). Cover:
 7. Never plan to use app:* tools that are NOT CONNECTED
 8. For email compose/send/revise: if email-writing is in the catalog, plan hire:email-writing only —
    do NOT plan app:gmail compose_email/send_email or a separate web+thinking draft pipeline
+9. For web scraping, research, searching, or reading URLs: if web-scraping is in the catalog,
+   plan hire:web-scraping only — do NOT plan web:search / web:fetch_url or a web+thinking pipeline
+10. For checking/validating/verifying links or URLs (working, broken, reachable): if
+    link-validation is in the catalog, plan hire:link-validation only
+11. VALIDATORS: agents whose skill ends in "-validation" (e.g. link-validation) verify other
+    agents' output. After execution the orchestrator ALWAYS runs a validation pass before
+    replying — using online validator agents, or validating itself when none are registered —
+    and re-hires the responsible agent to fix reported issues. So only plan an explicit
+    validator subtask when validation IS the user's request; do not append one to every plan.
 
 Be concise but thorough."""
 
@@ -180,42 +194,6 @@ def _force_python_subtask(query: str, agents: list[AgentCard]) -> list[Subtask] 
             "skill": None,
             "tool": "thinking",
             "assignee": "thinking",
-            "depends_on": [],
-        }
-    ]
-
-
-def _force_email_hire_subtask(
-    query: str,
-    agents: list[AgentCard],
-    *,
-    conversation_id: str = "",
-) -> list[Subtask] | None:
-    """When email-writing is online, hire it for compose/send — never app:gmail compose."""
-    if is_monitor_request(query) or is_stop_monitor_request(query):
-        return None
-    match = find_agent_by_skill(agents, "email-writing")
-    if not match:
-        return None
-
-    has_pending = False
-    if conversation_id:
-        has_pending = bool(DraftStore().has_pending_email(conversation_id))
-
-    wants_email = is_email_compose_request(query) or is_email_send_approval(
-        query, has_pending_draft=has_pending
-    )
-    if not wants_email:
-        return None
-
-    return [
-        {
-            "id": "email-writing",
-            "title": "Compose and handle email",
-            "instruction": query,
-            "skill": "email-writing",
-            "tool": "hire:email-writing",
-            "assignee": match.name,
             "depends_on": [],
         }
     ]
@@ -377,11 +355,7 @@ async def planner(state: State) -> dict:
     from orchestrator.context import current_conversation_id
 
     conversation_id = current_conversation_id.get() or ""
-    listener_active = False
-    if conversation_id:
-        listener_active = bool(
-            SubscriptionStore().list_active_for_conversation(conversation_id)
-        )
+    listener_active = _gmail_inbox_listener_active(conversation_id)
 
     if is_acknowledgment(query):
         if not (conversation_id and DraftStore().has_pending_email(conversation_id)):
@@ -456,60 +430,6 @@ async def planner(state: State) -> dict:
             text=catalog_text,
         )
 
-        # Hard agent-first: skip LLM planning when a specialist must be hired.
-        forced_email_early = _force_email_hire_subtask(
-            query,
-            catalog_agents,
-            conversation_id=conversation_id,
-        )
-        if forced_email_early:
-            match = forced_email_early[0]
-            thinking = (
-                f"Looked up the marketplace registry first.\n"
-                f"Catalog:\n{catalog_text}\n\n"
-                f"Found online specialist {match['assignee']} "
-                f"(skill={match['skill']}). Hiring it for this email task — "
-                f"not using app:gmail compose or the thinking agent."
-            )
-            emit("thinking_done", text=thinking)
-            plan: Plan = {
-                "reasoning": (
-                    f"Registry listed {match['assignee']} online with skill "
-                    f"{match['skill']}; force-hiring that agent."
-                ),
-                "suggested_ui": "email-draft",
-                "thinking": thinking,
-                "steps": [
-                    {
-                        "title": f"Hire {match['assignee']}",
-                        "detail": f"Delegate via {match['tool']}",
-                    }
-                ],
-            }
-            emit(
-                "plan",
-                data={
-                    **plan,
-                    "complexity": "complex",
-                    "route": "complex",
-                    "subtasks": forced_email_early,
-                },
-            )
-            emit("route_decision", route="complex", complexity="complex")
-            emit("capabilities", text=capabilities)
-            return {
-                **cache_updates,
-                "complexity": "complex",
-                "route": "complex",
-                "thinking": thinking,
-                "plan": plan,
-                "subtasks": forced_email_early,
-                "subtask_results": [],
-                "final_text": "",
-                "final_data": {},
-                "answer_streamed": False,
-            }
-
         emit_status("Planning…")
         try:
             complexity_decision = await _classify_complexity(query, catalog_text, capabilities)
@@ -565,6 +485,18 @@ async def planner(state: State) -> dict:
                         "EMAIL: If email-writing is in the catalog, plan EXACTLY one subtask "
                         "hire:email-writing for compose, revise, or send — never app:gmail "
                         "compose_email/send_email, and never prepend web or thinking draft steps. "
+                        "WEB SCRAPING / RESEARCH: If web-scraping is in the catalog, plan EXACTLY "
+                        "one subtask hire:web-scraping for scraping pages, reading URLs, web "
+                        "research, or current-information lookups — never web:search / "
+                        "web:fetch_url, and never split into web + thinking steps. "
+                        "LINK VALIDATION: If link-validation is in the catalog, plan EXACTLY one "
+                        "subtask hire:link-validation for checking, validating, or verifying that "
+                        "links/URLs work — never web:fetch_url for link checks. "
+                        "VALIDATORS: skills ending in -validation are validator agents. The "
+                        "orchestrator automatically validates every result before replying "
+                        "(hiring online validators, or self-validating when none exist) and "
+                        "re-hires the responsible agent to fix issues — do NOT append validator "
+                        "subtasks to plans unless validation itself is the user's request. "
                         "For Gmail inbox monitoring (notify me when, keep listening, watch inbox): "
                         "use app:gmail action=subscribe_inbox — NOT list_emails. "
                         "To stop: app:gmail action=unsubscribe_inbox. "
@@ -640,7 +572,9 @@ async def planner(state: State) -> dict:
                     route = "complex"
                     subtasks = forced_recurring
                 else:
-                    forced_web = web_subtasks_for_query(query)
+                    forced_web = web_subtasks_for_query(
+                        query, catalog_agents=catalog_agents
+                    )
                     if forced_web:
                         complexity = "complex"
                         route = "complex"
@@ -666,18 +600,6 @@ async def planner(state: State) -> dict:
             subtasks = forced_python
             if not decision.suggested_ui:
                 decision.suggested_ui = "python-code"
-
-        forced_email = _force_email_hire_subtask(
-            query,
-            catalog_agents,
-            conversation_id=conversation_id,
-        )
-        if forced_email:
-            complexity = "complex"
-            route = "complex"
-            subtasks = forced_email
-            if not decision.suggested_ui:
-                decision.suggested_ui = "email-draft"
 
         if route == "complex" and subtasks:
             subtasks = _apply_orchestrator_fallback(subtasks, catalog_agents)

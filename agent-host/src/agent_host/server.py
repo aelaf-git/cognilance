@@ -193,6 +193,33 @@ def create_app() -> FastAPI:
         keys = store.merge_env_vars(agent_id, updates, remove_keys=remove_keys)
         return JSONResponse(content={"keys": keys})
 
+    @app.get("/api/earnings")
+    async def earnings(wallet: str = "") -> JSONResponse:
+        """Mock-USDC earnings for a developer payout wallet (shared payment ledger)."""
+        payout = (wallet or "").strip()
+        if not payout:
+            raise HTTPException(status_code=400, detail="wallet query param required")
+        try:
+            from cognilance.payments import PaymentService
+
+            svc = PaymentService()
+            bal = svc.agent_earnings_base_units(payout)
+            ledger = svc.agent_ledger(payout, limit=25)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return JSONResponse(
+            content={
+                "payout_wallet": payout,
+                "balance_base_units": bal,
+                "balance_usd": bal // 1_000_000,
+                "ledger": ledger,
+                "note": (
+                    "Funds arrive automatically when managers settle hires; "
+                    "set PAYOUT_WALLET + PRICE_USD_CENTS on your agent env."
+                ),
+            }
+        )
+
     @app.post("/api/agents/{agent_id}/start")
     async def start_agent(agent_id: str) -> JSONResponse:
         try:

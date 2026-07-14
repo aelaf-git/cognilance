@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections import defaultdict, deque
-from typing import Any
+from typing import Any, Literal
 
 from cognilance import CognilanceManager
 
 from langchain_core.messages import BaseMessage
+from pydantic import BaseModel, Field
 
 from orchestrator.integrations.client import IntegrationClient
 from orchestrator.integrations.gmail_params import format_email_draft, format_send_email_result
@@ -22,7 +24,7 @@ from orchestrator.integrations.routing import (
 from orchestrator.tools.web import format_web_fetch_result, format_web_search_result
 from orchestrator.llm import get_llm, last_user_text, to_chat_messages
 from orchestrator.state import State, Subtask, SubtaskResult
-from orchestrator.streaming import emit, emit_status
+from orchestrator.streaming import emit, emit_status, stream_llm
 from orchestrator.tools.router import ToolRouter
 from orchestrator.drafts.store import DraftStore
 from orchestrator.integrations.gmail_params import mark_email_draft_sent
@@ -93,6 +95,385 @@ def _persist_email_hire_result(data: dict[str, Any] | None) -> None:
         )
     elif status == "sent":
         mark_email_draft_sent(conv_id)
+
+
+# --- Validation stage ---------------------------------------------------------
+# Validator agents are regular marketplace agents whose skill ends in
+# "-validation" (link-validation, fact-validation, …). After execution the
+# orchestrator ALWAYS validates results before they reach the user: planned
+# validators first, then any online validator agents, and an LLM self-check
+# when no validator agents are registered. Issues trigger one correction round
+# re-hiring the responsible agent.
+
+_VALIDATION_SKILL_SUFFIX = "-validation"
+_SELF_VALIDATOR_ID = "self-validation"
+_URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
+
+
+def _hire_skill_of(subtask: Subtask) -> str | None:
+    tool = str(subtask.get("tool") or "")
+    if tool.startswith("hire:"):
+        return tool.split(":", 1)[1]
+    return subtask.get("skill") or None
+
+
+def _is_validator_skill(skill: str | None) -> bool:
+    return bool(skill and skill.strip().lower().endswith(_VALIDATION_SKILL_SUFFIX))
+
+
+def _is_validator_subtask(subtask: Subtask) -> bool:
+    return _is_validator_skill(_hire_skill_of(subtask))
+
+
+def _catalog_validators(catalog_agents: list) -> list[tuple[Any, str]]:
+    """Online (agent, validator-skill) pairs from the marketplace catalog."""
+    pairs: list[tuple[Any, str]] = []
+    seen: set[str] = set()
+    for agent in catalog_agents or []:
+        if not getattr(agent, "online", False):
+            continue
+        for agent_skill in getattr(agent, "skills", []) or []:
+            slug = (agent_skill.id or agent_skill.name or "").strip().lower()
+            if _is_validator_skill(slug) and slug not in seen:
+                seen.add(slug)
+                pairs.append((agent, slug))
+    return pairs
+
+
+def _validation_issue_data(result: SubtaskResult | None) -> dict[str, Any] | None:
+    """Validator contract: data.status == 'issues_found' means correction needed."""
+    if not result or result.get("status") == "failed":
+        return None
+    data = result.get("data") or {}
+    if data.get("status") == "issues_found":
+        return data
+    return None
+
+
+def _find_planned_validation_issue(
+    subtasks: list[Subtask],
+    results_by_id: dict[str, SubtaskResult],
+) -> tuple[Subtask, dict[str, Any]] | None:
+    for subtask in subtasks:
+        if not _is_validator_subtask(subtask):
+            continue
+        data = _validation_issue_data(results_by_id.get(subtask["id"]))
+        if data:
+            return subtask, data
+    return None
+
+
+def _find_responsible_subtask(
+    subtasks: list[Subtask],
+    results_by_id: dict[str, SubtaskResult],
+    *,
+    validator_id: str | None = None,
+    validator_deps: list[str] | None = None,
+) -> Subtask | None:
+    """The subtask whose output should be corrected — validator deps first, then hires."""
+
+    def has_result(subtask: Subtask) -> bool:
+        if _is_validator_subtask(subtask) or subtask["id"] == validator_id:
+            return False
+        result = results_by_id.get(subtask["id"])
+        return bool(result and result.get("status") != "failed")
+
+    for dep_id in validator_deps or []:
+        for subtask in subtasks:
+            if subtask["id"] == dep_id and has_result(subtask):
+                return subtask
+
+    hires = [s for s in subtasks if has_result(s) and str(s.get("tool") or "").startswith("hire:")]
+    if hires:
+        return hires[-1]
+
+    others = [s for s in subtasks if has_result(s)]
+    return others[-1] if others else None
+
+
+def _result_output_text(result: SubtaskResult, *, limit: int = 4000) -> str:
+    """Text + any URLs from a result's data, for validators to inspect."""
+    parts = [str(result.get("text") or "")]
+    data = result.get("data") or {}
+    for key in ("summary", "body"):
+        value = str(data.get(key) or "")
+        if value and value not in parts[0]:
+            parts.append(value)
+    urls: list[str] = []
+    for source in data.get("sources") or []:
+        if isinstance(source, dict) and source.get("url"):
+            urls.append(str(source["url"]))
+    combined = "\n\n".join(p for p in parts if p)
+    for match in _URL_RE.finditer(combined):
+        url = match.group(0).rstrip(".,;)'\"")
+        if url not in urls:
+            urls.append(url)
+    if urls:
+        combined += "\n\nLinks in this output:\n" + "\n".join(f"- {u}" for u in urls)
+    return combined[:limit]
+
+
+class SelfValidation(BaseModel):
+    status: Literal["ok", "issues_found"] = Field(
+        description="ok when the output is fit to deliver; issues_found for clear problems"
+    )
+    issues: str = Field(default="", description="Short description of the problems found")
+    correction_request: str = Field(
+        default="",
+        description="Actionable instruction for the responsible agent to fix its output",
+    )
+
+
+async def _self_validate(query: str, output_text: str) -> dict[str, Any]:
+    """Orchestrator's own validation when no validator agents are registered."""
+    llm = get_llm(temperature=0).with_structured_output(SelfValidation)
+    try:
+        decision: SelfValidation = await llm.ainvoke(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are the orchestrator's output validator — the last check before "
+                        "a result is delivered to the user. Verify that the output actually "
+                        "addresses the user's request, is internally consistent, contains no "
+                        "raw HTML dumps or broken formatting, and claims no success that the "
+                        "results do not support. Only report issues_found for CLEAR problems "
+                        "that require redoing the work — do not nitpick style or tone. "
+                        "When issues are found, write a correction_request telling the "
+                        "responsible agent exactly what is wrong and what to re-deliver."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"User request:\n{query}\n\nOutput to validate:\n{output_text}",
+                },
+            ]
+        )  # type: ignore[assignment]
+    except Exception:
+        return {"status": "ok", "issues": "", "correction_request": ""}
+    return {
+        "status": decision.status,
+        "issues": decision.issues,
+        "correction_request": decision.correction_request,
+    }
+
+
+async def _run_self_validation(query: str, output_text: str) -> dict[str, Any]:
+    """Self-validation with subtask events so the session UI shows the check."""
+    emit(
+        "subtask_start",
+        id=_SELF_VALIDATOR_ID,
+        title="Validate output (orchestrator)",
+        assignee="orchestrator",
+        skill=None,
+        tool="validate:self",
+        instruction="No validator agents registered — orchestrator validates the output itself.",
+    )
+    data = await _self_validate(query, output_text)
+    emit(
+        "subtask_done",
+        id=_SELF_VALIDATOR_ID,
+        status="completed",
+        assignee="orchestrator",
+        text=(
+            "Output looks good — delivering."
+            if data.get("status") == "ok"
+            else f"Issues found: {data.get('issues', '')}"[:500]
+        ),
+    )
+    return data
+
+
+async def _run_validation_stage(
+    subtasks: list[Subtask],
+    results_by_id: dict[str, SubtaskResult],
+    all_results: list[SubtaskResult],
+    manager: CognilanceManager,
+    router: ToolRouter,
+    *,
+    catalog_agents: list,
+    query: str,
+    conversation: list[BaseMessage] | None,
+) -> list[SubtaskResult]:
+    """Always validate before delivery; apply one correction round on issues."""
+    worker_subtasks = [s for s in subtasks if not _is_validator_subtask(s)]
+    worker_ok = [
+        results_by_id[s["id"]]
+        for s in worker_subtasks
+        if results_by_id.get(s["id"]) and results_by_id[s["id"]].get("status") != "failed"
+    ]
+    if not worker_ok:
+        return all_results
+
+    validator_subtask: Subtask | None = None
+    validation_data: dict[str, Any] | None = None
+    self_validated = False
+
+    # 1) Validators the planner already included in the plan.
+    planned_issue = _find_planned_validation_issue(subtasks, results_by_id)
+    planned_skills = {
+        skill for s in subtasks if _is_validator_skill(skill := _hire_skill_of(s)) and skill
+    }
+    if planned_issue:
+        validator_subtask, validation_data = planned_issue
+    else:
+        output_text = "\n\n---\n\n".join(_result_output_text(r) for r in worker_ok)
+
+        # 2) Online validator agents not already in the plan.
+        extra_validators = [
+            (agent, skill)
+            for agent, skill in _catalog_validators(catalog_agents)
+            if skill not in planned_skills
+        ]
+        if extra_validators:
+            emit_status("Validating results before delivery…")
+        for agent, skill in extra_validators:
+            synthetic: Subtask = {
+                "id": f"validate-{skill}",
+                "title": f"Validate output ({skill})",
+                "instruction": (
+                    "Validate this output before it is delivered to the user. "
+                    "Report issues only when something is actually wrong.\n\n"
+                    f"User request:\n{query}\n\nOutput:\n{output_text}"
+                ),
+                "skill": skill,
+                "tool": f"hire:{skill}",
+                "assignee": agent.name,
+                "depends_on": [],
+            }
+            result = await _run_subtask(
+                synthetic, manager, router, conversation=conversation, prior_results=results_by_id
+            )
+            results_by_id[synthetic["id"]] = result
+            data = _validation_issue_data(result)
+            if data:
+                validator_subtask, validation_data = synthetic, data
+                break
+
+        # 3) No validator agents anywhere — the orchestrator validates itself.
+        if validation_data is None and not extra_validators and not planned_skills:
+            emit_status("Validating results before delivery…")
+            self_validated = True
+            data = await _run_self_validation(query, output_text)
+            if data.get("status") == "issues_found":
+                validation_data = data
+
+    if not validation_data:
+        return all_results
+
+    responsible = _find_responsible_subtask(
+        subtasks,
+        results_by_id,
+        validator_id=validator_subtask["id"] if validator_subtask else _SELF_VALIDATOR_ID,
+        validator_deps=(validator_subtask or {}).get("depends_on"),
+    )
+    if not responsible:
+        return all_results
+
+    return await _apply_correction(
+        responsible,
+        validator_subtask,
+        validation_data,
+        results_by_id,
+        all_results,
+        manager,
+        router,
+        conversation=conversation,
+        query=query,
+        self_validated=self_validated,
+    )
+
+
+async def _apply_correction(
+    responsible: Subtask,
+    validator_subtask: Subtask | None,
+    validation_data: dict[str, Any],
+    results_by_id: dict[str, SubtaskResult],
+    all_results: list[SubtaskResult],
+    manager: CognilanceManager,
+    router: ToolRouter,
+    *,
+    conversation: list[BaseMessage] | None,
+    query: str,
+    self_validated: bool,
+) -> list[SubtaskResult]:
+    """One correction round: re-run the responsible subtask, then re-validate."""
+    correction_request = str(validation_data.get("correction_request") or "").strip()
+    if not correction_request:
+        issues = str(validation_data.get("issues") or "").strip()
+        broken = [str(u) for u in validation_data.get("broken_links") or []]
+        details = issues or ("Broken links:\n" + "\n".join(f"- {u}" for u in broken) if broken else "")
+        if not details:
+            return all_results
+        correction_request = f"Fix these problems and re-deliver your output:\n{details}"
+
+    validator_name = (
+        (validator_subtask or {}).get("assignee") if validator_subtask else "orchestrator"
+    )
+    responsible_result = results_by_id.get(responsible["id"]) or {}
+    emit_status(
+        f"Validation found issues — re-running {responsible.get('assignee') or 'the responsible agent'}…"
+    )
+    emit(
+        "correction_start",
+        responsible=responsible.get("assignee"),
+        validator=validator_name,
+        request=correction_request[:500],
+    )
+
+    fix_subtask: Subtask = {
+        **responsible,
+        "id": f"{responsible['id']}-fix",
+        "title": f"Fix issues: {responsible.get('title') or responsible['id']}",
+        "instruction": (
+            f"{responsible.get('instruction') or ''}\n\n"
+            "CORRECTION REQUIRED — a validator checked your previous output and found "
+            "problems. Fix them and re-deliver your full output:\n"
+            f"{correction_request}\n\n"
+            f"Your previous output:\n{(responsible_result.get('text') or '')[:2000]}"
+        ),
+        "depends_on": [],
+    }
+    fix_result = await _run_subtask(
+        fix_subtask, manager, router, conversation=conversation, prior_results=results_by_id
+    )
+    results_by_id[fix_subtask["id"]] = fix_result
+    if fix_result.get("status") == "failed":
+        emit("correction_done", status="failed")
+        return all_results
+
+    updated = [
+        fix_result if r.get("subtask_id") == responsible["id"] else r for r in all_results
+    ]
+    corrected_text = _result_output_text(fix_result)
+
+    if self_validated or validator_subtask is None:
+        recheck = await _self_validate(query, corrected_text)
+        emit("correction_done", status=str(recheck.get("status") or "unknown"))
+        return updated
+
+    recheck_subtask: Subtask = {
+        **validator_subtask,
+        "id": f"{validator_subtask['id']}-recheck",
+        "title": "Re-validate corrected output",
+        "instruction": (
+            "Validate this corrected output before it is delivered to the user:\n\n"
+            f"{corrected_text}"
+        ),
+        "depends_on": [],
+    }
+    recheck_result = await _run_subtask(
+        recheck_subtask, manager, router, conversation=conversation, prior_results=results_by_id
+    )
+    results_by_id[recheck_subtask["id"]] = recheck_result
+    updated = [
+        recheck_result if r.get("subtask_id") == validator_subtask["id"] else r for r in updated
+    ]
+    emit(
+        "correction_done",
+        status=str((recheck_result.get("data") or {}).get("status") or "unknown"),
+    )
+    return updated
 
 
 def _dependency_layers(subtasks: list[Subtask]) -> list[list[Subtask]]:
@@ -277,33 +658,34 @@ async def _synthesize_final(
     results: list[SubtaskResult],
     *,
     conversation: list[BaseMessage] | None = None,
-) -> str:
+) -> tuple[str, bool]:
+    """Return (final_text, answer_streamed)."""
     if not results:
-        return ""
+        return "", False
 
     if len(results) == 1 and results[0].get("status") == "failed":
-        return results[0].get("text") or "The task failed."
+        return results[0].get("text") or "The task failed.", False
 
     facts = _result_facts(results)
     if not facts:
-        return results[0].get("text") or "" if len(results) == 1 else ""
+        return (results[0].get("text") or "" if len(results) == 1 else ""), False
 
     if len(results) == 1:
         data = results[0].get("data") or {}
         if data.get("draft") or (data.get("status") == "draft" and data.get("body")):
-            return format_email_draft(data)
+            return format_email_draft(data), False
         if data.get("gmail_message_id") or data.get("status") == "sent" or (
             data.get("id") and data.get("sent_body")
         ):
-            return format_send_email_result(data)
+            return format_send_email_result(data), False
         if data.get("subscription_id") or "stopped" in data:
             if data.get("kind") == "recurring_task" or data.get("instruction"):
-                return format_recurring_result(data)
-            return format_subscription_result(data)
+                return format_recurring_result(data), False
+            return format_subscription_result(data), False
         if data.get("sources") and data.get("query"):
-            return format_web_search_result(data)
+            return format_web_search_result(data), False
         if data.get("url") and data.get("content") is not None and results[0].get("assignee") == "web":
-            return format_web_fetch_result(data)
+            return format_web_fetch_result(data), False
 
     llm = get_llm(temperature=0.3)
     messages: list[dict[str, str]] = [
@@ -311,13 +693,16 @@ async def _synthesize_final(
             "role": "system",
             "content": (
                 "You are Cognilance replying in chat. "
-                "Write a short, natural answer using the execution results below. "
+                "Write a short, natural answer using the execution results below, "
+                "formatted as clean Markdown (bold, lists, links) — the chat renders Markdown. "
+                "NEVER output raw HTML tags or inline CSS; if results contain HTML "
+                "(e.g. an email body), summarize it in plain language instead of echoing it — "
+                "a rich card below your message shows the full content. "
                 "Preserve links, counts, and facts exactly. "
                 "Never mention tools, APIs, subscribe_inbox, or internal orchestration. "
                 "Never claim an action succeeded if results say FAILED. "
                 "Never claim an email was sent unless execution results include a Gmail message ID. "
-                "For email drafts or sent emails, include the full subject and body exactly as shown. "
-                "One to three sentences unless listing emails, documents, or showing an email draft."
+                "One to three sentences unless listing emails, documents, or sources."
             ),
         },
     ]
@@ -330,11 +715,13 @@ async def _synthesize_final(
         }
     )
     try:
-        response = await llm.ainvoke(messages)
-        content = response.content
-        return content if isinstance(content, str) else str(content)
+        text = await stream_llm(llm, messages, event="answer")
+        if text.strip():
+            emit("answer_done", text=text)
+            return text, True
+        return facts, False
     except Exception:
-        return facts
+        return facts, False
 
 
 async def task_agent(state: State) -> dict:
@@ -376,8 +763,19 @@ async def task_agent(state: State) -> dict:
                 results_by_id[item["id"]] = result
             all_results.extend(layer_results)
 
+        all_results = await _run_validation_stage(
+            subtasks,
+            results_by_id,
+            all_results,
+            manager,
+            router,
+            catalog_agents=catalog_agents,
+            query=query,
+            conversation=state.get("messages", []),
+        )
+
     emit_status("Aggregating results…")
-    final_text = await _synthesize_final(
+    final_text, answer_streamed = await _synthesize_final(
         query,
         all_results,
         conversation=state.get("messages", []),
@@ -389,5 +787,5 @@ async def task_agent(state: State) -> dict:
         "subtask_results": all_results,
         "final_text": final_text,
         "final_data": final_data,
-        "answer_streamed": False,
+        "answer_streamed": answer_streamed,
     }

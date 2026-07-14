@@ -113,6 +113,25 @@ function PythonCode({
   );
 }
 
+function looksLikeHtml(body: string): boolean {
+  const t = body.trim().toLowerCase();
+  if (!t.includes("<")) return false;
+  return (
+    /<(p|br|div|span|h[1-3]|ul|ol|li|a|strong|em|b|i)\b/.test(t) ||
+    t.includes("font-family") ||
+    t.includes("style=")
+  );
+}
+
+function sanitizeEmailHtml(html: string): string {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
+    .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, "")
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, "")
+    .replace(/javascript:/gi, "");
+}
+
 function EmailDraft({
   to,
   subject,
@@ -120,6 +139,7 @@ function EmailDraft({
   tone,
   status,
   gmail_message_id,
+  format_notes,
 }: {
   to?: string;
   subject?: string;
@@ -127,8 +147,10 @@ function EmailDraft({
   tone?: string;
   status?: string;
   gmail_message_id?: string | null;
+  format_notes?: string;
 }) {
   const sent = status === "sent" || Boolean(gmail_message_id);
+  const htmlBody = Boolean(body && looksLikeHtml(body));
   return (
     <div className="space-y-3">
       {to ? (
@@ -140,10 +162,18 @@ function EmailDraft({
         <p className="text-sm font-semibold text-white">{subject}</p>
       ) : null}
       {tone ? <p className="text-xs text-dim">Tone: {tone}</p> : null}
+      {format_notes ? <p className="text-xs text-dim">Format: {format_notes}</p> : null}
       {body ? (
-        <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-background p-3 font-sans text-sm leading-relaxed text-white/90 scrollbar-thin">
-          {body}
-        </pre>
+        htmlBody ? (
+          <div
+            className="email-draft-html max-h-80 overflow-auto rounded-md border border-border bg-background p-3 text-sm leading-relaxed text-white/90 scrollbar-thin [&_a]:text-registry [&_a]:underline"
+            dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(body) }}
+          />
+        ) : (
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-background p-3 font-sans text-sm leading-relaxed text-white/90 scrollbar-thin">
+            {body}
+          </pre>
+        )
       ) : (
         <p className="text-sm text-muted">No body returned.</p>
       )}
@@ -169,6 +199,7 @@ export function GenUiRenderer({ item }: { item: UiItem }) {
         tone={props.tone as string}
         status={props.status as string}
         gmail_message_id={props.gmail_message_id as string | null}
+        format_notes={props.format_notes as string | undefined}
       />
     );
   }

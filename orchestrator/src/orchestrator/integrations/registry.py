@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 
 class IntegrationSpec(TypedDict):
@@ -13,6 +13,7 @@ class IntegrationSpec(TypedDict):
     scopes: list[str]
     actions: list[str]
     logo: str
+    coming_soon: NotRequired[bool]
 
 
 INTEGRATIONS: dict[str, IntegrationSpec] = {
@@ -74,6 +75,7 @@ INTEGRATIONS: dict[str, IntegrationSpec] = {
         "scopes": [],
         "actions": ["list_databases", "query_database", "create_page", "update_page"],
         "logo": "notion",
+        "coming_soon": True,
     },
     "slack": {
         "id": "slack",
@@ -88,6 +90,7 @@ INTEGRATIONS: dict[str, IntegrationSpec] = {
         ],
         "actions": ["list_channels", "read_messages", "send_message", "search_messages"],
         "logo": "slack",
+        "coming_soon": True,
     },
     "github": {
         "id": "github",
@@ -103,6 +106,7 @@ INTEGRATIONS: dict[str, IntegrationSpec] = {
             "read_file",
         ],
         "logo": "github",
+        "coming_soon": True,
     },
 }
 
@@ -116,12 +120,14 @@ def get_integration(integration_id: str) -> IntegrationSpec | None:
 
 
 def integration_for_api(spec: IntegrationSpec, *, connected: bool) -> dict[str, Any]:
+    coming_soon = bool(spec.get("coming_soon"))
     return {
         "id": spec["id"],
         "name": spec["name"],
         "description": spec["description"],
         "logo": spec["logo"],
-        "connected": connected,
+        "connected": False if coming_soon else connected,
+        "coming_soon": coming_soon,
         "auth_type": "oauth2",
-        "actions": spec["actions"],
+        "actions": [] if coming_soon else spec["actions"],
     }
