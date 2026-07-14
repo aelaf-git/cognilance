@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import re
 
+from cognilance.core.models import AgentCard
+
+from orchestrator.registry_cache import has_agent_for_skill
 from orchestrator.state import Subtask
 from orchestrator.tools.web import extract_urls
 
@@ -106,8 +109,53 @@ def _search_query_from_instruction(query: str) -> str:
     return q
 
 
-def web_subtasks_for_query(query: str) -> list[Subtask] | None:
-    """Return web tool subtasks when the user needs search or page fetch."""
+def _wants_link_validation(query: str) -> bool:
+    q = query.lower()
+    if not extract_urls(query) and "link" not in q and "url" not in q:
+        return False
+    return any(
+        term in q
+        for term in (
+            "check the link",
+            "check this link",
+            "check these link",
+            "check those link",
+            "check if the link",
+            "check if this link",
+            "validate",
+            "verify",
+            "broken link",
+            "dead link",
+            "links work",
+            "link works",
+            "is working",
+            "are working",
+            "still work",
+            "functional",
+            "reachable",
+        )
+    )
+
+
+def web_subtasks_for_query(
+    query: str,
+    *,
+    catalog_agents: list[AgentCard] | None = None,
+) -> list[Subtask] | None:
+    """Return web tool subtasks when the user needs search or page fetch.
+
+    Yields to the planner (returns None) when an online specialist exists in the
+    catalog for the job, so the LLM can decide to hire it instead.
+    """
+    if catalog_agents and has_agent_for_skill(catalog_agents, "web-scraping"):
+        return None
+    if (
+        catalog_agents
+        and _wants_link_validation(query)
+        and has_agent_for_skill(catalog_agents, "link-validation")
+    ):
+        return None
+
     if _wants_web_fetch(query):
         url = extract_urls(query)[0]
         return [

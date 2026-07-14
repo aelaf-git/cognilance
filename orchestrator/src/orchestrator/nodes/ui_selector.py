@@ -24,6 +24,8 @@ UI_COMPONENTS = """- email-draft: composed email with to, subject, body, and sen
 SKILL_DEFAULT_UI: dict[str, ComponentName] = {
     "email-writing": "email-draft",
     "research": "research-sources",
+    "web-scraping": "research-sources",
+    "link-validation": "research-sources",
     "data-analysis": "data-chart",
     "python-code": "python-code",
 }

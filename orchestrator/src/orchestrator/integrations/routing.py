@@ -70,7 +70,10 @@ def integration_subtasks_for_query(
         from orchestrator.subscriptions.store import SubscriptionStore
 
         conv_id = current_conversation_id.get() or ""
-        if conv_id and SubscriptionStore().list_active_for_conversation(conv_id):
+        if conv_id and any(
+            s.integration == "gmail" and s.kind == "new_email"
+            for s in SubscriptionStore().list_active_for_conversation(conv_id)
+        ):
             return None
         integration = monitor_integration_for_query(query)
         if integration == "gmail" and client.is_connected(user_id, "gmail"):

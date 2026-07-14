@@ -29,6 +29,7 @@ class ConversationMessage:
     role: str
     content: str
     created_at: datetime
+    ui: str | None = None  # JSON-encoded rich UI payload ({name, props})
 
 
 class ConversationStore:
@@ -67,6 +68,11 @@ class ConversationStore:
                     ON conversation_messages(conversation_id);
                 """
             )
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(conversation_messages)")
+            }
+            if "ui" not in columns:
+                conn.execute("ALTER TABLE conversation_messages ADD COLUMN ui TEXT")
 
     def ensure_conversation(
         self,
@@ -221,15 +227,22 @@ class ConversationStore:
                     (now, conversation_id),
                 )
 
-    def append_message(self, conversation_id: str, *, role: str, content: str) -> None:
+    def append_message(
+        self,
+        conversation_id: str,
+        *,
+        role: str,
+        content: str,
+        ui: str | None = None,
+    ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
                 """
-                INSERT INTO conversation_messages (conversation_id, role, content, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO conversation_messages (conversation_id, role, content, created_at, ui)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (conversation_id, role, content, now),
+                (conversation_id, role, content, now, ui),
             )
             conn.execute(
                 "UPDATE conversations SET updated_at = ? WHERE id = ?",
@@ -259,6 +272,7 @@ class ConversationStore:
                 role=row["role"],
                 content=row["content"],
                 created_at=datetime.fromisoformat(row["created_at"]),
+                ui=row["ui"] if "ui" in row.keys() else None,
             )
             for row in reversed(rows)
         ]

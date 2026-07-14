@@ -406,3 +406,25 @@ export function extractChatOutput(
 export function isOutputEvent(event: string): boolean {
   return event === "answer" || event === "answer_done" || event === "final" || event === "error";
 }
+
+/** Rich UI component payload for the chat feed, if this event carries one. */
+export function extractUiItem(data: Record<string, unknown>): UiItem | null {
+  const event = data.event as string;
+  if (event === "ui" && data.name && data.name !== "text-card") {
+    return {
+      name: String(data.name),
+      props: (data.props as Record<string, unknown>) ?? {},
+    };
+  }
+  if (event === "gen_ui_selected" && data.component) {
+    return {
+      name: String(data.component),
+      props: (data.props as Record<string, unknown>) ?? {},
+    };
+  }
+  if (event === "final") {
+    const items = ((data.ui as UiItem[]) ?? []).filter((i) => i.name !== "text-card");
+    return items.length ? items[items.length - 1] : null;
+  }
+  return null;
+}

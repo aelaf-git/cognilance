@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ChatMessage } from "@/types";
+import { Markdown } from "@/components/Markdown";
+import { GenUiRenderer } from "@/components/GenUiRenderer";
 
 function LoadingDots() {
   return (
@@ -12,6 +14,12 @@ function LoadingDots() {
         />
       ))}
     </span>
+  );
+}
+
+function StreamingCursor() {
+  return (
+    <span className="ml-0.5 inline-block h-3.5 w-[7px] animate-pulse rounded-[1px] bg-white/70 align-text-bottom" />
   );
 }
 
@@ -56,13 +64,18 @@ export function ChatFeed({
               >
                 {msg.streaming && !msg.content ? (
                   <LoadingDots />
+                ) : msg.role === "assistant" && !msg.error ? (
+                  <div>
+                    <Markdown content={msg.content || " "} />
+                    {msg.streaming ? <StreamingCursor /> : null}
+                  </div>
                 ) : (
                   <p className="whitespace-pre-wrap">{msg.content || " "}</p>
                 )}
-                {msg.streaming && msg.content ? (
-                  <span className="mt-2 inline-block">
-                    <LoadingDots />
-                  </span>
+                {msg.role === "assistant" && !msg.streaming && msg.ui?.name ? (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <GenUiRenderer item={{ name: msg.ui.name, props: msg.ui.props ?? {} }} />
+                  </div>
                 ) : null}
               </div>
             </div>

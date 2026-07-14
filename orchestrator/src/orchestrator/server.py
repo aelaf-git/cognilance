@@ -43,6 +43,16 @@ def _ui_items(result: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _parse_message_ui(raw: str | None) -> dict[str, Any] | None:
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) and parsed.get("name") else None
+
+
 def create_app() -> FastAPI:
     store = MissionStore()
     conv_store = ConversationStore()
@@ -212,6 +222,7 @@ def create_app() -> FastAPI:
                 "role": m.role,
                 "content": m.content,
                 "created_at": m.created_at.isoformat(),
+                "ui": _parse_message_ui(m.ui),
             }
             for m in conv_store.list_messages(conversation_id, limit=200)
         ]
@@ -514,10 +525,16 @@ def create_app() -> FastAPI:
                     final_text = event.get("text")
                     final_ui = event.get("ui") or []
                     if final_text:
+                        rich_ui = [
+                            item
+                            for item in final_ui
+                            if isinstance(item, dict) and item.get("name") != "text-card"
+                        ]
                         conv_store.append_message(
                             conversation_id,
                             role="assistant",
                             content=str(final_text),
+                            ui=json.dumps(rich_ui[-1]) if rich_ui else None,
                         )
                 await persist(event)
 

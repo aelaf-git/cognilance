@@ -60,6 +60,7 @@ export type ChatMessage = {
   streaming?: boolean;
   error?: boolean;
   sessionId?: string;
+  ui?: UiItem | null;
 };
 
 export type ConversationSummary = {

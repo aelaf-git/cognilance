@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatMessage, OrchestrationTurn } from "@/types";
+import type { ChatMessage, OrchestrationTurn, UiItem } from "@/types";
 import {
   applySessionEvent,
   createEventContext,
   extractChatOutput,
+  extractUiItem,
   finalizeSessionTurn,
   isOutputEvent,
   makeCard,
@@ -27,6 +28,7 @@ type ConversationMessage = {
   id: number;
   role: string;
   content: string;
+  ui?: UiItem | null;
 };
 
 export function useOrchestrator(
@@ -136,6 +138,7 @@ export function useOrchestrator(
           id: `msg-${m.id}`,
           role: m.role === "user" ? "user" : "assistant",
           content: m.content,
+          ui: m.ui ?? null,
         })),
       );
       return true;
@@ -223,11 +226,19 @@ export function useOrchestrator(
             return {
               ...m,
               content,
+              ui: extractUiItem(data) ?? m.ui,
               streaming: event !== "final" && event !== "answer_done" && event !== "error",
               error: event === "error",
             };
           }),
         );
+      } else if (assistantId) {
+        const uiItem = extractUiItem(data);
+        if (uiItem) {
+          setChatMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, ui: uiItem } : m)),
+          );
+        }
       }
     },
     [],
@@ -285,12 +296,15 @@ export function useOrchestrator(
       });
 
       if (assistantId) {
+        const lastUi =
+          [...ctx.uiItems].reverse().find((item) => item.name !== "text-card") ?? null;
         setChatMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
               ? {
                   ...m,
                   content: m.content || ctx.answer,
+                  ui: m.ui ?? lastUi,
                   streaming: false,
                 }
               : m,

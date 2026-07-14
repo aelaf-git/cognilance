@@ -90,8 +90,16 @@ def _normalize_skill(skill: str) -> str:
 
 _SKILL_ALIASES: dict[str, set[str]] = {
     "python-code": {"python-code", "python", "code-writing", "code-writer", "python-coding"},
-    "research": {"research", "web-research"},
+    "web-scraping": {"web-scraping", "web-scrape", "scraping", "web-research", "research"},
     "data-analysis": {"data-analysis", "data-analysis", "analytics", "charting"},
+    "link-validation": {
+        "link-validation",
+        "link-validator",
+        "link-checking",
+        "link-checker",
+        "url-validation",
+        "url-checker",
+    },
 }
 
 

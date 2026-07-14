@@ -26,8 +26,19 @@ if ! grep -q '^GROQ_API_KEY=.\+' .env 2>/dev/null; then
   exit 1
 fi
 
+mapfile -t AGENT_DIRS < <(
+  find agents -mindepth 2 -maxdepth 2 -type f -name agent.py | sed 's|/agent\.py$||' | sort
+)
+
+REQS=()
+for dir in "${AGENT_DIRS[@]}"; do
+  if [[ -f "${dir}/requirements.txt" ]]; then
+    REQS+=(-r "${dir}/requirements.txt")
+  fi
+done
+
 echo "Installing Python packages..."
-pip install -q -e . -e orchestrator -r agents/email_writer/requirements.txt
+pip install -q -e . -e orchestrator "${REQS[@]}"
 
 REGISTRY_URL="${COGNILANCE_REGISTRY_URL:-http://127.0.0.1:8088}"
 REGISTRY_HEALTH="${REGISTRY_URL%/}/health"
@@ -68,18 +79,36 @@ if ! curl -sf "${REGISTRY_HEALTH}" >/dev/null; then
 fi
 echo "Registry ok: ${REGISTRY_URL}"
 
-echo "Starting agents..."
-python -u agents/email_writer/agent.py &
-PIDS+=($!)
+echo "Starting ${#AGENT_DIRS[@]} agent(s)..."
+for dir in "${AGENT_DIRS[@]}"; do
+  name="$(basename "${dir}")"
+  echo "  ${name}"
+  python -u "${dir}/agent.py" &
+  PIDS+=($!)
+done
 
-for port in 8101; do
+# Wait for agent health endpoints if their ports are declared in agent.py.
+AGENT_PORTS=()
+for dir in "${AGENT_DIRS[@]}"; do
+  port="$(
+    sed -nE 's/.*port[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "${dir}/agent.py" | head -1
+  )"
+  [[ -n "${port}" ]] && AGENT_PORTS+=("${port}")
+done
+
+for port in "${AGENT_PORTS[@]}"; do
+  ready=false
   for _ in $(seq 1 60); do
     if curl -sf "http://127.0.0.1:${port}/health" >/dev/null; then
       echo "  agent :${port} ok"
+      ready=true
       break
     fi
     sleep 0.5
   done
+  if [[ "${ready}" != "true" ]]; then
+    echo "  warning: agent :${port} did not become healthy" >&2
+  fi
 done
 
 echo "Starting orchestrator..."
@@ -100,6 +129,9 @@ echo "========================================"
 echo "  Chat UI:  http://127.0.0.1:${ORCHESTRATOR_PORT}/chat"
 echo "  Health:   http://127.0.0.1:${ORCHESTRATOR_PORT}/health"
 echo "  Registry: ${REGISTRY_URL}"
+for port in "${AGENT_PORTS[@]}"; do
+  echo "  Agent:    http://127.0.0.1:${port}/health"
+done
 echo ""
 echo "  Share online (free): ./scripts/expose_demo.sh"
 echo "  Stop: Ctrl+C"
