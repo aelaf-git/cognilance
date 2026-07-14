@@ -35,15 +35,19 @@ export function AppsPanel({ apps, onRefresh, onConnect }: AppsPanelProps) {
               </div>
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                  app.connected
-                    ? "bg-genui/10 text-genui"
-                    : "bg-surface text-dim border border-border"
+                  app.coming_soon
+                    ? "border border-border bg-surface text-muted"
+                    : app.connected
+                      ? "bg-genui/10 text-genui"
+                      : "bg-surface text-dim border border-border"
                 }`}
               >
-                {app.connected ? "on" : "off"}
+                {app.coming_soon ? "soon" : app.connected ? "on" : "off"}
               </span>
             </div>
-            {!app.connected ? (
+            {app.coming_soon ? (
+              <p className="mt-3 text-xs text-dim">Coming soon</p>
+            ) : !app.connected ? (
               <button
                 type="button"
                 onClick={() => onConnect(app.id)}

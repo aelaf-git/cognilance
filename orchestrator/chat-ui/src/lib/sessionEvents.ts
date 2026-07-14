@@ -399,12 +399,19 @@ export function extractChatOutput(
   if (event === "answer" && data.delta) return content + String(data.delta);
   if (event === "answer_done" && data.text) return String(data.text);
   if (event === "final" && data.text) return String(data.text) || ctx.answer;
+  if (event === "session_aborted") return content.trim() || "Stopped.";
   if (event === "error") return String(data.message ?? "Request failed");
   return content;
 }
 
 export function isOutputEvent(event: string): boolean {
-  return event === "answer" || event === "answer_done" || event === "final" || event === "error";
+  return (
+    event === "answer" ||
+    event === "answer_done" ||
+    event === "final" ||
+    event === "error" ||
+    event === "session_aborted"
+  );
 }
 
 /** Rich UI component payload for the chat feed, if this event carries one. */

@@ -75,3 +75,23 @@ export async function fetchLogs(id: string, lines = 200): Promise<string> {
   const data = await request<{ logs: string }>(`/api/agents/${id}/logs?lines=${lines}`);
   return data.logs;
 }
+
+export type EarningsResponse = {
+  payout_wallet: string;
+  balance_base_units: number;
+  balance_usd: number;
+  ledger: Array<{
+    entry_type: string;
+    amount: number;
+    created_at: string;
+    hire_id?: string | null;
+  }>;
+  note: string;
+};
+
+export async function fetchEarnings(wallet: string): Promise<EarningsResponse> {
+  return request<EarningsResponse>(
+    `/api/earnings?wallet=${encodeURIComponent(wallet)}`,
+  );
+}
+

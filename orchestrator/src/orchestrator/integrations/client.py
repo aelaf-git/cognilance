@@ -53,6 +53,15 @@ class IntegrationClient:
         ]
         for spec in list_integrations():
             integration_id = spec["id"]
+            if spec.get("coming_soon"):
+                lines.append(f"- app:{integration_id} — {spec['name']} [COMING SOON]")
+                lines.append(f"  {spec['description']}")
+                lines.append(
+                    f"  → Do NOT use app:{integration_id}. "
+                    f"Tell the user {spec['name']} is coming soon."
+                )
+                lines.append("")
+                continue
             is_on = integration_id in connected
             status = "CONNECTED" if is_on else "NOT CONNECTED"
             actions = ", ".join(spec["actions"])
@@ -107,7 +116,7 @@ class IntegrationClient:
         lines.append("- hire:<skill> — hire a marketplace agent by skill slug")
         connected = self._tokens.list_connected(user_id)
         for spec in list_integrations():
-            if spec["id"] not in connected:
+            if spec.get("coming_soon") or spec["id"] not in connected:
                 continue
             actions = ", ".join(spec["actions"])
             lines.append(f"- app:{spec['id']} — {spec['name']} (actions: {actions})")
@@ -123,6 +132,8 @@ class IntegrationClient:
         spec = INTEGRATIONS.get(integration_id)
         if not spec:
             raise RuntimeError(f"Unknown integration: {integration_id}")
+        if spec.get("coming_soon"):
+            raise RuntimeError(f"{spec['name']} is coming soon")
         payload = dict(params or {})
         emit("tool_start", tool=f"app:{integration_id}", assignee=integration_id, action=action)
 

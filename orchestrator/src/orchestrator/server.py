@@ -7,7 +7,8 @@ import json
 import uuid
 from typing import Any, AsyncIterator
 
-from cognilance.assets import LOGO_PATH
+from cognilance import CognilanceManager
+from cognilance.assets import LOGO_PATH, integration_logo_media_type, integration_logo_path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from langchain_core.messages import HumanMessage
@@ -33,6 +34,42 @@ from orchestrator.tool_proxy import gmail_router
 
 def _thread_config(thread_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": thread_id}}
+
+
+# In-flight chat/mission graph tasks — abort cancels these so work stops mid-run.
+_running_mission_tasks: dict[str, asyncio.Task[Any]] = {}
+
+
+def _register_mission_task(mission_id: str, task: asyncio.Task[Any]) -> None:
+    _running_mission_tasks[mission_id] = task
+
+    def _cleanup(done: asyncio.Task[Any]) -> None:
+        current = _running_mission_tasks.get(mission_id)
+        if current is done:
+            _running_mission_tasks.pop(mission_id, None)
+
+    task.add_done_callback(_cleanup)
+
+
+def _cancel_mission_task(mission_id: str) -> bool:
+    task = _running_mission_tasks.get(mission_id)
+    if task is None or task.done():
+        return False
+    task.cancel()
+    return True
+
+
+def _refund_mission_escrows(mission_id: str) -> None:
+    """Refund any funded escrows for a cancelled/aborted mission."""
+    try:
+        from cognilance.payments import EscrowStatus, PaymentService
+
+        pay = PaymentService()
+        for hire in pay.list_mission_escrows(mission_id):
+            if hire.status == EscrowStatus.FUNDED:
+                pay.refund_escrow(hire.hire_id)
+    except Exception as exc:
+        print(f"Escrow refund for mission {mission_id} failed: {exc}", flush=True)
 
 
 def _ui_items(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -111,11 +148,87 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/marketplace/agents")
+    async def marketplace_agents() -> JSONResponse:
+        """Online marketplace agents with direct chat URLs."""
+        try:
+            async with CognilanceManager(agent_name="Orchestrator") as manager:
+                agents = await manager.discover(limit=50)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Registry unavailable: {exc}",
+            ) from exc
+        rows = []
+        for agent in agents:
+            skills = [skill.id or skill.name for skill in agent.skills]
+            base = (getattr(agent, "url", None) or "").rstrip("/")
+            rows.append(
+                {
+                    "id": getattr(agent, "id", None),
+                    "name": agent.name,
+                    "online": bool(agent.online),
+                    "skills": skills,
+                    "url": base or None,
+                    "description": agent.description or "",
+                    "chat_url": f"{base}/chat" if base else None,
+                    "price_usd_cents": int(getattr(agent, "price_usd_cents", 0) or 0),
+                    "payout_wallet": getattr(agent, "payout_wallet", None),
+                }
+            )
+        return JSONResponse(content={"agents": rows, "total": len(rows)})
+
+    @app.get("/payments/balance")
+    async def payments_balance(request: Request) -> JSONResponse:
+        from cognilance.payments import PaymentService
+
+        user_id = getattr(request.state, "user_id", None) or "anonymous"
+        svc = PaymentService()
+        wallet_id = svc.ensure_user_wallet(user_id)
+        bal = svc.get_balance_base_units(user_id)
+        return JSONResponse(
+            content={
+                "user_id": user_id,
+                "wallet_id": wallet_id,
+                "balance_base_units": bal,
+                "balance_usd": bal // 1_000_000,
+            }
+        )
+
+    @app.post("/payments/fund")
+    async def payments_fund(request: Request) -> JSONResponse:
+        """Mock USD → mock USDC (1:1). Body: {\"amount_usd\": N}."""
+        from cognilance.payments import PaymentError, PaymentService
+
+        body = await request.json()
+        amount_usd = int(body.get("amount_usd") or 0)
+        # Never take user_id from the body — spoof risk.
+        user_id = getattr(request.state, "user_id", None) or "anonymous"
+        try:
+            result = PaymentService().fund_account_usd(user_id, amount_usd)
+        except (PaymentError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(
+            content={
+                **result,
+                "balance_usd": result["balance_base_units"] // 1_000_000,
+            }
+        )
+
     @app.get("/logo.png")
     async def logo() -> FileResponse:
         if not LOGO_PATH.is_file():
             raise HTTPException(status_code=404, detail="Logo not found")
         return FileResponse(LOGO_PATH, media_type="image/png")
+
+    @app.get("/integrations/logos/{integration_id}")
+    async def integration_logo(integration_id: str) -> FileResponse:
+        """Serve brand logos for OAuth integrations (from cognilance/assets/integrations)."""
+        safe_id = integration_id.strip().lower()
+        path = integration_logo_path(safe_id)
+        if path is None:
+            raise HTTPException(status_code=404, detail="Logo not found")
+        return FileResponse(path, media_type=integration_logo_media_type(path))
 
     @app.get("/chat", response_class=HTMLResponse)
     @app.get("/integrations", response_class=HTMLResponse)
@@ -370,12 +483,25 @@ def create_app() -> FastAPI:
         mission = store.get_mission(session_id)
         if not mission:
             raise HTTPException(status_code=404, detail="Session not found")
+        cancelled_task = _cancel_mission_task(session_id)
         stop_listener_for_mission(
             session_id,
             sub_store=sub_store,
             mission_store=store,
         )
-        return JSONResponse(content={"session_id": session_id, "status": "cancelled"})
+        # Ensure one-shot runs are marked cancelled even without a listener.
+        current = store.get_mission(session_id)
+        if current and current.status in {MissionStatus.RUNNING, MissionStatus.QUEUED}:
+            store.update_status(session_id, MissionStatus.CANCELLED, error="Aborted by user")
+            store.append_event(session_id, {"event": "session_aborted", "reason": "user"})
+            _refund_mission_escrows(session_id)
+        return JSONResponse(
+            content={
+                "session_id": session_id,
+                "status": "cancelled",
+                "task_cancelled": cancelled_task,
+            }
+        )
 
     @app.delete("/sessions/{session_id}")
     @app.post("/sessions/{session_id}/dismiss")
@@ -545,8 +671,12 @@ def create_app() -> FastAPI:
                     history=prior_history,
                     on_event=persist_with_status,
                 ):
-                    pass
+                    current = store.get_mission(mission_id)
+                    if current and current.status == MissionStatus.CANCELLED:
+                        break
                 current = store.get_mission(mission_id) or mission
+                if current.status == MissionStatus.CANCELLED:
+                    return
                 finalize_session_status(
                     store,
                     current,
@@ -555,8 +685,25 @@ def create_app() -> FastAPI:
                     final_text=final_text,
                     final_ui=final_ui,
                 )
+            except asyncio.CancelledError:
+                current = store.get_mission(mission_id)
+                if current and current.status not in {
+                    MissionStatus.CANCELLED,
+                    MissionStatus.FAILED,
+                    MissionStatus.COMPLETED,
+                }:
+                    store.update_status(
+                        mission_id, MissionStatus.CANCELLED, error="Aborted by user"
+                    )
+                    store.append_event(
+                        mission_id, {"event": "session_aborted", "reason": "user"}
+                    )
+                    _refund_mission_escrows(mission_id)
+                raise
             except Exception as exc:
-                store.update_status(mission_id, MissionStatus.FAILED, error=str(exc))
+                current = store.get_mission(mission_id)
+                if current and current.status != MissionStatus.CANCELLED:
+                    store.update_status(mission_id, MissionStatus.FAILED, error=str(exc))
             finally:
                 current_conversation_id.reset(conv_token)
                 current_mission_id.reset(mission_token)
@@ -572,6 +719,7 @@ def create_app() -> FastAPI:
             }
             yield f"data: {json.dumps(created)}\n\n"
             task = asyncio.create_task(run_and_mark())
+            _register_mission_task(mission_id, task)
             try:
                 after_id = 0
                 while not task.done():
@@ -581,14 +729,25 @@ def create_app() -> FastAPI:
                         if eid:
                             after_id = int(eid)
                         yield f"data: {json.dumps(event)}\n\n"
+                    current = store.get_mission(mission_id)
+                    if current and current.status == MissionStatus.CANCELLED:
+                        if not task.done():
+                            task.cancel()
+                        break
                     await asyncio.sleep(0.15)
                 events = store.list_events(mission_id, after_id=after_id)
                 for event in events:
                     event.pop("_event_id", None)
                     yield f"data: {json.dumps(event)}\n\n"
+                if store.get_mission(mission_id) and store.get_mission(mission_id).status == MissionStatus.CANCELLED:
+                    yield f"data: {json.dumps({'event': 'session_aborted', 'reason': 'user'})}\n\n"
+                    yield f"data: {json.dumps({'event': 'done', 'thread_id': thread_id, 'aborted': True})}\n\n"
             finally:
                 if not task.done():
-                    await task
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
 
         return StreamingResponse(
             stream(),

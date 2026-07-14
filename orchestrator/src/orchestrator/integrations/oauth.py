@@ -32,6 +32,8 @@ class OAuthService:
         spec = get_integration(integration_id)
         if not spec:
             raise ValueError(f"Unknown integration: {integration_id}")
+        if spec.get("coming_soon"):
+            raise ValueError(f"{spec['name']} is coming soon")
         state = secrets.token_urlsafe(32)
         self._store.save_oauth_state(state, user_id, integration_id)
         provider = spec["provider"]

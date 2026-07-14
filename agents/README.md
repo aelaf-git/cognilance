@@ -36,7 +36,9 @@ With the registry up:
 ./scripts/start_agents.sh
 ```
 
-This installs each agent's requirements and starts every `agents/*/agent.py`.
+Discovers every `agents/*/agent.py` (Email Writer, Web Scraper, Link Validator,
+and any you add later), installs each agent's requirements, starts them from
+their own folder, and waits on health checks. Ctrl+C stops all of them.
 
 ## Email Writer
 

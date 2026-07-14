@@ -30,7 +30,7 @@ for dir in "${AGENT_DIRS[@]}"; do
   fi
 done
 
-echo "Installing agent packages..."
+echo "Installing agent packages (${#AGENT_DIRS[@]} agent(s))..."
 pip install -q -e . "${REQS[@]}"
 
 REGISTRY_URL="${COGNILANCE_REGISTRY_URL:-http://127.0.0.1:8088}"
@@ -68,11 +68,38 @@ trap cleanup EXIT INT TERM
 echo "Starting ${#AGENT_DIRS[@]} agent(s)..."
 for dir in "${AGENT_DIRS[@]}"; do
   name="$(basename "${dir}")"
-  echo "  ${name} → python -u ${dir}/agent.py"
-  python -u "${dir}/agent.py" &
+  port="$(
+    sed -nE 's/.*port[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "${dir}/agent.py" | head -1
+  )"
+  # Run from the agent folder so local imports (scrape.py, proxy.py, …) resolve.
+  echo "  ${name}${port:+ (:${port})} ← ${dir}/agent.py"
+  (
+    cd "${dir}"
+    python -u agent.py
+  ) &
   PIDS+=($!)
 done
 
+# Wait briefly for health endpoints when ports are declared.
+for dir in "${AGENT_DIRS[@]}"; do
+  port="$(
+    sed -nE 's/.*port[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "${dir}/agent.py" | head -1
+  )"
+  [[ -z "${port}" ]] && continue
+  ready=false
+  for _ in $(seq 1 40); do
+    if curl -sf "http://127.0.0.1:${port}/health" >/dev/null; then
+      echo "  agent :${port} ok"
+      ready=true
+      break
+    fi
+    sleep 0.25
+  done
+  if [[ "${ready}" != "true" ]]; then
+    echo "  warning: agent :${port} did not become healthy yet" >&2
+  fi
+done
+
 echo ""
-echo "Agents running (Ctrl+C to stop)."
+echo "Agents running (Ctrl+C to stop all)."
 wait

@@ -82,8 +82,15 @@ echo "Registry ok: ${REGISTRY_URL}"
 echo "Starting ${#AGENT_DIRS[@]} agent(s)..."
 for dir in "${AGENT_DIRS[@]}"; do
   name="$(basename "${dir}")"
-  echo "  ${name}"
-  python -u "${dir}/agent.py" &
+  port="$(
+    sed -nE 's/.*port[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "${dir}/agent.py" | head -1
+  )"
+  echo "  ${name}${port:+ (:${port})}"
+  # Run from the agent folder so local imports (scrape.py, proxy.py, …) resolve.
+  (
+    cd "${dir}"
+    python -u agent.py
+  ) &
   PIDS+=($!)
 done
 

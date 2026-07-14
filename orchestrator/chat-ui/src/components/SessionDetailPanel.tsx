@@ -142,18 +142,18 @@ export function SessionDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="relative flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+        className="relative flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-xl border border-border bg-background shadow-2xl sm:max-h-[88vh] sm:rounded-xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="session-detail-title"
       >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border bg-gradient-to-b from-surface/80 to-background px-5 py-4 pr-12">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border bg-gradient-to-b from-surface/80 to-background px-4 py-3 pr-12 sm:px-5 sm:py-4">
           <div className="min-w-0">
             <p
               id="session-detail-title"

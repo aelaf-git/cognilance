@@ -53,13 +53,13 @@ export function EnvEditor({ rows, onChange, hint, existingKeys = [] }: EnvEditor
           {rows.map((row, index) => {
             const isExisting = existingKeys.includes(row.key.trim().toUpperCase());
             return (
-              <div key={`${row.key}-${index}`} className="flex flex-wrap items-center gap-2">
+              <div key={`${row.key}-${index}`} className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                 <input
                   type="text"
                   value={row.key}
                   onChange={(e) => updateRow(index, { key: e.target.value.toUpperCase() })}
                   placeholder="GROQ_API_KEY"
-                  className="min-w-[10rem] flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-white outline-none focus:border-registry/50"
+                  className="w-full min-w-0 rounded-md border border-border bg-background px-3 py-2.5 font-mono text-xs text-white outline-none focus:border-registry/50 sm:min-w-[10rem] sm:flex-1 sm:py-2"
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -68,14 +68,14 @@ export function EnvEditor({ rows, onChange, hint, existingKeys = [] }: EnvEditor
                   value={row.value}
                   onChange={(e) => updateRow(index, { value: e.target.value })}
                   placeholder={isExisting ? "Leave blank to keep existing" : "Secret value"}
-                  className="min-w-[12rem] flex-[2] rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-white outline-none focus:border-registry/50"
+                  className="w-full min-w-0 rounded-md border border-border bg-background px-3 py-2.5 font-mono text-xs text-white outline-none focus:border-registry/50 sm:min-w-[12rem] sm:flex-[2] sm:py-2"
                   autoComplete="new-password"
                   spellCheck={false}
                 />
                 <button
                   type="button"
                   onClick={() => removeRow(index)}
-                  className="rounded-md border border-border p-2 text-dim hover:text-red-400"
+                  className="self-end rounded-md border border-border p-2 text-dim hover:text-red-400 sm:self-auto"
                   aria-label="Remove variable"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

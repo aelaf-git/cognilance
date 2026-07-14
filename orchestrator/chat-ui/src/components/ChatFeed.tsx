@@ -38,9 +38,9 @@ export function ChatFeed({
 
   return (
     <div className="flex-1 overflow-y-auto scrollbar-thin">
-      <div className="mx-auto max-w-3xl space-y-6 px-5 py-6">
+      <div className="mx-auto max-w-3xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-5 sm:py-6">
         {messages.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border bg-surface/40 px-6 py-12 text-center">
+          <div className="rounded-lg border border-dashed border-border bg-surface/40 px-4 py-8 text-center sm:px-6 sm:py-12">
             <p className="text-sm font-medium text-white/90">Conversation</p>
             <p className="mt-2 text-sm text-muted">
               Send a message — responses stream here. Open a session card to see planning and
@@ -54,7 +54,7 @@ export function ChatFeed({
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
+                className={`max-w-[92%] rounded-xl px-3 py-2.5 text-sm leading-relaxed sm:max-w-[85%] sm:px-4 sm:py-3 ${
                   msg.role === "user"
                     ? "bg-registry/15 text-white"
                     : msg.error

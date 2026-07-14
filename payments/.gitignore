@@ -1,0 +1,30 @@
+# Anchor / Solana local artifacts
+.anchor/
+target/
+test-ledger/
+.surfpool/
+**/*.rs.bk
+
+# Node
+node_modules/
+.yarn/
+.vite/
+*.tsbuildinfo
+
+# Secrets & local env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Generated / local wallets (never commit)
+**/*-keypair.json
+scripts/test-wallets/
+keys/
+
+# OS
+.DS_Store

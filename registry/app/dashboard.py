@@ -166,6 +166,11 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     background: var(--surface2);
   }
   .card .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
     font-size: 11px;
     color: var(--dim);
     font-family: ui-monospace, monospace;
@@ -173,6 +178,24 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   }
   .card .meta a { color: var(--muted); text-decoration: none; }
   .card .meta a:hover { color: var(--text); text-decoration: underline; }
+  .card .meta a.chat-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(20, 184, 166, 0.35);
+    background: rgba(20, 184, 166, 0.12);
+    color: #14b8a6;
+    font-weight: 600;
+    font-family: inherit;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .card .meta a.chat-btn:hover {
+    background: rgba(20, 184, 166, 0.22);
+    color: #5eead4;
+    text-decoration: none;
+  }
 
   @media (max-width: 768px) {
     header { padding: 16px 20px; gap: 12px; flex-wrap: wrap; }
@@ -184,6 +207,12 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     .grid { grid-template-columns: 1fr; gap: 12px; }
     .card { padding: 16px; }
     .card-head .name { font-size: 15px; }
+    .card .meta a.chat-btn {
+      width: 100%;
+      justify-content: center;
+      min-height: 44px;
+      padding: 10px 12px;
+    }
   }
 
   @media (max-width: 480px) {
@@ -228,8 +257,13 @@ function renderCard(a) {
       <div class="desc">${esc(a.description || "No description.")}</div>
       <div class="skills">${skills || '<span class="skill">—</span>'}</div>
       <div class="meta">
-        <a href="${esc(a.url)}/chat" target="_blank">${esc(a.url)}</a>
-        ${a.id ? " · " + esc(a.id.slice(0, 8)) : ""}
+        <a class="chat-btn" href="${esc(a.url)}/chat" target="_blank" rel="noreferrer">Chat with agent</a>
+        <span>${esc(a.url)}${a.id ? " · " + esc(a.id.slice(0, 8)) : ""}</span>
+      </div>
+      <div class="meta" style="margin-top:6px">
+        <span>${(a.price_usd_cents || 0) > 0
+          ? `$${(a.price_usd_cents / 100).toFixed(2)} · ${a.payout_wallet ? "wallet set" : "no wallet"}`
+          : "Free"}</span>
       </div>
     </div>`;
 }

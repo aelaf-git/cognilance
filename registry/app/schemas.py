@@ -16,6 +16,13 @@ class RegisterAgentRequest(BaseModel):
     skills: list[str] = Field(default_factory=list)
     visibility: str = "public"
     tags: list[str] = Field(default_factory=list)
+    payout_wallet: str | None = None
+    price_usd_cents: int = Field(default=0, ge=0)
+
+
+class UpdateAgentPaymentRequest(BaseModel):
+    payout_wallet: str | None = None
+    price_usd_cents: int | None = Field(default=None, ge=0)
 
 
 class AgentResponse(BaseModel):
@@ -29,6 +36,8 @@ class AgentResponse(BaseModel):
     online: bool = True
     last_heartbeat: datetime
     version: str = "0.1.0"
+    payout_wallet: str | None = None
+    price_usd_cents: int = 0
 
 
 class DiscoverResponse(BaseModel):
