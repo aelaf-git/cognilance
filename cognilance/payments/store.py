@@ -41,6 +41,20 @@ class PaymentStore:
                     wallet_id TEXT PRIMARY KEY,
                     amount_base_units INTEGER NOT NULL DEFAULT 0
                 );
+                CREATE TABLE IF NOT EXISTS user_solana_wallets (
+                    user_id TEXT PRIMARY KEY,
+                    address TEXT NOT NULL,
+                    provider TEXT,
+                    cluster TEXT NOT NULL DEFAULT 'devnet',
+                    linked_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS wallet_bridges (
+                    user_id TEXT NOT NULL,
+                    address TEXT NOT NULL,
+                    bridged_base_units INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, address)
+                );
                 CREATE TABLE IF NOT EXISTS task_id_seq (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
                     next_val INTEGER NOT NULL DEFAULT 1
@@ -94,6 +108,42 @@ class PaymentStore:
                 (wallet_id,),
             )
             return wallet_id
+
+    def link_solana_wallet(
+        self,
+        user_id: str,
+        address: str,
+        *,
+        provider: str | None = None,
+        cluster: str = "devnet",
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_solana_wallets (user_id, address, provider, cluster, linked_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                  address = excluded.address,
+                  provider = excluded.provider,
+                  cluster = excluded.cluster,
+                  linked_at = excluded.linked_at
+                """,
+                (user_id, address, provider, cluster, now),
+            )
+
+    def unlink_solana_wallet(self, user_id: str) -> None:
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                "DELETE FROM user_solana_wallets WHERE user_id = ?", (user_id,)
+            )
+
+    def get_solana_wallet(self, user_id: str) -> dict[str, Any] | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM user_solana_wallets WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            return dict(row) if row else None
 
     def get_balance(self, wallet_id: str) -> int:
         with self._conn() as conn:
@@ -174,6 +224,38 @@ class PaymentStore:
                 "SELECT * FROM escrow_links WHERE hire_id = ?", (hire_id,)
             ).fetchone()
             return dict(row) if row else None
+
+    def list_escrows_for_agent_wallet(self, agent_wallet: str) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM escrow_links WHERE agent_wallet = ? ORDER BY created_at",
+                (agent_wallet,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_bridged_base_units(self, user_id: str, address: str) -> int:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT bridged_base_units FROM wallet_bridges WHERE user_id = ? AND address = ?",
+                (user_id, address),
+            ).fetchone()
+            return int(row["bridged_base_units"]) if row else 0
+
+    def set_bridged_base_units(
+        self, user_id: str, address: str, amount: int
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO wallet_bridges (user_id, address, bridged_base_units, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, address) DO UPDATE SET
+                  bridged_base_units = excluded.bridged_base_units,
+                  updated_at = excluded.updated_at
+                """,
+                (user_id, address, amount, now),
+            )
 
     def list_escrows_for_mission(self, mission_id: str) -> list[dict[str, Any]]:
         with self._conn() as conn:

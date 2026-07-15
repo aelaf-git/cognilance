@@ -142,7 +142,16 @@ default at `~/.cognilance/payments.db`). `CognilanceManager.hire` funds escrow
 when `price_usd_cents > 0`; managers must call `settle_hire` / `refund_hire`
 after validation (the orchestrator does this in mission finalize).
 
-Orchestrator chat UI: **Fund $10 / $50** → `POST /payments/fund`.
+Orchestrator chat UI: **Connect wallet** (Solflare or Phantom, Devnet) →
+`POST /payments/wallet/connect` links the address to the user; the header shows
+the devnet **USDC** balance (`GET /payments/wallet`, summed over the owner's
+token accounts for the configured mint). The mint defaults to Circle's devnet
+USDC (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`) — get free test USDC at
+https://faucet.circle.com — or set `MOCK_USDC_MINT` to a self-minted mock USDC
+created with `scripts/create-mock-usdc.ts`. A 1 SOL devnet airdrop endpoint
+(`POST /payments/wallet/airdrop`) exists for future tx fees. The mock-USDC
+`POST /payments/fund` endpoint still exists for tests/scripts but has no UI
+button anymore.
 Developer portal: set `PAYOUT_WALLET` + `PRICE_USD_CENTS` on agent env; use
 **Collect / earnings** to view settled balances.
 

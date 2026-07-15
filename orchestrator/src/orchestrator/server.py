@@ -215,6 +215,92 @@ def create_app() -> FastAPI:
             }
         )
 
+    @app.get("/payments/wallet")
+    async def payments_wallet(request: Request) -> JSONResponse:
+        """Linked Solana wallet (devnet) for the current user, with SOL balance."""
+        from cognilance.payments import PaymentService
+
+        user_id = getattr(request.state, "user_id", None) or "anonymous"
+        svc = PaymentService()
+        wallet = svc.get_solana_wallet(user_id)
+        if wallet is None:
+            return JSONResponse(content={"connected": False})
+        usdc_base_units: int | None = None
+        spendable_base_units: int | None = None
+        balance_error: str | None = None
+        try:
+            usdc_base_units = await svc.solana_usdc_balance_base_units(
+                wallet["address"]
+            )
+            # Mirror new devnet USDC deposits into the spendable hire balance.
+            spendable_base_units = await svc.sync_wallet_usdc(user_id)
+        except Exception as exc:  # RPC hiccups shouldn't hide the linked wallet
+            balance_error = str(exc)
+        return JSONResponse(
+            content={
+                "connected": True,
+                "address": wallet["address"],
+                "provider": wallet.get("provider"),
+                "cluster": wallet.get("cluster", "devnet"),
+                "usdc_mint": svc.usdc_mint,
+                "balance_usdc_base_units": usdc_base_units,
+                "balance_usdc": (
+                    round(usdc_base_units / 1_000_000, 2)
+                    if usdc_base_units is not None
+                    else None
+                ),
+                "spendable_usdc": (
+                    round(spendable_base_units / 1_000_000, 2)
+                    if spendable_base_units is not None
+                    else None
+                ),
+                "balance_error": balance_error,
+            }
+        )
+
+    @app.post("/payments/wallet/connect")
+    async def payments_wallet_connect(request: Request) -> JSONResponse:
+        """Link a wallet address from the browser extension (Solflare/Phantom)."""
+        from cognilance.payments import PaymentError, PaymentService
+
+        body = await request.json()
+        address = str(body.get("address") or "").strip()
+        provider = str(body.get("provider") or "").strip() or None
+        user_id = getattr(request.state, "user_id", None) or "anonymous"
+        try:
+            result = PaymentService().link_solana_wallet(
+                user_id, address, provider=provider, cluster="devnet"
+            )
+        except PaymentError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(content={"connected": True, **result})
+
+    @app.post("/payments/wallet/disconnect")
+    async def payments_wallet_disconnect(request: Request) -> JSONResponse:
+        from cognilance.payments import PaymentService
+
+        user_id = getattr(request.state, "user_id", None) or "anonymous"
+        PaymentService().unlink_solana_wallet(user_id)
+        return JSONResponse(content={"connected": False})
+
+    @app.post("/payments/wallet/airdrop")
+    async def payments_wallet_airdrop(request: Request) -> JSONResponse:
+        """Request a 1 SOL devnet airdrop for the linked wallet."""
+        from cognilance.payments import PaymentError, PaymentService
+
+        user_id = getattr(request.state, "user_id", None) or "anonymous"
+        svc = PaymentService()
+        wallet = svc.get_solana_wallet(user_id)
+        if wallet is None:
+            raise HTTPException(status_code=400, detail="No wallet connected")
+        try:
+            signature = await svc.request_airdrop(wallet["address"], 1_000_000_000)
+        except PaymentError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(
+            content={"signature": signature, "address": wallet["address"]}
+        )
+
     @app.get("/logo.png")
     async def logo() -> FileResponse:
         if not LOGO_PATH.is_file():

@@ -76,10 +76,25 @@ export async function fetchLogs(id: string, lines = 200): Promise<string> {
   return data.logs;
 }
 
+export type RegistryAgentEarnings = {
+  id: string | null;
+  name: string;
+  online: boolean;
+  skills: string[];
+  url: string | null;
+  price_usd_cents: number;
+  hires: number;
+  earned_base_units: number;
+  earned_usd: number;
+};
+
 export type EarningsResponse = {
   payout_wallet: string;
   balance_base_units: number;
   balance_usd: number;
+  total_hires: number;
+  total_earned_usd: number;
+  agents: RegistryAgentEarnings[];
   ledger: Array<{
     entry_type: string;
     amount: number;

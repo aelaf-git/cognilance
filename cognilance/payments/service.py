@@ -18,6 +18,23 @@ from cognilance.payments.store import PaymentStore
 # Platform treasury wallet id in the mock ledger (mirrors on-chain treasury).
 MOCK_TREASURY_WALLET_ID = "cognilance-treasury"
 
+# Public devnet RPC used for connected-wallet balances when SOLANA_RPC_URL
+# points at the default localnet (no validator running in product demos).
+DEVNET_RPC_URL = "https://api.devnet.solana.com"
+
+# Circle's official devnet USDC mint (get test USDC at https://faucet.circle.com).
+# Override with MOCK_USDC_MINT to use a self-minted mock USDC instead.
+DEVNET_USDC_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+
+_BASE58_ALPHABET = frozenset(
+    "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+)
+
+
+def is_valid_solana_address(address: str) -> bool:
+    """Cheap shape check for a base58 Solana pubkey (32-44 chars)."""
+    return 32 <= len(address) <= 44 and all(c in _BASE58_ALPHABET for c in address)
+
 
 class PaymentError(Exception):
     """Raised when a payment operation cannot proceed."""
@@ -80,6 +97,156 @@ class PaymentService:
             "credited_base_units": amount,
             "balance_base_units": self.store.get_balance(wallet_id),
         }
+
+    # ---- Connected Solana wallet (devnet) ----------------------------------
+
+    def _wallet_rpc_url(self) -> str:
+        rpc = (self.config.rpc_url or "").strip()
+        if not rpc or "localhost" in rpc or "127.0.0.1" in rpc:
+            return DEVNET_RPC_URL
+        return rpc
+
+    def link_solana_wallet(
+        self,
+        user_id: str,
+        address: str,
+        *,
+        provider: str | None = None,
+        cluster: str = "devnet",
+    ) -> dict[str, Any]:
+        """Attach a user's Solana wallet address (Solflare/Phantom/…)."""
+        address = address.strip()
+        if not is_valid_solana_address(address):
+            raise PaymentError(f"Not a valid Solana address: {address!r}")
+        self.store.link_solana_wallet(
+            user_id, address, provider=provider, cluster=cluster
+        )
+        return {
+            "user_id": user_id,
+            "address": address,
+            "provider": provider,
+            "cluster": cluster,
+        }
+
+    def unlink_solana_wallet(self, user_id: str) -> None:
+        self.store.unlink_solana_wallet(user_id)
+
+    def get_solana_wallet(self, user_id: str) -> dict[str, Any] | None:
+        return self.store.get_solana_wallet(user_id)
+
+    @property
+    def usdc_mint(self) -> str:
+        return self.config.mock_usdc_mint or DEVNET_USDC_MINT
+
+    async def _rpc(self, method: str, params: list[Any]) -> Any:
+        import httpx
+
+        payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(self._wallet_rpc_url(), json=payload)
+            res.raise_for_status()
+            data = res.json()
+        if "error" in data:
+            raise PaymentError(f"Solana RPC error: {data['error']}")
+        return data["result"]
+
+    async def solana_balance_lamports(self, address: str) -> int:
+        """Fetch SOL balance for an address from the configured RPC (devnet)."""
+        result = await self._rpc("getBalance", [address])
+        return int(result["value"])
+
+    async def solana_usdc_balance_base_units(self, address: str) -> int:
+        """Sum USDC (SPL token) balance across the owner's token accounts.
+
+        Uses the configured mint (MOCK_USDC_MINT) or Circle's devnet USDC.
+        Returns base units (6 decimals).
+        """
+        result = await self._rpc(
+            "getTokenAccountsByOwner",
+            [address, {"mint": self.usdc_mint}, {"encoding": "jsonParsed"}],
+        )
+        total = 0
+        for account in result.get("value", []):
+            info = account["account"]["data"]["parsed"]["info"]
+            total += int(info["tokenAmount"]["amount"])
+        return total
+
+    async def sync_wallet_usdc(self, user_id: str) -> int:
+        """Mirror the connected wallet's devnet USDC into the spendable ledger.
+
+        Credits the user's ledger with any devnet USDC that appeared since the
+        last sync (deposit-only bridge; on-chain spend/escrow isn't wired yet).
+        Returns the user's spendable balance in base units.
+        """
+        wallet = self.store.get_solana_wallet(user_id)
+        wallet_id = self.store.ensure_user_wallet(user_id)
+        if wallet is None:
+            return self.store.get_balance(wallet_id)
+        address = wallet["address"]
+        on_chain = await self.solana_usdc_balance_base_units(address)
+        bridged = self.store.get_bridged_base_units(user_id, address)
+        if on_chain > bridged:
+            delta = on_chain - bridged
+            self.store.credit(wallet_id, delta)
+            self.store.add_ledger(
+                entry_type=LedgerEntryType.CREDIT.value,
+                wallet_id=wallet_id,
+                amount=delta,
+            )
+            self.store.set_bridged_base_units(user_id, address, on_chain)
+        return self.store.get_balance(wallet_id)
+
+    def agent_hire_stats(self, payout_wallet: str) -> dict[str, Any]:
+        """Hire counts and earnings for a developer payout wallet.
+
+        Earnings mirror release math: 90% of each released escrow.
+        """
+        escrows = self.store.list_escrows_for_agent_wallet(payout_wallet)
+        per_agent: dict[str, dict[str, Any]] = {}
+        total_hires = 0
+        total_earned = 0
+        for row in escrows:
+            agent_id = row.get("agent_id") or "unknown"
+            stats = per_agent.setdefault(
+                agent_id,
+                {"agent_id": agent_id, "hires": 0, "released": 0, "refunded": 0,
+                 "earned_base_units": 0},
+            )
+            stats["hires"] += 1
+            total_hires += 1
+            if row["status"] == EscrowStatus.RELEASED.value:
+                earned = (int(row["amount_base_units"]) * 90) // 100
+                stats["released"] += 1
+                stats["earned_base_units"] += earned
+                total_earned += earned
+            elif row["status"] == EscrowStatus.REFUNDED.value:
+                stats["refunded"] += 1
+        return {
+            "payout_wallet": payout_wallet,
+            "total_hires": total_hires,
+            "total_earned_base_units": total_earned,
+            "agents": sorted(
+                per_agent.values(), key=lambda s: -s["earned_base_units"]
+            ),
+        }
+
+    async def request_airdrop(self, address: str, lamports: int) -> str:
+        """Request a devnet SOL airdrop. Returns the tx signature."""
+        import httpx
+
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "requestAirdrop",
+            "params": [address, lamports],
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            res = await client.post(self._wallet_rpc_url(), json=payload)
+            res.raise_for_status()
+            data = res.json()
+        if "error" in data:
+            raise PaymentError(f"Airdrop failed: {data['error'].get('message', data['error'])}")
+        return str(data["result"])
 
     # ---- Escrow lifecycle -------------------------------------------------
 
