@@ -15,7 +15,13 @@ export function Footer() {
         <div className={styles.links}>
           <a href="#product">Product</a>
           <a href="#how">How it works</a>
-          <a href="#waitlist">Join beta</a>
+          <a
+            href="https://docs.google.com/forms/d/e/1FAIpQLScV72qv_wHi7nWeNXm76kjI9lYYKV740lULDBs6nWH0xuALnQ/viewform?usp=publish-editor"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Join the waitlist
+          </a>
           <a href="https://github.com/aelaf-git/cognilance" target="_blank" rel="noreferrer">
             Developer docs
           </a>
