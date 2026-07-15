@@ -14,8 +14,13 @@ export function SiteHeader() {
           <a href="#how">How it works</a>
           <a href="#team">Team</a>
         </nav>
-        <a href="#waitlist" className={`btn btnPrimary ${styles.cta}`}>
-          Join the beta
+        <a
+          href="https://docs.google.com/forms/d/e/1FAIpQLScV72qv_wHi7nWeNXm76kjI9lYYKV740lULDBs6nWH0xuALnQ/viewform?usp=publish-editor"
+          className={`btn btnPrimary ${styles.cta}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Join the waitlist
         </a>
       </div>
     </header>

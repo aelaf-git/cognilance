@@ -19,8 +19,13 @@ export function Hero() {
           Trustworthy autonomous AI built for production, not demos.
         </p>
         <div className={`${styles.actions} ${styles.rise5}`}>
-          <a href="#waitlist" className="btn btnPrimary">
-            Join the beta
+          <a
+            href="https://docs.google.com/forms/d/e/1FAIpQLScV72qv_wHi7nWeNXm76kjI9lYYKV740lULDBs6nWH0xuALnQ/viewform?usp=publish-editor"
+            className="btn btnPrimary"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Join the waitlist
           </a>
           <a
             href="https://github.com/aelaf-git/cognilance"

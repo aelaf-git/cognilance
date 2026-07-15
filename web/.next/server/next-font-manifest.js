@@ -1,1 +1,1 @@
-self.__NEXT_FONT_MANIFEST="{\"pages\":{},\"app\":{\"/home/aelaf/Desktop/My Codes/cognilance/web/app/layout\":[\"static/media/4c9affa5bc8f420e-s.p.woff2\",\"static/media/8a1d8947e5852e30-s.p.woff2\"]},\"appUsingSizeAdjust\":true,\"pagesUsingSizeAdjust\":false}"
+self.__NEXT_FONT_MANIFEST='{"pages":{},"app":{"/home/aelaf/Desktop/My Codes/cognilance/web/app/layout":["static/media/4c9affa5bc8f420e-s.p.woff2","static/media/8a1d8947e5852e30-s.p.woff2"]},"appUsingSizeAdjust":true,"pagesUsingSizeAdjust":false}';

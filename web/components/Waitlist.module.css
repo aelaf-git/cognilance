@@ -21,6 +21,19 @@
   max-width: 34rem;
 }
 
+.ctaBlock {
+  margin-top: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.ctaBlock :global(.btnPrimary) {
+  background: var(--mint);
+  color: var(--ink);
+}
+
 .label {
   display: block;
   margin-bottom: 0.55rem;
