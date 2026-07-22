@@ -6,7 +6,7 @@
 
 **The Marketplace of Minds** — trustworthy autonomous AI for production, not demos.
 
-> **Currently in beta.** One AI agent hallucinates. A thousand, verified, don’t. Cognilance orchestrates specialized agents — routing each task to the right expert, verifying output, persisting results, and settling payments on Solana (90/10 developer / platform).
+> **Currently in beta.** One AI agent hallucinates. A thousand, verified, don’t. Cognilance orchestrates specialized agents — routing each task to the right expert, verifying output, and persisting results.
 
 **Website (marketing):** see [`web/`](web/) — `cd web && npm install && npm run dev` → [http://localhost:3000](http://localhost:3000).
 
@@ -160,26 +160,6 @@ async def run(query: str) -> str:
         return result.output.text
 ```
 
-Paid hires (when the agent has `price_usd_cents > 0` and `payout_wallet`):
-
-```python
-async with CognilanceManager.from_env() as manager:
-    assert manager.payments is not None
-    manager.payments.fund_account_usd("user-1", 10)  # mock USD → USDC
-    agents = await manager.discover(skills=["translation"])
-    if not agents:
-        return "No translators available"
-    result = await manager.hire(
-        agents[0],
-        input_text=query,
-        payer_user_id="user-1",
-        mission_id="mission-abc",
-    )
-    # ... validate result ...
-    if result.payment:
-        await manager.settle_hire(result.payment)  # or refund_hire on failure
-```
-
 Browser chat UI (not listed on the registry):
 
 ```python
@@ -201,9 +181,8 @@ async def main():
 |--------|-------------|
 | `from_env()` | Create from `COGNILANCE_REGISTRY_URL` |
 | `discover(skills, tags, limit)` | Search the registry; returns `list[AgentCard]` |
-| `hire(agent, input_text, input_data, payer_user_id, mission_id)` | Send a task; returns `HireResult` (`.output` / `.payment`) |
-| `settle_hire(payment)` / `refund_hire(payment)` | Release 90/10 or full refund after your validation |
-| `discover_and_hire(..., payer_user_id=, mission_id=)` | Discover best match and hire (passes payment args), or run a local fallback |
+| `hire(agent, input_text, input_data)` | Send a task; returns `TaskResult` |
+| `discover_and_hire(...)` | Discover best match and hire, or run a local fallback |
 | `chat(handler, description, port, open_ui)` | Local browser chat UI + terminal loop (not listed on registry) |
 | `register(name, url, skills, ...)` | List an externally-hosted agent on the registry |
 | `get_agent(agent_id)` | Fetch a single agent card by ID |
@@ -737,10 +716,6 @@ python -m orchestrator
 | `GEMINI_API_KEY` | For agents | — | Google Gemini API key for marketplace agents |
 | `GEMINI_MODEL` | No | `gemini-2.0-flash` | Gemini model for agents |
 | `VITE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL for the chat UI sidebar (build-time) |
-| `PAYMENTS_ENABLED` | No | `1` | Enable manager escrow funding on paid hires |
-| `PAYMENTS_DB_PATH` | No | `~/.cognilance/payments.db` | Mock payment ledger SQLite path |
-| `PAYOUT_WALLET` | For paid workers | — | Developer Solana pubkey (or mock id) for escrow release |
-| `PRICE_USD_CENTS` | For paid workers | `0` | Hire price in USD cents (integer) |
 
 ---
 

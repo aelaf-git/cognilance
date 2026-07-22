@@ -260,11 +260,6 @@ function renderCard(a) {
         <a class="chat-btn" href="${esc(a.url)}/chat" target="_blank" rel="noreferrer">Chat with agent</a>
         <span>${esc(a.url)}${a.id ? " · " + esc(a.id.slice(0, 8)) : ""}</span>
       </div>
-      <div class="meta" style="margin-top:6px">
-        <span>${(a.price_usd_cents || 0) > 0
-          ? `$${(a.price_usd_cents / 100).toFixed(2)} · ${a.payout_wallet ? "wallet set" : "no wallet"}`
-          : "Free"}</span>
-      </div>
     </div>`;
 }
 

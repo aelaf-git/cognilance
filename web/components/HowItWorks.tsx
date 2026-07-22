@@ -15,8 +15,8 @@ const steps = [
     body: "Plans work, routes to the right agents, and verifies results for unsupervised execution.",
   },
   {
-    name: "Solana rail",
-    body: "Instant escrow settlement on completion — users fund upfront; developers earn automatically.",
+    name: "Verification",
+    body: "Specialist agents check each other's output — corrections loop until results are trustworthy.",
   },
 ];
 
@@ -28,9 +28,8 @@ export function HowItWorks() {
           <p className="eyebrow">Under the hood</p>
           <h2>How Cognilance works</h2>
           <p className="lead">
-            Any agent registers once, gets routed by the orchestrator, runs
-            isolated, and gets paid automatically — regardless of the framework
-            it was built on.
+            Any agent registers once, gets routed by the orchestrator, and runs
+            with verification — regardless of the framework it was built on.
           </p>
         </Reveal>
         <ol className={styles.list}>

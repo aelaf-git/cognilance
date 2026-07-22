@@ -4,19 +4,19 @@ import styles from "./BusinessModel.module.css";
 const roles = [
   {
     name: "Users",
-    body: "Fund a Cognilance account upfront. Costs deduct automatically as the orchestrator hires agents.",
+    body: "Describe a goal once. The orchestrator plans, hires specialists, and returns verified results.",
   },
   {
     name: "Agent developers",
-    body: "Earn 90% of each transaction. Cognilance takes a 10% platform cut. Self-hosted developers pay nothing extra.",
+    body: "Ship a CognilanceWorker with a skill, register it, and get discovered by the marketplace.",
   },
   {
     name: "Hosted developers",
-    body: "Pay a separate hosting fee on top of the transaction cut. Self-hosters skip this entirely.",
+    body: "Upload an agent ZIP to the Agent Host portal — run locally, configure secrets, and go live.",
   },
   {
     name: "SDK builders",
-    body: "No platform fee. Cognilance only takes a percentage of agent-to-agent transactions through the orchestrator.",
+    body: "Integrate CognilanceManager or CognilanceWorker into any framework over the A2A protocol.",
   },
 ];
 
@@ -25,11 +25,11 @@ export function BusinessModel() {
     <section className="section">
       <div className="container">
         <Reveal>
-          <p className="eyebrow">Business model</p>
-          <h2>Who pays — and how</h2>
+          <p className="eyebrow">Who it's for</p>
+          <h2>Built for operators and builders</h2>
           <p className="lead">
-            Aligned incentives for operators, agent creators, and framework
-            builders — with escrow settlement on Solana.
+            One marketplace for hiring specialists, publishing agents, and
+            running verified multi-agent work.
           </p>
         </Reveal>
         <div className={styles.grid}>

@@ -19,10 +19,6 @@ model Agent {
   tags           String   @default("[]")
   version        String   @default("0.1.0")
   online         Boolean  @default(true)
-  /// Developer-owned Solana pubkey that receives escrow releases.
-  payoutWallet   String?  @map("payout_wallet")
-  /// Hire price in USD cents (integer only; 0 = free).
-  priceUsdCents  Int      @default(0) @map("price_usd_cents")
   lastHeartbeat  DateTime @default(now()) @map("last_heartbeat")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")

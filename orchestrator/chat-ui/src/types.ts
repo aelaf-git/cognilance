@@ -28,8 +28,6 @@ export type CatalogAgent = {
   online: boolean;
   skills: string[];
   url?: string | null;
-  price_usd_cents?: number;
-  payout_wallet?: string | null;
 };
 
 export type FeedCard = {
