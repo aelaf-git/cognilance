@@ -46,6 +46,7 @@
   letter-spacing: -0.01em;
   color: var(--fog);
   justify-self: center;
+  text-transform: capitalize;
 }
 
 .nav a:hover {
@@ -64,6 +65,7 @@
   min-height: 2.6rem;
   padding: 0.55rem 0.9rem;
   white-space: nowrap;
+  text-transform: capitalize;
 }
 
 .ctaFull {
@@ -161,6 +163,7 @@
   color: var(--ash);
   padding: 0.85rem 0.35rem;
   border-bottom: 1px solid var(--border);
+  text-transform: capitalize;
 }
 
 .mobileNav a:hover {

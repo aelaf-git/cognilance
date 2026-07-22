@@ -1,3 +1,4 @@
+import ClickSpark from "@/components/ClickSpark";
 import { BusinessModel } from "@/components/BusinessModel";
 import { Developers } from "@/components/Developers";
 import { Footer } from "@/components/Footer";
@@ -14,7 +15,13 @@ import { Waitlist } from "@/components/Waitlist";
 
 export default function HomePage() {
   return (
-    <>
+    <ClickSpark
+      sparkColor="#ff492c"
+      sparkSize={10}
+      sparkRadius={15}
+      sparkCount={8}
+      duration={400}
+    >
       <SiteHeader />
       <main>
         <Hero />
@@ -30,6 +37,6 @@ export default function HomePage() {
         <Waitlist />
       </main>
       <Footer />
-    </>
+    </ClickSpark>
   );
 }

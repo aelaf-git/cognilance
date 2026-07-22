@@ -9,7 +9,7 @@ const WAITLIST =
 
 const LINKS = [
   { href: "#product", label: "Product" },
-  { href: "#how", label: "How it works" },
+  { href: "#how", label: "How It Works" },
   { href: "#pricing", label: "Pricing" },
   { href: "#developers", label: "For Developers" },
   { href: "#founders", label: "Founders" },
@@ -64,7 +64,7 @@ export function SiteHeader() {
             target="_blank"
             rel="noreferrer"
           >
-            <span className={styles.ctaFull}>Join the waitlist</span>
+            <span className={styles.ctaFull}>Join The Waitlist</span>
             <span className={styles.ctaShort}>Waitlist</span>
           </a>
           <button
@@ -97,7 +97,7 @@ export function SiteHeader() {
             rel="noreferrer"
             onClick={close}
           >
-            Join the waitlist
+            Join The Waitlist
           </a>
         </nav>
       </div>

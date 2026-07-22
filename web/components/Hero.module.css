@@ -30,13 +30,6 @@
   min-width: 0;
 }
 
-.brandLogo {
-  display: block;
-  width: min(100%, 16rem);
-  height: auto;
-  margin: 0 0 1rem;
-}
-
 .headline {
   font-family: var(--font-display);
   font-size: var(--text-h1);
@@ -44,15 +37,18 @@
   line-height: 1.08;
   letter-spacing: -0.035em;
   color: var(--white);
-  max-width: 16ch;
+  max-width: 14ch;
 }
 
 .sub {
-  margin: 1.1rem 0 0;
-  max-width: 32rem;
+  margin: 0.85rem 0 0;
+  max-width: 20ch;
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 3.5vw, 1.85rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
   color: var(--ash);
-  font-size: var(--text-lead);
-  line-height: 1.55;
 }
 
 .actions {
@@ -66,129 +62,53 @@
   width: 100%;
 }
 
-.canvas {
+.visual {
   position: relative;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.sphereStage {
+  position: relative;
+  width: min(100%, 28rem);
+  aspect-ratio: 1;
   min-height: 320px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%),
-    var(--panel);
-  box-shadow:
-    inset 0 -1px 0 rgba(255, 142, 93, 0.18),
-    0 30px 80px rgba(0, 0, 0, 0.35);
-  overflow: hidden;
+  isolation: isolate;
 }
 
-.canvasGlow {
+.sphereGlow {
   position: absolute;
-  inset: auto -20% -30% 20%;
-  height: 60%;
-  background: radial-gradient(circle, rgba(253, 137, 37, 0.2), transparent 65%);
-  filter: blur(20px);
+  inset: 12% 8% 8%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(253, 137, 37, 0.28) 0%,
+    rgba(255, 73, 44, 0.12) 42%,
+    transparent 70%
+  );
+  filter: blur(18px);
   pointer-events: none;
+  z-index: 0;
 }
 
-.wires {
-  position: absolute;
-  inset: 0;
+.sphereStage :global(canvas) {
+  position: relative;
+  z-index: 1;
+}
+
+.sphereFallback {
   width: 100%;
   height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(253, 137, 37, 0.2),
+    transparent 65%
+  );
 }
 
-.wire {
-  stroke: rgba(7, 122, 199, 0.55);
-  stroke-width: 1.5;
-  stroke-dasharray: 5 7;
-  animation: flowPulse 2.8s ease-in-out infinite;
-}
-
-.wire:nth-child(2) {
-  animation-delay: 0.4s;
-  stroke: rgba(255, 73, 44, 0.45);
-}
-
-.wire:nth-child(3) {
-  animation-delay: 0.8s;
-}
-
-.wire:nth-child(4) {
-  animation-delay: 1.2s;
-  stroke: rgba(107, 33, 239, 0.5);
-}
-
-.node {
-  position: absolute;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 6.4rem;
-  max-width: 42%;
-  padding: 0.5rem 0.65rem;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: rgba(26, 22, 36, 0.92);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
-  animation: nodeFloat 5s ease-in-out infinite;
-}
-
-.nodeLabel {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--white);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.nodeMeta,
-.nodePrice {
-  font-size: 0.65rem;
-  color: var(--fog);
-}
-
-.nodePrice {
-  color: var(--ember-start);
-}
-
-.nodeUser {
-  top: 7%;
-  left: 10%;
-  animation-delay: 0.2s;
-}
-
-.nodeOrch {
-  top: 36%;
-  left: 32%;
-  border-color: rgba(255, 73, 44, 0.35);
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.28),
-    0 0 24px rgba(255, 73, 44, 0.12);
-  animation-delay: 0.6s;
-}
-
-.nodeA {
-  bottom: 10%;
-  left: 4%;
-  animation-delay: 1s;
-}
-
-.nodeB {
-  bottom: 10%;
-  left: 36%;
-  animation-delay: 1.3s;
-}
-
-.nodeC {
-  bottom: 10%;
-  right: 4%;
-  animation-delay: 1.6s;
-}
-
-.rise1 {
-  animation: heroRise 0.8s ease 0.05s both;
-}
 .rise2 {
   animation: heroRise 0.85s ease 0.15s both;
 }
@@ -203,11 +123,6 @@
 }
 
 @media (min-width: 640px) {
-  .brandLogo {
-    width: min(100%, 20rem);
-    margin-bottom: 1.25rem;
-  }
-
   .actions {
     flex-direction: row;
     flex-wrap: wrap;
@@ -218,23 +133,9 @@
     width: auto;
   }
 
-  .canvas {
+  .sphereStage {
+    width: min(100%, 32rem);
     min-height: 380px;
-  }
-
-  .node {
-    min-width: 7.8rem;
-    max-width: none;
-    padding: 0.7rem 0.85rem;
-  }
-
-  .nodeLabel {
-    font-size: 0.82rem;
-  }
-
-  .nodeMeta,
-  .nodePrice {
-    font-size: 0.72rem;
   }
 }
 
@@ -244,44 +145,12 @@
   }
 
   .grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-    gap: 2.5rem;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
+    gap: 1.5rem 2rem;
   }
 
-  .brandLogo {
-    width: min(100%, 22rem);
-  }
-
-  .canvas {
+  .sphereStage {
+    width: min(100%, 36rem);
     min-height: 460px;
-  }
-
-  .node {
-    min-width: 8.5rem;
-    padding: 0.75rem 0.9rem;
-  }
-
-  .nodeLabel {
-    font-size: 0.86rem;
-  }
-
-  .nodeUser {
-    left: 18%;
-  }
-
-  .nodeOrch {
-    left: 38%;
-  }
-
-  .nodeA {
-    left: 8%;
-  }
-
-  .nodeB {
-    left: 38%;
-  }
-
-  .nodeC {
-    right: 8%;
   }
 }

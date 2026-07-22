@@ -39,11 +39,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${spaceGrotesk.variable} ${ibmPlex.variable}`}
-        suppressHydrationWarning
-      >
+    <html lang="en">
+      <body className={`${spaceGrotesk.variable} ${ibmPlex.variable}`}>
         {children}
       </body>
     </html>

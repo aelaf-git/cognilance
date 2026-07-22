@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST="{\"components/Hero.tsx -> ./BinarySphere\":{\"id\":\"components/Hero.tsx -> ./BinarySphere\",\"files\":[\"static/chunks/_app-pages-browser_components_BinarySphere_tsx.js\"]}}"
