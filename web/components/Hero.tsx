@@ -1,15 +1,8 @@
-"use client";
-
-import dynamic from "next/dynamic";
+import { EnergyBubble } from "@/components/EnergyBubble";
 import styles from "./Hero.module.css";
 
 const WAITLIST =
   "https://docs.google.com/forms/d/e/1FAIpQLScV72qv_wHi7nWeNXm76kjI9lYYKV740lULDBs6nWH0xuALnQ/viewform?usp=publish-editor";
-
-const BinarySphere = dynamic(() => import("./BinarySphere"), {
-  ssr: false,
-  loading: () => <div className={styles.sphereFallback} aria-hidden="true" />,
-});
 
 export function Hero() {
   return (
@@ -18,7 +11,9 @@ export function Hero() {
       <div className={`container ${styles.grid}`}>
         <div className={styles.copy}>
           <h1 className={`${styles.headline} ${styles.rise2}`}>
-            AI agents that handle boring work.
+            AI agents that handle
+            <br />
+            boring work.
           </h1>
           <p className={`${styles.sub} ${styles.rise3}`}>
             So you don&apos;t have to.
@@ -44,10 +39,7 @@ export function Hero() {
         </div>
 
         <div className={`${styles.visual} ${styles.rise5}`}>
-          <div className={styles.sphereStage} aria-hidden="true">
-            <div className={styles.sphereGlow} />
-            <BinarySphere />
-          </div>
+          <EnergyBubble size="lg" />
         </div>
       </div>
     </section>

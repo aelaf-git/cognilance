@@ -21,11 +21,19 @@ type Props = {
 const card: CSSProperties = {
   width: "100%",
   maxWidth: 720,
-  border: "1px solid #e5e7eb",
+  border: "1px solid #2c2834",
   borderRadius: 12,
   padding: 16,
-  fontFamily: "ui-sans-serif, system-ui, sans-serif",
-  background: "#fff",
+  fontFamily: '"IBM Plex Sans", system-ui, sans-serif',
+  background: "#1a1624",
+  color: "#e8e6e6",
+};
+
+const tick = { fill: "#9d9797", fontSize: 11 };
+const tooltipStyle = {
+  background: "#15101f",
+  border: "1px solid #2c2834",
+  borderRadius: 8,
 };
 
 export default function DataChart({
@@ -36,7 +44,14 @@ export default function DataChart({
   return (
     <div style={card}>
       {title ? (
-        <div style={{ fontWeight: 600, color: "#111827", marginBottom: 12 }}>
+        <div
+          style={{
+            fontWeight: 600,
+            color: "#ffffff",
+            marginBottom: 12,
+            fontFamily: '"Space Grotesk", system-ui, sans-serif',
+          }}
+        >
           {title}
         </div>
       ) : null}
@@ -44,31 +59,31 @@ export default function DataChart({
         <ResponsiveContainer width="100%" height="100%">
           {chartType === "line" ? (
             <LineChart data={series} margin={{ left: 0, right: 8, top: 8 }}>
-              <CartesianGrid vertical={false} stroke="#eef2f7" />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis tickLine={false} axisLine={false} />
-              <Tooltip />
+              <CartesianGrid vertical={false} stroke="#2c2834" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} tick={tick} />
+              <YAxis tickLine={false} axisLine={false} tick={tick} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "#fff" }} />
               <Line
                 dataKey="value"
                 type="monotone"
-                stroke="#4f46e5"
+                stroke="#ff492c"
                 strokeWidth={2}
                 dot={false}
               />
             </LineChart>
           ) : (
             <BarChart data={series} margin={{ left: 0, right: 8, top: 8 }}>
-              <CartesianGrid vertical={false} stroke="#eef2f7" />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis tickLine={false} axisLine={false} />
-              <Tooltip />
-              <Bar dataKey="value" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+              <CartesianGrid vertical={false} stroke="#2c2834" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} tick={tick} />
+              <YAxis tickLine={false} axisLine={false} tick={tick} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "#fff" }} />
+              <Bar dataKey="value" fill="#fd8925" radius={[4, 4, 0, 0]} />
             </BarChart>
           )}
         </ResponsiveContainer>
       </div>
       {series.length === 0 ? (
-        <div style={{ color: "#9ca3af", fontSize: 13, marginTop: 8 }}>
+        <div style={{ color: "#9d9797", fontSize: 13, marginTop: 8 }}>
           No data returned.
         </div>
       ) : null}

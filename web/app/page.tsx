@@ -7,8 +7,8 @@ import { HowItWorks } from "@/components/HowItWorks";
 import { Market } from "@/components/Market";
 import { Pricing } from "@/components/Pricing";
 import { Problem } from "@/components/Problem";
-import { Proof } from "@/components/Proof";
 import { SiteHeader } from "@/components/SiteHeader";
+import { SocialProof } from "@/components/SocialProof";
 import { Solution } from "@/components/Solution";
 import { Team } from "@/components/Team";
 import { Waitlist } from "@/components/Waitlist";
@@ -25,7 +25,7 @@ export default function HomePage() {
       <SiteHeader />
       <main>
         <Hero />
-        <Proof />
+        <SocialProof />
         <Problem />
         <Solution />
         <HowItWorks />

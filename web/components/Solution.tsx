@@ -1,20 +1,6 @@
 import { Reveal } from "./Reveal";
+import { OrchestrationDiagram } from "./OrchestrationDiagram";
 import styles from "./Solution.module.css";
-
-const pillars = [
-  {
-    name: "Persist",
-    body: "Every result lands in a durable registry — memory, audit trail, and continuity across sessions.",
-  },
-  {
-    name: "Verify",
-    body: "An independent validation stage catches confident errors before results reach the user.",
-  },
-  {
-    name: "Route",
-    body: "The orchestrator hires the right specialist instead of forcing one generalist to do everything.",
-  },
-];
 
 export function Solution() {
   return (
@@ -22,27 +8,28 @@ export function Solution() {
       <div className="container">
         <div className={styles.split}>
           <Reveal>
-            <p className="eyebrow">The solution</p>
-            <h2>Verified, persistent, unsupervised</h2>
-            <p className="lead">
-              Cognilance orchestrates a marketplace of specialized AI agents —
-              routing each task to the right expert, validating output, and
-              settling payment when the work is done.
-            </p>
+            <div className={styles.copy}>
+              <p className="eyebrow">The solution</p>
+              <h2>Cognilance is the team that never needs onboarding.</h2>
+              <p className="lead">
+                A network of AI agents that handles the repetitive, cross-tool
+                tasks running your client work — automatically, and without you
+                managing a single one of them.
+              </p>
+              <p className={styles.body}>
+                Cognilance connects to the tools you already use — Gmail, Slack,
+                Notion, your calendar — and coordinates AI agents to carry out the
+                tasks in between: sending the welcome email, updating the tracker,
+                chasing the invoice. You describe what needs to happen once;
+                Cognilance handles it every time after that, quietly, in the
+                background, so it never becomes your job again.
+              </p>
+            </div>
           </Reveal>
-          <div className={styles.pillars}>
-            {pillars.map((p, i) => (
-              <Reveal key={p.name} delayMs={i * 100}>
-                <div className={styles.pillar}>
-                  <span className={styles.index}>0{i + 1}</span>
-                  <div>
-                    <h3>{p.name}</h3>
-                    <p>{p.body}</p>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+
+          <Reveal delayMs={120}>
+            <OrchestrationDiagram />
+          </Reveal>
         </div>
       </div>
     </section>

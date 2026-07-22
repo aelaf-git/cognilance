@@ -7,15 +7,15 @@
   --shell: #2c2834;
   --border: rgba(255, 255, 255, 0.1);
   --border-strong: #e5e7eb;
-  --ash: #d1cece;
-  --fog: #9d9797;
+  --ash: #e8e6e6;
+  --fog: #c9c5c5;
   --white: #ffffff;
   --ember-start: #fd8925;
   --ember-end: #ff0c00;
   --ember: #ff492c;
-  --current-start: #077ac7;
-  --current-end: #6b21ef;
-  --mint: #2dd4bf;
+  --current-start: #fd8925;
+  --current-end: #ff492c;
+  --mint: #ff8e5d;
   --radius: 8px;
   --radius-lg: 16px;
   --radius-xl: 24px;
@@ -84,11 +84,12 @@ input {
 .eyebrow {
   margin: 0 0 0.85rem;
   font-family: var(--font-display);
-  font-size: var(--text-eyebrow);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
   font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ember);
+  letter-spacing: -0.03em;
+  text-transform: none;
+  color: var(--white);
+  line-height: 1.15;
 }
 
 h1,
@@ -108,9 +109,12 @@ h1 {
 }
 
 h2 {
-  font-size: var(--text-h2);
-  line-height: 1.12;
-  max-width: 22ch;
+  font-size: clamp(1.1rem, 2.4vw, 1.35rem);
+  line-height: 1.45;
+  max-width: 36rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--ash);
 }
 
 h3 {
@@ -131,7 +135,7 @@ h3 {
 .lead {
   margin: 1.1rem 0 0;
   max-width: 38rem;
-  color: var(--fog);
+  color: var(--ash);
   font-size: var(--text-lead);
   line-height: 1.6;
 }

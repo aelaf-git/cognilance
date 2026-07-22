@@ -1,55 +1,662 @@
 .split {
   display: grid;
   gap: 2.5rem;
-}
-
-.pillars {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.pillar {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.85rem;
   align-items: start;
-  padding: 1.1rem 1rem;
-  border-radius: var(--radius-lg);
+}
+
+.copy {
+  max-width: 42rem;
+}
+
+.body {
+  margin: 1.25rem 0 0;
+  color: var(--fog);
+  font-size: var(--text-body);
+  line-height: 1.65;
+}
+
+.diagram {
+  margin: 0;
+  width: 100%;
+  max-width: 42rem;
+  justify-self: stretch;
+  --line: rgba(255, 255, 255, 0.22);
+  --line-on: rgba(255, 73, 44, 0.9);
+  --beam: #ffd4a8;
+}
+
+.stage {
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--surface);
+  padding: 1.1rem 0.95rem 1.2rem;
+  overflow: hidden;
+  /* Full tall frame — does not resize across phases */
+  min-height: clamp(34rem, 78vh, 46rem);
+  display: flex;
+  flex-direction: column;
 }
 
-.index {
+.flow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+}
+
+/* Nodes */
+.box {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 11rem;
+  min-height: 3rem;
+  padding: 0.5rem 0.55rem 0.5rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #221c2e 0%, #1a1624 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 6px 16px rgba(0, 0, 0, 0.25);
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    filter 0.25s ease;
+}
+
+.boxBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.boxCompact {
+  max-width: none;
+  min-height: 2.05rem;
+  padding: 0.28rem 0.3rem 0.28rem 0.5rem;
+}
+
+.boxCompact .boxTitle {
+  font-size: 0.62rem;
+}
+
+.boxCompact .boxSub {
+  font-size: 0.48rem;
+}
+
+.boxLit {
+  border-color: rgba(255, 212, 168, 0.55);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 0 0 1px rgba(255, 73, 44, 0.22),
+    0 0 18px rgba(255, 73, 44, 0.22),
+    0 8px 18px rgba(0, 0, 0, 0.3);
+  filter: brightness(1.08);
+}
+
+.boxAccent {
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.boxTitle {
   font-family: var(--font-display);
-  font-size: 0.95rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--white);
+  line-height: 1.2;
+}
+
+.boxSub {
+  font-size: 0.62rem;
   font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fog);
+  opacity: 0.8;
+}
+
+.tone_orch {
+  max-width: 12rem;
+}
+
+.tone_orch .boxAccent {
+  background: var(--ember);
+}
+
+.tone_agent .boxAccent {
+  background: rgba(232, 230, 230, 0.45);
+}
+
+.tone_validator .boxAccent {
+  background: var(--ember-start, #fd8925);
+}
+
+.tone_gather .boxAccent {
+  background: #ff8e5d;
+}
+
+.tone_user {
+  max-width: 12rem;
+}
+
+.tone_user .boxAccent {
+  background: var(--white);
+}
+
+/* Status: spinner / tick */
+.status {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+}
+
+.boxCompact .status {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 1.5px solid rgba(255, 212, 168, 0.25);
+  border-top-color: var(--beam);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.boxCompact .spinner {
+  width: 0.58rem;
+  height: 0.58rem;
+}
+
+.statusDone {
+  color: #ffd4a8;
+}
+
+.tick {
+  width: 0.85rem;
+  height: 0.85rem;
+  display: block;
+}
+
+.boxCompact .tick {
+  width: 0.65rem;
+  height: 0.65rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Light beam tracks (arrows always down) */
+.beamTrack {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 1.55rem;
+  color: var(--line);
+  overflow: hidden;
+}
+
+.beamTrackLit {
+  color: var(--line-on);
+}
+
+.arrow {
+  width: 1.15rem;
+  height: 1.55rem;
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+.fleetPair .arrow,
+.gatherPair .arrow {
+  width: 0.85rem;
+  height: 1.1rem;
+}
+
+.beam {
+  position: absolute;
+  left: 50%;
+  top: -40%;
+  width: 4px;
+  height: 55%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(255, 212, 168, 0.15) 20%,
+    var(--beam) 50%,
+    rgba(255, 73, 44, 0.95) 70%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 10px rgba(255, 212, 168, 0.85),
+    0 0 18px rgba(255, 73, 44, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.beamTrackActive .beam {
+  opacity: 1;
+  animation: beamFall 0.45s ease-in forwards;
+}
+
+@keyframes beamFall {
+  from {
+    top: -45%;
+    opacity: 0.2;
+  }
+  30% {
+    opacity: 1;
+  }
+  to {
+    top: 70%;
+    opacity: 0.15;
+  }
+}
+
+.mergeWrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  color: var(--line);
+  overflow: hidden;
+}
+
+.mergeArrows,
+.mergeArrowsClose {
+  width: min(100%, 16rem);
+  height: 2.4rem;
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+.mergeArrows {
+  width: min(100%, 22rem);
+  height: 2.6rem;
+}
+
+.beamMerge {
+  position: absolute;
+  left: 50%;
+  top: -30%;
+  width: 5px;
+  height: 50%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--beam) 45%,
+    rgba(255, 73, 44, 0.9) 70%,
+    transparent
+  );
+  box-shadow: 0 0 14px rgba(255, 212, 168, 0.8);
+  opacity: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.beamTrackActive .beamMerge {
+  opacity: 1;
+  animation: beamFall 0.5s ease-in forwards;
+}
+
+/* Registry */
+.registry {
+  width: 100%;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  padding: 0.8rem 0.75rem 0.9rem;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.055) 1px, transparent 0) 0 0 / 12px 12px,
+    var(--void-soft);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.registryHead {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 0.75rem;
+  flex-shrink: 0;
+}
+
+.registryLabel {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--ember);
 }
 
-.pillar h3 {
-  margin: 0 0 0.4rem;
-  font-size: var(--text-h3);
-  font-weight: 500;
+.registryBody {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 16.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.pillar p {
-  margin: 0;
-  color: var(--fog);
-  font-size: var(--text-body);
-  line-height: 1.55;
+.wideStack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  width: 100%;
+  min-height: 100%;
+  transition: opacity 0.35s ease;
+}
+
+.closeup {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  align-content: center;
+  justify-items: stretch;
+  width: min(100%, 28rem);
+  transform: translateX(-50%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+.lane {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.1rem;
+}
+
+.lane .box {
+  max-width: none;
+}
+
+.fleetScroll {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.15rem;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.fleet {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.35rem;
+  width: 100%;
+  min-width: 18rem;
+}
+
+.fleetPair {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.05rem;
+  opacity: 0.35;
+  transition: opacity 0.35s ease;
+}
+
+.fleetPair .box {
+  max-width: none;
+}
+
+.gatherBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.14);
+  width: 100%;
+  opacity: 0.35;
+  transition: opacity 0.35s ease;
+}
+
+.gatherRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.gatherPair {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.05rem;
+  opacity: 0.45;
+  transition: opacity 0.35s ease;
+}
+
+.gatherPair .box {
+  max-width: none;
+}
+
+.outroStack {
+  position: relative;
+  width: 100%;
+  min-height: 7.5rem;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.closeupOutro,
+.deliverOutro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  width: 100%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+/* ===== Phases — opacity only; layout height stays locked ===== */
+
+.diagram[data-phase="closeup"] .closeup,
+.diagram[data-phase="closeup"] .closeupOutro {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.diagram[data-phase="closeup"] .wideStack {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.diagram[data-phase="fleet"] .wideStack,
+.diagram[data-phase="gather"] .wideStack,
+.diagram[data-phase="deliver"] .wideStack {
+  opacity: 1;
+  visibility: visible;
+}
+
+.diagram[data-phase="fleet"] .fleetPair {
+  opacity: 1;
+}
+
+.diagram[data-phase="fleet"] .gatherBlock,
+.diagram[data-phase="fleet"] .gatherPair {
+  opacity: 0.28;
+}
+
+.diagram[data-phase="gather"] .fleetPair,
+.diagram[data-phase="deliver"] .fleetPair {
+  opacity: 0.4;
+}
+
+.diagram[data-phase="gather"] .gatherBlock,
+.diagram[data-phase="gather"] .gatherPair,
+.diagram[data-phase="deliver"] .gatherBlock,
+.diagram[data-phase="deliver"] .gatherPair {
+  opacity: 1;
+}
+
+.diagram[data-phase="fleet"] .deliverOutro,
+.diagram[data-phase="gather"] .deliverOutro {
+  opacity: 0.3;
+  visibility: visible;
+}
+
+.diagram[data-phase="deliver"] .deliverOutro {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .box,
+  .beam,
+  .beamMerge,
+  .spinner,
+  .closeup,
+  .closeupOutro,
+  .deliverOutro,
+  .wideStack,
+  .fleetPair,
+  .gatherPair,
+  .gatherBlock {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  .diagram .closeup,
+  .diagram .closeupOutro {
+    opacity: 0 !important;
+    visibility: hidden !important;
+  }
+
+  .diagram .wideStack,
+  .diagram .deliverOutro,
+  .diagram .fleetPair,
+  .diagram .gatherBlock,
+  .diagram .gatherPair {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  .beam,
+  .beamMerge {
+    opacity: 0 !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .stage {
+    min-height: clamp(32rem, 85vh, 42rem);
+    padding: 0.9rem 0.7rem 1rem;
+  }
+
+  .registryBody {
+    min-height: 18rem;
+  }
+
+  .fleet {
+    min-width: 20rem;
+    gap: 0.28rem;
+  }
+
+  .gatherRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .outroStack {
+    min-height: 7rem;
+  }
+
+  .boxCompact .boxTitle {
+    font-size: 0.58rem;
+  }
 }
 
 @media (min-width: 640px) {
-  .pillar {
-    gap: 1rem;
-    padding: 1.25rem 1.2rem;
+  .stage {
+    padding: 1.2rem 1.05rem 1.35rem;
+    min-height: clamp(36rem, 76vh, 48rem);
+  }
+
+  .registryBody {
+    min-height: 17.5rem;
   }
 }
 
 @media (min-width: 900px) {
   .split {
-    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-    align-items: center;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
     gap: 3.5rem;
+    align-items: center;
+  }
+
+  .copy {
+    max-width: none;
+  }
+
+  .body {
+    margin-top: 1.5rem;
+  }
+
+  .diagram {
+    justify-self: end;
+    max-width: 44rem;
+    width: 100%;
+  }
+
+  .stage {
+    min-height: clamp(38rem, 74vh, 50rem);
   }
 }

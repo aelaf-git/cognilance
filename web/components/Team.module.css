@@ -8,14 +8,30 @@
 
 .person {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem 1.5rem;
+  align-items: center;
+  gap: 1rem;
   padding: 1rem 1.05rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--surface);
+  min-width: 0;
+}
+
+.photo {
+  width: 4.25rem;
+  height: 4.25rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
 }
 
 .name {
@@ -37,6 +53,12 @@
 
   .person {
     padding: 1.15rem 1.25rem;
+    gap: 1.15rem;
+  }
+
+  .photo {
+    width: 4.75rem;
+    height: 4.75rem;
   }
 }
 

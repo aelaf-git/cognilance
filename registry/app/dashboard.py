@@ -7,22 +7,27 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cognilance — Registry</title>
 <link rel="icon" href="/icon.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #000000;
-    --surface: #0a0a0a;
-    --surface2: #111111;
-    --border: #222222;
+    --bg: #0e0918;
+    --surface: #1a1624;
+    --surface2: #15101f;
+    --border: #2c2834;
     --text: #ffffff;
-    --muted: #888888;
-    --dim: #555555;
+    --muted: #c9c5c5;
+    --dim: #9d9797;
+    --ember: #ff492c;
+    --ember-soft: #fd8925;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { -webkit-text-size-adjust: 100%; }
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
     min-height: 100vh;
     min-height: 100dvh;
     display: flex;
@@ -35,9 +40,11 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     gap: 16px;
     padding: 20px 28px;
     border-bottom: 1px solid var(--border);
+    background: rgba(14, 9, 24, 0.92);
   }
   header img { height: 28px; width: 28px; object-fit: contain; flex-shrink: 0; }
   header .title {
+    font-family: "Space Grotesk", system-ui, sans-serif;
     font-size: 13px;
     font-weight: 500;
     letter-spacing: 0.12em;
@@ -82,7 +89,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     min-height: 44px;
   }
   .tab:hover { color: var(--text); }
-  .tab.active { color: var(--text); border-bottom-color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--ember); }
   .tab .count {
     margin-left: 6px;
     font-size: 11px;
@@ -111,10 +118,10 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 8px;
     padding: 18px 20px;
   }
-  .card:hover { border-color: #444; }
+  .card:hover { border-color: rgba(255, 73, 44, 0.35); }
   .card-head {
     display: flex;
     align-items: flex-start;
@@ -184,17 +191,17 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     align-items: center;
     padding: 6px 10px;
     border-radius: 8px;
-    border: 1px solid rgba(20, 184, 166, 0.35);
-    background: rgba(20, 184, 166, 0.12);
-    color: #14b8a6;
+    border: 1px solid rgba(255, 73, 44, 0.35);
+    background: rgba(255, 73, 44, 0.12);
+    color: var(--ember);
     font-weight: 600;
     font-family: inherit;
     text-decoration: none;
     white-space: nowrap;
   }
   .card .meta a.chat-btn:hover {
-    background: rgba(20, 184, 166, 0.22);
-    color: #5eead4;
+    background: rgba(255, 73, 44, 0.22);
+    color: var(--ember-soft);
     text-decoration: none;
   }
 

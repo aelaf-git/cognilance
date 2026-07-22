@@ -22,7 +22,7 @@
 
 .item p {
   margin: 0;
-  color: var(--fog);
+  color: var(--ash);
   font-size: var(--text-body);
   line-height: 1.55;
 }

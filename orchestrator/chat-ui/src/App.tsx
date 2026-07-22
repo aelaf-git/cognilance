@@ -236,7 +236,7 @@ export default function App() {
             className="h-6 w-auto object-contain sm:h-7"
           />
           <div className="min-w-0 flex-1 sm:flex-none">
-            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:text-[11px]">
+            <p className="truncate font-display text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:text-[11px]">
               Orchestrator Agent
             </p>
           </div>

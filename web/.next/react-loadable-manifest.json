@@ -1,8 +1,8 @@
 {
-  "components/Hero.tsx -> ./BinarySphere": {
-    "id": "components/Hero.tsx -> ./BinarySphere",
+  "components/EnergyBubble/EnergyBubble.tsx -> ./BinarySphereCanvas": {
+    "id": "components/EnergyBubble/EnergyBubble.tsx -> ./BinarySphereCanvas",
     "files": [
-      "static/chunks/_app-pages-browser_components_BinarySphere_tsx.js"
+      "static/chunks/_app-pages-browser_components_EnergyBubble_BinarySphereCanvas_tsx.js"
     ]
   }
 }

@@ -5,19 +5,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "#0a0a0a",
-        surface: "#1a1a1a",
-        border: "#2a2a2a",
-        muted: "#888888",
-        dim: "#555555",
-        planner: "#3b82f6",
-        thinking: "#a855f7",
-        task: "#f97316",
-        genui: "#22c55e",
-        registry: "#14b8a6",
+        background: "#0e0918",
+        surface: "#1a1624",
+        border: "#2c2834",
+        muted: "#c9c5c5",
+        dim: "#9d9797",
+        ember: "#ff492c",
+        "ember-soft": "#fd8925",
+        planner: "#fd8925",
+        thinking: "#ff8e5d",
+        task: "#ff492c",
+        genui: "#fd8925",
+        registry: "#ff492c",
       },
       fontFamily: {
-        sans: ['"Inter"', "system-ui", "-apple-system", "sans-serif"],
+        sans: ['"IBM Plex Sans"', "system-ui", "-apple-system", "sans-serif"],
+        display: ['"Space Grotesk"', "system-ui", "sans-serif"],
         mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
       },
       keyframes: {

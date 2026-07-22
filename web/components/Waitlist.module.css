@@ -3,7 +3,7 @@
   overflow: hidden;
   background:
     radial-gradient(ellipse 45% 55% at 90% 10%, rgba(255, 73, 44, 0.2), transparent 55%),
-    radial-gradient(ellipse 40% 45% at 10% 90%, rgba(107, 33, 239, 0.14), transparent 50%),
+    radial-gradient(ellipse 40% 45% at 10% 90%, rgba(253, 137, 37, 0.14), transparent 50%),
     var(--void);
   border-top: 1px solid var(--border);
 }

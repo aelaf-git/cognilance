@@ -13,18 +13,31 @@ type Props = {
 const card: CSSProperties = {
   width: "100%",
   maxWidth: 640,
-  border: "1px solid #e5e7eb",
+  border: "1px solid #2c2834",
   borderRadius: 12,
   overflow: "hidden",
-  fontFamily: "ui-sans-serif, system-ui, sans-serif",
-  background: "#fff",
+  fontFamily: '"IBM Plex Sans", system-ui, sans-serif',
+  background: "#1a1624",
+  color: "#e8e6e6",
 };
 
 const header: CSSProperties = {
-  background: "linear-gradient(90deg,#0f766e,#14b8a6)",
+  background: "linear-gradient(90deg,#fd8925,#ff492c)",
   color: "#fff",
   padding: "12px 16px",
   fontWeight: 600,
+  fontFamily: '"Space Grotesk", system-ui, sans-serif',
+};
+
+const bodyBox: CSSProperties = {
+  margin: 0,
+  padding: 12,
+  background: "#0e0918",
+  borderRadius: 8,
+  border: "1px solid #2c2834",
+  lineHeight: 1.5,
+  overflow: "auto",
+  color: "#e8e6e6",
 };
 
 function looksLikeHtml(body: string): boolean {
@@ -61,7 +74,7 @@ export default function EmailDraft({
   return (
     <div style={card}>
       <div style={header}>{sent ? "Email sent" : "Email draft"}</div>
-      <div style={{ padding: "12px 16px", color: "#374151", fontSize: 14 }}>
+      <div style={{ padding: "12px 16px", fontSize: 14 }}>
         {to ? (
           <div style={{ marginBottom: 8 }}>
             <strong>To:</strong> {to}
@@ -73,49 +86,31 @@ export default function EmailDraft({
           </div>
         ) : null}
         {tone ? (
-          <div style={{ marginBottom: 8, color: "#6b7280", fontSize: 12 }}>
+          <div style={{ marginBottom: 8, color: "#c9c5c5", fontSize: 12 }}>
             Tone: {tone}
           </div>
         ) : null}
         {format_notes ? (
-          <div style={{ marginBottom: 8, color: "#6b7280", fontSize: 12 }}>
+          <div style={{ marginBottom: 8, color: "#c9c5c5", fontSize: 12 }}>
             Format: {format_notes}
           </div>
         ) : null}
         {body ? (
           htmlBody ? (
             <div
-              style={{
-                margin: 0,
-                padding: 12,
-                background: "#f9fafb",
-                borderRadius: 8,
-                border: "1px solid #f1f5f9",
-                lineHeight: 1.5,
-                overflow: "auto",
-              }}
+              style={bodyBox}
               dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(body) }}
             />
           ) : (
-            <pre
-              style={{
-                whiteSpace: "pre-wrap",
-                fontFamily: "inherit",
-                margin: 0,
-                padding: 12,
-                background: "#f9fafb",
-                borderRadius: 8,
-                border: "1px solid #f1f5f9",
-              }}
-            >
+            <pre style={{ ...bodyBox, whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
               {body}
             </pre>
           )
         ) : (
-          <div style={{ color: "#9ca3af" }}>No body returned.</div>
+          <div style={{ color: "#9d9797" }}>No body returned.</div>
         )}
         {sent && gmail_message_id ? (
-          <div style={{ marginTop: 8, fontSize: 12, color: "#059669" }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: "#ff492c" }}>
             Gmail message ID: {gmail_message_id}
           </div>
         ) : null}
