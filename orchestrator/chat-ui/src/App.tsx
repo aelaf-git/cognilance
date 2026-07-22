@@ -6,7 +6,6 @@ import {
   ConversationSidebarCollapsed,
 } from "@/components/ConversationSidebar";
 import { MarketplaceAgentsModal } from "@/components/MarketplaceAgentsModal";
-import { WalletBar } from "@/components/WalletBar";
 import {
   SessionDetailCollapsed,
   SessionDetailModal,
@@ -263,7 +262,6 @@ export default function App() {
               navOpen ? "flex" : "hidden"
             } w-full flex-col gap-3 border-t border-border pt-3 md:ml-auto md:flex md:w-auto md:flex-row md:flex-wrap md:items-center md:gap-4 md:border-0 md:pt-0`}
           >
-            <WalletBar compact={isMobile} />
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"

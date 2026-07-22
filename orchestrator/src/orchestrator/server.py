@@ -59,19 +59,6 @@ def _cancel_mission_task(mission_id: str) -> bool:
     return True
 
 
-def _refund_mission_escrows(mission_id: str) -> None:
-    """Refund any funded escrows for a cancelled/aborted mission."""
-    try:
-        from cognilance.payments import EscrowStatus, PaymentService
-
-        pay = PaymentService()
-        for hire in pay.list_mission_escrows(mission_id):
-            if hire.status == EscrowStatus.FUNDED:
-                pay.refund_escrow(hire.hire_id)
-    except Exception as exc:
-        print(f"Escrow refund for mission {mission_id} failed: {exc}", flush=True)
-
-
 def _ui_items(result: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {"name": item["name"], "props": item.get("props") or {}}
@@ -172,134 +159,9 @@ def create_app() -> FastAPI:
                     "url": base or None,
                     "description": agent.description or "",
                     "chat_url": f"{base}/chat" if base else None,
-                    "price_usd_cents": int(getattr(agent, "price_usd_cents", 0) or 0),
-                    "payout_wallet": getattr(agent, "payout_wallet", None),
                 }
             )
         return JSONResponse(content={"agents": rows, "total": len(rows)})
-
-    @app.get("/payments/balance")
-    async def payments_balance(request: Request) -> JSONResponse:
-        from cognilance.payments import PaymentService
-
-        user_id = getattr(request.state, "user_id", None) or "anonymous"
-        svc = PaymentService()
-        wallet_id = svc.ensure_user_wallet(user_id)
-        bal = svc.get_balance_base_units(user_id)
-        return JSONResponse(
-            content={
-                "user_id": user_id,
-                "wallet_id": wallet_id,
-                "balance_base_units": bal,
-                "balance_usd": bal // 1_000_000,
-            }
-        )
-
-    @app.post("/payments/fund")
-    async def payments_fund(request: Request) -> JSONResponse:
-        """Mock USD → mock USDC (1:1). Body: {\"amount_usd\": N}."""
-        from cognilance.payments import PaymentError, PaymentService
-
-        body = await request.json()
-        amount_usd = int(body.get("amount_usd") or 0)
-        # Never take user_id from the body — spoof risk.
-        user_id = getattr(request.state, "user_id", None) or "anonymous"
-        try:
-            result = PaymentService().fund_account_usd(user_id, amount_usd)
-        except (PaymentError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return JSONResponse(
-            content={
-                **result,
-                "balance_usd": result["balance_base_units"] // 1_000_000,
-            }
-        )
-
-    @app.get("/payments/wallet")
-    async def payments_wallet(request: Request) -> JSONResponse:
-        """Linked Solana wallet (devnet) for the current user, with SOL balance."""
-        from cognilance.payments import PaymentService
-
-        user_id = getattr(request.state, "user_id", None) or "anonymous"
-        svc = PaymentService()
-        wallet = svc.get_solana_wallet(user_id)
-        if wallet is None:
-            return JSONResponse(content={"connected": False})
-        usdc_base_units: int | None = None
-        spendable_base_units: int | None = None
-        balance_error: str | None = None
-        try:
-            usdc_base_units = await svc.solana_usdc_balance_base_units(
-                wallet["address"]
-            )
-            # Mirror new devnet USDC deposits into the spendable hire balance.
-            spendable_base_units = await svc.sync_wallet_usdc(user_id)
-        except Exception as exc:  # RPC hiccups shouldn't hide the linked wallet
-            balance_error = str(exc)
-        return JSONResponse(
-            content={
-                "connected": True,
-                "address": wallet["address"],
-                "provider": wallet.get("provider"),
-                "cluster": wallet.get("cluster", "devnet"),
-                "usdc_mint": svc.usdc_mint,
-                "balance_usdc_base_units": usdc_base_units,
-                "balance_usdc": (
-                    round(usdc_base_units / 1_000_000, 2)
-                    if usdc_base_units is not None
-                    else None
-                ),
-                "spendable_usdc": (
-                    round(spendable_base_units / 1_000_000, 2)
-                    if spendable_base_units is not None
-                    else None
-                ),
-                "balance_error": balance_error,
-            }
-        )
-
-    @app.post("/payments/wallet/connect")
-    async def payments_wallet_connect(request: Request) -> JSONResponse:
-        """Link a wallet address from the browser extension (Solflare/Phantom)."""
-        from cognilance.payments import PaymentError, PaymentService
-
-        body = await request.json()
-        address = str(body.get("address") or "").strip()
-        provider = str(body.get("provider") or "").strip() or None
-        user_id = getattr(request.state, "user_id", None) or "anonymous"
-        try:
-            result = PaymentService().link_solana_wallet(
-                user_id, address, provider=provider, cluster="devnet"
-            )
-        except PaymentError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return JSONResponse(content={"connected": True, **result})
-
-    @app.post("/payments/wallet/disconnect")
-    async def payments_wallet_disconnect(request: Request) -> JSONResponse:
-        from cognilance.payments import PaymentService
-
-        user_id = getattr(request.state, "user_id", None) or "anonymous"
-        PaymentService().unlink_solana_wallet(user_id)
-        return JSONResponse(content={"connected": False})
-
-    @app.post("/payments/wallet/airdrop")
-    async def payments_wallet_airdrop(request: Request) -> JSONResponse:
-        """Request a 1 SOL devnet airdrop for the linked wallet."""
-        from cognilance.payments import PaymentError, PaymentService
-
-        user_id = getattr(request.state, "user_id", None) or "anonymous"
-        svc = PaymentService()
-        wallet = svc.get_solana_wallet(user_id)
-        if wallet is None:
-            raise HTTPException(status_code=400, detail="No wallet connected")
-        try:
-            signature = await svc.request_airdrop(wallet["address"], 1_000_000_000)
-        except PaymentError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return JSONResponse(
-            content={"signature": signature, "address": wallet["address"]}
-        )
 
     @app.get("/logo.png")
     async def logo() -> FileResponse:
@@ -580,7 +442,6 @@ def create_app() -> FastAPI:
         if current and current.status in {MissionStatus.RUNNING, MissionStatus.QUEUED}:
             store.update_status(session_id, MissionStatus.CANCELLED, error="Aborted by user")
             store.append_event(session_id, {"event": "session_aborted", "reason": "user"})
-            _refund_mission_escrows(session_id)
         return JSONResponse(
             content={
                 "session_id": session_id,
@@ -784,7 +645,6 @@ def create_app() -> FastAPI:
                     store.append_event(
                         mission_id, {"event": "session_aborted", "reason": "user"}
                     )
-                    _refund_mission_escrows(mission_id)
                 raise
             except Exception as exc:
                 current = store.get_mission(mission_id)

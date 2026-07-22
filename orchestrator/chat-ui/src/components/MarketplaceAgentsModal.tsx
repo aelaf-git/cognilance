@@ -6,8 +6,6 @@ type MarketplaceAgent = CatalogAgent & {
   id?: string | null;
   description?: string;
   chat_url?: string | null;
-  price_usd_cents?: number;
-  payout_wallet?: string | null;
 };
 
 export function MarketplaceAgentsModal({ onClose }: { onClose: () => void }) {
@@ -122,11 +120,6 @@ export function MarketplaceAgentsModal({ onClose }: { onClose: () => void }) {
                           }`}
                         >
                           {agent.online ? "online" : "offline"}
-                        </span>
-                        <span className="rounded-md border border-border px-2 py-0.5 text-[10px] font-semibold text-dim">
-                          {(agent.price_usd_cents ?? 0) > 0
-                            ? `$${((agent.price_usd_cents ?? 0) / 100).toFixed(2)}`
-                            : "Free"}
                         </span>
                       </div>
                       {agent.description ? (

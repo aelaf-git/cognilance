@@ -10,7 +10,6 @@ import {
   uploadAgent,
 } from "./api";
 import { EnvEditor, buildEnvUpdate, rowsFromKeys } from "./components/EnvEditor";
-import { EarningsPanel } from "./components/EarningsPanel";
 import type { EnvRow, HostedAgent } from "./types";
 
 const REGISTRY_URL = "http://127.0.0.1:8088/dashboard";
@@ -58,8 +57,6 @@ export default function App() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploadEnvRows, setUploadEnvRows] = useState<EnvRow[]>([
     { key: "GROQ_API_KEY", value: "" },
-    { key: "PAYOUT_WALLET", value: "" },
-    { key: "PRICE_USD_CENTS", value: "0" },
   ]);
   const [editEnvRows, setEditEnvRows] = useState<EnvRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -100,8 +97,6 @@ export default function App() {
       setPendingFile(null);
       setUploadEnvRows([
         { key: "GROQ_API_KEY", value: "" },
-        { key: "PAYOUT_WALLET", value: "" },
-        { key: "PRICE_USD_CENTS", value: "0" },
       ]);
       await refresh();
     } catch (exc) {
@@ -255,11 +250,9 @@ export default function App() {
                   disabled={uploading}
                   onClick={() => {
                     setPendingFile(null);
-                    setUploadEnvRows([
-                      { key: "GROQ_API_KEY", value: "" },
-                      { key: "PAYOUT_WALLET", value: "" },
-                      { key: "PRICE_USD_CENTS", value: "0" },
-                    ]);
+      setUploadEnvRows([
+        { key: "GROQ_API_KEY", value: "" },
+      ]);
                   }}
                   className="rounded-md border border-border px-4 py-2 text-sm text-muted hover:text-white"
                 >
@@ -282,8 +275,6 @@ export default function App() {
             </p>
           )}
         </div>
-
-        <EarningsPanel />
 
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-medium text-white">Hosted agents</h2>

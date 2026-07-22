@@ -55,10 +55,6 @@ class AgentCard(BaseModel):
     visibility: AgentVisibility = AgentVisibility.PUBLIC
     tags: list[str] = Field(default_factory=list)
     online: bool = True
-    # Developer Solana pubkey that receives escrow releases (base58).
-    payout_wallet: str | None = None
-    # Hire price in USD cents (integer; 0 = free).
-    price_usd_cents: int = 0
 
     def to_a2a_dict(self) -> dict[str, Any]:
         return {
