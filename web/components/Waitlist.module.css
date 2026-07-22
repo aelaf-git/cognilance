@@ -1,101 +1,42 @@
 .wrap {
-  background: var(--ink);
-  color: var(--mist);
-}
-
-.wrap :global(.eyebrow) {
-  color: var(--mint-bright);
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 45% 55% at 90% 10%, rgba(255, 73, 44, 0.2), transparent 55%),
+    radial-gradient(ellipse 40% 45% at 10% 90%, rgba(107, 33, 239, 0.14), transparent 50%),
+    var(--void);
+  border-top: 1px solid var(--border);
 }
 
 .wrap :global(h2) {
-  color: var(--mist);
-  max-width: 18ch;
-}
-
-.wrap :global(.lead) {
-  color: rgba(232, 244, 241, 0.7);
-}
-
-.form {
-  margin-top: 2.5rem;
-  max-width: 34rem;
+  max-width: 16ch;
 }
 
 .ctaBlock {
-  margin-top: 2.5rem;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.35rem;
-}
-
-.ctaBlock :global(.btnPrimary) {
-  background: var(--mint);
-  color: var(--ink);
-}
-
-.label {
-  display: block;
-  margin-bottom: 0.55rem;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(232, 244, 241, 0.55);
-}
-
-.row {
+  margin-top: 2rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 }
 
-.row input {
-  flex: 1;
-  min-height: 2.9rem;
-  padding: 0.75rem 1rem;
-  border-radius: 999px;
-  border: 1px solid rgba(232, 244, 241, 0.2);
-  background: rgba(232, 244, 241, 0.06);
-  color: var(--mist);
-  outline: none;
-}
-
-.row input::placeholder {
-  color: rgba(232, 244, 241, 0.4);
-}
-
-.row input:focus {
-  border-color: var(--mint-bright);
-}
-
-.row :global(.btnPrimary) {
-  background: var(--mint);
-  color: var(--ink);
-}
-
-.hint,
-.success,
-.error {
-  margin: 0.85rem 0 0;
-  font-size: 0.9rem;
+.ctaBlock :global(.btn) {
+  width: 100%;
 }
 
 .hint {
-  color: rgba(232, 244, 241, 0.45);
+  margin: 1rem 0 0;
+  color: var(--fog);
+  font-size: 0.9rem;
 }
 
-.success {
-  color: var(--mint-bright);
-}
-
-.error {
-  color: #fca5a5;
-}
-
-@media (min-width: 640px) {
-  .row {
+@media (min-width: 560px) {
+  .ctaBlock {
     flex-direction: row;
-    align-items: stretch;
+    flex-wrap: wrap;
+    margin-top: 2.25rem;
+  }
+
+  .ctaBlock :global(.btn) {
+    width: auto;
   }
 }

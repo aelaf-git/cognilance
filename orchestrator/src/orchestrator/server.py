@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from cognilance import CognilanceManager
-from cognilance.assets import LOGO_PATH, integration_logo_media_type, integration_logo_path
+from cognilance.assets import integration_logo_media_type, integration_logo_path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from langchain_core.messages import HumanMessage
@@ -30,6 +31,10 @@ from orchestrator.users.timezone import activate_user_timezone, client_timezone_
 from orchestrator.ui.chat import orchestrator_chat_html
 from orchestrator.apps.store import init_all_stores
 from orchestrator.tool_proxy import gmail_router
+
+_UI_STATIC = Path(__file__).resolve().parent / "ui" / "static"
+LOGO_PATH = _UI_STATIC / "logo.png"
+ICON_PATH = _UI_STATIC / "icon.png"
 
 
 def _thread_config(thread_id: str) -> dict[str, Any]:
@@ -168,6 +173,12 @@ def create_app() -> FastAPI:
         if not LOGO_PATH.is_file():
             raise HTTPException(status_code=404, detail="Logo not found")
         return FileResponse(LOGO_PATH, media_type="image/png")
+
+    @app.get("/icon.png")
+    async def icon() -> FileResponse:
+        if not ICON_PATH.is_file():
+            raise HTTPException(status_code=404, detail="Icon not found")
+        return FileResponse(ICON_PATH, media_type="image/png")
 
     @app.get("/integrations/logos/{integration_id}")
     async def integration_logo(integration_id: str) -> FileResponse:

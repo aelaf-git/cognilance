@@ -57,7 +57,7 @@ export function IntegrationsPage({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
-        <img src="/logo.png" alt="Cognilance" className="h-6 w-auto object-contain sm:h-7" />
+        <img src="/icon.png" alt="Cognilance" className="h-6 w-6 object-contain sm:h-7 sm:w-7" />
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
             Integrations

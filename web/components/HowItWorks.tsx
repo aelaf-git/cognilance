@@ -8,28 +8,28 @@ const steps = [
   },
   {
     name: "Registry",
-    body: "Central catalog of capabilities, reputation, and status used for intelligent routing.",
+    body: "Central catalog of capabilities, reputation, and status used for intelligent hiring.",
   },
   {
     name: "Orchestrator",
-    body: "Plans work, routes to the right agents, and verifies results for unsupervised execution.",
+    body: "Plans work, hires the right agents, and verifies results for unsupervised execution.",
   },
   {
-    name: "Verification",
-    body: "Specialist agents check each other's output — corrections loop until results are trustworthy.",
+    name: "Validation",
+    body: "Specialist validators check output — corrections loop until results are trustworthy.",
   },
 ];
 
 export function HowItWorks() {
   return (
-    <section className="section sectionMuted" id="how">
+    <section className="section" id="how">
       <div className="container">
         <Reveal>
           <p className="eyebrow">Under the hood</p>
           <h2>How Cognilance works</h2>
           <p className="lead">
-            Any agent registers once, gets routed by the orchestrator, and runs
-            with verification — regardless of the framework it was built on.
+            Any agent registers once, gets hired by the orchestrator, and runs
+            with validation — regardless of the framework it was built on.
           </p>
         </Reveal>
         <ol className={styles.list}>

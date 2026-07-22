@@ -1,105 +1,189 @@
 .hero {
   position: relative;
-  isolation: isolate;
-  min-height: min(92vh, 860px);
-  display: grid;
-  align-items: end;
   overflow: hidden;
-  padding: 5rem 0 4.5rem;
-  color: var(--mist);
-  background: var(--ink);
+  min-height: auto;
+  padding: clamp(2.5rem, 7vw, 5.5rem) 0 clamp(3rem, 8vw, 6rem);
+  border-bottom: 1px solid var(--border);
 }
 
 .atmosphere {
   position: absolute;
   inset: 0;
-  z-index: -1;
   background:
-    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(31, 168, 154, 0.35), transparent 55%),
-    radial-gradient(ellipse 70% 50% at 85% 10%, rgba(45, 212, 191, 0.18), transparent 50%),
-    radial-gradient(ellipse 90% 70% at 50% 100%, rgba(26, 42, 38, 0.9), transparent 60%),
-    linear-gradient(165deg, #06100e 0%, #0c1412 42%, #12241f 100%);
+    radial-gradient(ellipse 60% 50% at 85% 35%, rgba(255, 73, 44, 0.18), transparent 60%),
+    radial-gradient(ellipse 45% 40% at 15% 20%, rgba(107, 33, 239, 0.16), transparent 55%),
+    radial-gradient(ellipse 50% 45% at 50% 100%, rgba(7, 122, 199, 0.1), transparent 50%);
   animation: heroWash 1.2s ease both;
+  pointer-events: none;
 }
 
-.atmosphere::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(232, 244, 241, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(232, 244, 241, 0.04) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 85%);
-}
-
-.content {
+.grid {
   position: relative;
-  padding-bottom: 1rem;
-}
-
-.chip {
-  display: flex;
-  flex-wrap: wrap;
+  z-index: 1;
+  display: grid;
+  gap: 2rem;
   align-items: center;
-  gap: 0.85rem;
-  margin-bottom: 1.5rem;
 }
 
-.tagline {
-  color: rgba(232, 244, 241, 0.72);
-  font-size: 0.86rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+.copy {
+  max-width: 34rem;
+  min-width: 0;
 }
 
-.brand {
+.brandLogo {
+  display: block;
+  width: min(100%, 16rem);
+  height: auto;
   margin: 0 0 1rem;
-  font-family: var(--font-display);
-  font-size: clamp(3.2rem, 10vw, 6.5rem);
-  font-weight: 800;
-  letter-spacing: -0.055em;
-  line-height: 0.92;
 }
 
 .headline {
-  max-width: 14ch;
-  font-size: clamp(1.85rem, 4.6vw, 3.15rem);
-  font-weight: 700;
-  color: rgba(232, 244, 241, 0.94);
+  font-family: var(--font-display);
+  font-size: var(--text-h1);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  color: var(--white);
+  max-width: 16ch;
 }
 
 .sub {
-  margin: 1.25rem 0 0;
-  max-width: 34rem;
-  color: rgba(232, 244, 241, 0.7);
-  font-size: clamp(1.05rem, 2vw, 1.2rem);
+  margin: 1.1rem 0 0;
+  max-width: 32rem;
+  color: var(--ash);
+  font-size: var(--text-lead);
+  line-height: 1.55;
 }
 
 .actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.75rem;
-  margin-top: 2rem;
+  margin-top: 1.5rem;
 }
 
-.actions :global(.btnGhost) {
-  border-color: rgba(232, 244, 241, 0.25);
-  color: var(--mist);
+.actions :global(.btn) {
+  width: 100%;
 }
 
-.actions :global(.btnGhost:hover) {
-  border-color: var(--mint-bright);
-  color: #fff;
+.canvas {
+  position: relative;
+  min-height: 320px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%),
+    var(--panel);
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 142, 93, 0.18),
+    0 30px 80px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
 }
 
-.actions :global(.btnPrimary) {
-  background: var(--mint);
-  color: var(--ink);
+.canvasGlow {
+  position: absolute;
+  inset: auto -20% -30% 20%;
+  height: 60%;
+  background: radial-gradient(circle, rgba(253, 137, 37, 0.2), transparent 65%);
+  filter: blur(20px);
+  pointer-events: none;
 }
 
-.actions :global(.btnPrimary:hover) {
-  background: var(--mint-bright);
+.wires {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.wire {
+  stroke: rgba(7, 122, 199, 0.55);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 7;
+  animation: flowPulse 2.8s ease-in-out infinite;
+}
+
+.wire:nth-child(2) {
+  animation-delay: 0.4s;
+  stroke: rgba(255, 73, 44, 0.45);
+}
+
+.wire:nth-child(3) {
+  animation-delay: 0.8s;
+}
+
+.wire:nth-child(4) {
+  animation-delay: 1.2s;
+  stroke: rgba(107, 33, 239, 0.5);
+}
+
+.node {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 6.4rem;
+  max-width: 42%;
+  padding: 0.5rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(26, 22, 36, 0.92);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  animation: nodeFloat 5s ease-in-out infinite;
+}
+
+.nodeLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--white);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nodeMeta,
+.nodePrice {
+  font-size: 0.65rem;
+  color: var(--fog);
+}
+
+.nodePrice {
+  color: var(--ember-start);
+}
+
+.nodeUser {
+  top: 7%;
+  left: 10%;
+  animation-delay: 0.2s;
+}
+
+.nodeOrch {
+  top: 36%;
+  left: 32%;
+  border-color: rgba(255, 73, 44, 0.35);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.28),
+    0 0 24px rgba(255, 73, 44, 0.12);
+  animation-delay: 0.6s;
+}
+
+.nodeA {
+  bottom: 10%;
+  left: 4%;
+  animation-delay: 1s;
+}
+
+.nodeB {
+  bottom: 10%;
+  left: 36%;
+  animation-delay: 1.3s;
+}
+
+.nodeC {
+  bottom: 10%;
+  right: 4%;
+  animation-delay: 1.6s;
 }
 
 .rise1 {
@@ -118,10 +202,86 @@
   animation: heroRise 0.9s ease 0.52s both;
 }
 
-@media (max-width: 640px) {
+@media (min-width: 640px) {
+  .brandLogo {
+    width: min(100%, 20rem);
+    margin-bottom: 1.25rem;
+  }
+
+  .actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+  }
+
+  .actions :global(.btn) {
+    width: auto;
+  }
+
+  .canvas {
+    min-height: 380px;
+  }
+
+  .node {
+    min-width: 7.8rem;
+    max-width: none;
+    padding: 0.7rem 0.85rem;
+  }
+
+  .nodeLabel {
+    font-size: 0.82rem;
+  }
+
+  .nodeMeta,
+  .nodePrice {
+    font-size: 0.72rem;
+  }
+}
+
+@media (min-width: 960px) {
   .hero {
-    align-items: center;
-    min-height: 88vh;
-    padding-top: 4rem;
+    min-height: min(100vh, 920px);
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: 2.5rem;
+  }
+
+  .brandLogo {
+    width: min(100%, 22rem);
+  }
+
+  .canvas {
+    min-height: 460px;
+  }
+
+  .node {
+    min-width: 8.5rem;
+    padding: 0.75rem 0.9rem;
+  }
+
+  .nodeLabel {
+    font-size: 0.86rem;
+  }
+
+  .nodeUser {
+    left: 18%;
+  }
+
+  .nodeOrch {
+    left: 38%;
+  }
+
+  .nodeA {
+    left: 8%;
+  }
+
+  .nodeB {
+    left: 38%;
+  }
+
+  .nodeC {
+    right: 8%;
   }
 }

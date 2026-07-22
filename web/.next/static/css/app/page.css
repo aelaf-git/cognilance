@@ -1,0 +1,1213 @@
+/*!*******************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/BusinessModel.module.css ***!
+  \*******************************************************************************************************************************************************************************************************************************************************************************/
+.BusinessModel_grid__2a6cm {
+  display: grid;
+  grid-gap: 1rem;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.BusinessModel_card__NPXZN {
+  padding: 1.25rem 1.1rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 rgba(7, 122, 199, 0.12);
+  min-height: 100%;
+  min-width: 0;
+}
+
+.BusinessModel_card__NPXZN h3 {
+  margin: 0 0 0.65rem;
+  font-size: var(--text-h3);
+  font-weight: 500;
+}
+
+.BusinessModel_card__NPXZN p {
+  margin: 0;
+  color: var(--fog);
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+@media (min-width: 640px) {
+  .BusinessModel_grid__2a6cm {
+    margin-top: 2.75rem;
+  }
+
+  .BusinessModel_card__NPXZN {
+    padding: 1.5rem 1.35rem;
+  }
+}
+
+@media (min-width: 800px) {
+  .BusinessModel_grid__2a6cm {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/*!****************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/Developers.module.css ***!
+  \****************************************************************************************************************************************************************************************************************************************************************************/
+.Developers_split__LRzme {
+  display: grid;
+  grid-gap: 2.5rem;
+  gap: 2.5rem;
+}
+
+.Developers_actions__l_yK4 {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+.Developers_actions__l_yK4 .btn {
+  width: 100%;
+}
+
+@media (min-width: 560px) {
+  .Developers_actions__l_yK4 {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .Developers_actions__l_yK4 .btn {
+    width: auto;
+  }
+}
+
+.Developers_list__xov2P {
+  display: grid;
+  grid-gap: 0.85rem;
+  gap: 0.85rem;
+}
+
+.Developers_item__M0SI7 {
+  padding: 1.35rem 1.25rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.Developers_item__M0SI7 h3 {
+  margin: 0 0 0.45rem;
+  font-size: var(--text-h3);
+  font-weight: 500;
+}
+
+.Developers_item__M0SI7 p {
+  margin: 0;
+  color: var(--fog);
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+@media (min-width: 900px) {
+  .Developers_split__LRzme {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 3.5rem;
+    align-items: center;
+  }
+}
+
+/*!************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/Footer.module.css ***!
+  \************************************************************************************************************************************************************************************************************************************************************************/
+.Footer_footer__pQtti {
+  position: relative;
+  overflow: hidden;
+  padding: 2.75rem 0 2rem;
+  border-top: 1px solid var(--border);
+  background:
+    radial-gradient(ellipse 40% 60% at 100% 0%, rgba(255, 73, 44, 0.14), transparent 55%),
+    var(--void-soft);
+}
+
+.Footer_inner__vtL_T {
+  display: grid;
+  grid-gap: 2rem;
+  gap: 2rem;
+}
+
+.Footer_top__YBhK_ {
+  display: grid;
+  grid-gap: 1.75rem;
+  gap: 1.75rem;
+}
+
+.Footer_brandBlock__hiaIg {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.Footer_brand__0rdww {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--white);
+}
+
+.Footer_meta__HKjwM {
+  margin: 0.2rem 0 0;
+  color: var(--fog);
+  font-size: 0.88rem;
+}
+
+.Footer_links__cFiYr {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.35rem;
+  color: var(--ash);
+  font-size: 0.92rem;
+}
+
+.Footer_links__cFiYr a:hover {
+  color: var(--white);
+}
+
+.Footer_copy__KUC9W {
+  margin: 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  color: var(--fog);
+  font-size: 0.85rem;
+}
+
+@media (min-width: 800px) {
+  .Footer_footer__pQtti {
+    padding: 3.5rem 0 2.5rem;
+  }
+
+  .Footer_top__YBhK_ {
+    grid-template-columns: 1fr auto;
+    align-items: start;
+  }
+}
+
+/*!**********************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/Hero.module.css ***!
+  \**********************************************************************************************************************************************************************************************************************************************************************/
+.Hero_hero__bqvNd {
+  position: relative;
+  overflow: hidden;
+  min-height: auto;
+  padding: clamp(2.5rem, 7vw, 5.5rem) 0 clamp(3rem, 8vw, 6rem);
+  border-bottom: 1px solid var(--border);
+}
+
+.Hero_atmosphere__mkQu7 {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 85% 35%, rgba(255, 73, 44, 0.18), transparent 60%),
+    radial-gradient(ellipse 45% 40% at 15% 20%, rgba(107, 33, 239, 0.16), transparent 55%),
+    radial-gradient(ellipse 50% 45% at 50% 100%, rgba(7, 122, 199, 0.1), transparent 50%);
+  animation: Hero_heroWash__ihygn 1.2s ease both;
+  pointer-events: none;
+}
+
+.Hero_grid___ML9v {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-gap: 2rem;
+  gap: 2rem;
+  align-items: center;
+}
+
+.Hero_copy__KMVTd {
+  max-width: 34rem;
+  min-width: 0;
+}
+
+.Hero_brandLogo__Gl_B0 {
+  display: block;
+  width: min(100%, 16rem);
+  height: auto;
+  margin: 0 0 1rem;
+}
+
+.Hero_headline__wPoAT {
+  font-family: var(--font-display);
+  font-size: var(--text-h1);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  color: var(--white);
+  max-width: 16ch;
+}
+
+.Hero_sub__mpF_z {
+  margin: 1.1rem 0 0;
+  max-width: 32rem;
+  color: var(--ash);
+  font-size: var(--text-lead);
+  line-height: 1.55;
+}
+
+.Hero_actions__yXeUX {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.Hero_actions__yXeUX .btn {
+  width: 100%;
+}
+
+.Hero_canvas__dF6vn {
+  position: relative;
+  min-height: 320px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%),
+    var(--panel);
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 142, 93, 0.18),
+    0 30px 80px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.Hero_canvasGlow__Shbnp {
+  position: absolute;
+  inset: auto -20% -30% 20%;
+  height: 60%;
+  background: radial-gradient(circle, rgba(253, 137, 37, 0.2), transparent 65%);
+  filter: blur(20px);
+  pointer-events: none;
+}
+
+.Hero_wires__RTIDG {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.Hero_wire__9SPgS {
+  stroke: rgba(7, 122, 199, 0.55);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 7;
+  animation: Hero_flowPulse__GV8pH 2.8s ease-in-out infinite;
+}
+
+.Hero_wire__9SPgS:nth-child(2) {
+  animation-delay: 0.4s;
+  stroke: rgba(255, 73, 44, 0.45);
+}
+
+.Hero_wire__9SPgS:nth-child(3) {
+  animation-delay: 0.8s;
+}
+
+.Hero_wire__9SPgS:nth-child(4) {
+  animation-delay: 1.2s;
+  stroke: rgba(107, 33, 239, 0.5);
+}
+
+.Hero_node__9VmlY {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 6.4rem;
+  max-width: 42%;
+  padding: 0.5rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(26, 22, 36, 0.92);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  animation: Hero_nodeFloat__rmQty 5s ease-in-out infinite;
+}
+
+.Hero_nodeLabel__FxSUq {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--white);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.Hero_nodeMeta__oV351,
+.Hero_nodePrice__Vd56E {
+  font-size: 0.65rem;
+  color: var(--fog);
+}
+
+.Hero_nodePrice__Vd56E {
+  color: var(--ember-start);
+}
+
+.Hero_nodeUser__WrU06 {
+  top: 7%;
+  left: 10%;
+  animation-delay: 0.2s;
+}
+
+.Hero_nodeOrch__TAFnX {
+  top: 36%;
+  left: 32%;
+  border-color: rgba(255, 73, 44, 0.35);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.28),
+    0 0 24px rgba(255, 73, 44, 0.12);
+  animation-delay: 0.6s;
+}
+
+.Hero_nodeA__XdD0N {
+  bottom: 10%;
+  left: 4%;
+  animation-delay: 1s;
+}
+
+.Hero_nodeB__vE0NR {
+  bottom: 10%;
+  left: 36%;
+  animation-delay: 1.3s;
+}
+
+.Hero_nodeC__p28_2 {
+  bottom: 10%;
+  right: 4%;
+  animation-delay: 1.6s;
+}
+
+.Hero_rise1__HKPdo {
+  animation: Hero_heroRise__xjh2F 0.8s ease 0.05s both;
+}
+.Hero_rise2__w79dM {
+  animation: Hero_heroRise__xjh2F 0.85s ease 0.15s both;
+}
+.Hero_rise3__LFQCn {
+  animation: Hero_heroRise__xjh2F 0.9s ease 0.28s both;
+}
+.Hero_rise4___PC7e {
+  animation: Hero_heroRise__xjh2F 0.9s ease 0.4s both;
+}
+.Hero_rise5__pRN1P {
+  animation: Hero_heroRise__xjh2F 0.9s ease 0.52s both;
+}
+
+@media (min-width: 640px) {
+  .Hero_brandLogo__Gl_B0 {
+    width: min(100%, 20rem);
+    margin-bottom: 1.25rem;
+  }
+
+  .Hero_actions__yXeUX {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+  }
+
+  .Hero_actions__yXeUX .btn {
+    width: auto;
+  }
+
+  .Hero_canvas__dF6vn {
+    min-height: 380px;
+  }
+
+  .Hero_node__9VmlY {
+    min-width: 7.8rem;
+    max-width: none;
+    padding: 0.7rem 0.85rem;
+  }
+
+  .Hero_nodeLabel__FxSUq {
+    font-size: 0.82rem;
+  }
+
+  .Hero_nodeMeta__oV351,
+  .Hero_nodePrice__Vd56E {
+    font-size: 0.72rem;
+  }
+}
+
+@media (min-width: 960px) {
+  .Hero_hero__bqvNd {
+    min-height: min(100vh, 920px);
+  }
+
+  .Hero_grid___ML9v {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: 2.5rem;
+  }
+
+  .Hero_brandLogo__Gl_B0 {
+    width: min(100%, 22rem);
+  }
+
+  .Hero_canvas__dF6vn {
+    min-height: 460px;
+  }
+
+  .Hero_node__9VmlY {
+    min-width: 8.5rem;
+    padding: 0.75rem 0.9rem;
+  }
+
+  .Hero_nodeLabel__FxSUq {
+    font-size: 0.86rem;
+  }
+
+  .Hero_nodeUser__WrU06 {
+    left: 18%;
+  }
+
+  .Hero_nodeOrch__TAFnX {
+    left: 38%;
+  }
+
+  .Hero_nodeA__XdD0N {
+    left: 8%;
+  }
+
+  .Hero_nodeB__vE0NR {
+    left: 38%;
+  }
+
+  .Hero_nodeC__p28_2 {
+    right: 8%;
+  }
+}
+
+/*!****************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/HowItWorks.module.css ***!
+  \****************************************************************************************************************************************************************************************************************************************************************************/
+.HowItWorks_list__e1Ud_ {
+  list-style: none;
+  margin: 2rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-gap: 0.85rem;
+  gap: 0.85rem;
+}
+
+.HowItWorks_row__kLxIa {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-gap: 0.85rem;
+  gap: 0.85rem;
+  align-items: start;
+  padding: 1.15rem 1rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  min-width: 0;
+}
+
+.HowItWorks_row__kLxIa > div {
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .HowItWorks_list__e1Ud_ {
+    margin-top: 2.75rem;
+  }
+
+  .HowItWorks_row__kLxIa {
+    gap: 1.15rem;
+    padding: 1.35rem 1.25rem;
+  }
+}
+
+.HowItWorks_num__dzNnr {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 400;
+  color: var(--ember);
+  line-height: 1.2;
+}
+
+.HowItWorks_row__kLxIa h3 {
+  margin: 0 0 0.4rem;
+  font-size: var(--text-h3);
+  font-weight: 500;
+}
+
+.HowItWorks_row__kLxIa p {
+  margin: 0;
+  color: var(--fog);
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+@media (min-width: 800px) {
+  .HowItWorks_list__e1Ud_ {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/*!************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/Market.module.css ***!
+  \************************************************************************************************************************************************************************************************************************************************************************/
+.Market_wrap__kL_aJ {
+  background:
+    radial-gradient(ellipse 50% 40% at 80% 0%, rgba(255, 73, 44, 0.12), transparent 55%),
+    var(--void);
+}
+
+.Market_grid__FhJCP {
+  display: grid;
+  grid-gap: 1rem;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.Market_metric__ROP_o {
+  padding: 1.2rem 1.1rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  min-width: 0;
+}
+
+.Market_value__Xlu0v {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.65rem, 2.8vw, 2.1rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--white);
+  line-height: 1;
+}
+
+.Market_label__vpW7C {
+  margin: 0.7rem 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ash);
+}
+
+.Market_detail__Sk5IA {
+  margin: 0.35rem 0 0;
+  color: var(--fog);
+  font-size: var(--text-sm);
+}
+
+.Market_source__e61dm {
+  margin: 1.75rem 0 0;
+  color: var(--fog);
+  font-size: 0.85rem;
+}
+
+@media (min-width: 560px) {
+  .Market_grid__FhJCP {
+    grid-template-columns: repeat(2, 1fr);
+    margin-top: 2.75rem;
+  }
+
+  .Market_metric__ROP_o {
+    padding: 1.4rem 1.25rem;
+  }
+}
+
+@media (min-width: 960px) {
+  .Market_grid__FhJCP {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/*!*************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/Pricing.module.css ***!
+  \*************************************************************************************************************************************************************************************************************************************************************************/
+.Pricing_grid__kjo5u {
+  display: grid;
+  grid-gap: 1rem;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.Pricing_card__RsOoS {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 100%;
+  padding: 1.35rem 1.15rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.Pricing_featured__t_CNZ {
+  border-color: rgba(255, 73, 44, 0.35);
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 142, 93, 0.18),
+    0 18px 50px rgba(255, 12, 0, 0.08);
+}
+
+.Pricing_name__uYZVo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fog);
+}
+
+.Pricing_price__W6Wrh {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.65rem, 2.8vw, 2.05rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--white);
+  line-height: 1;
+}
+
+.Pricing_detail__dOdSR {
+  margin: 0;
+  color: var(--fog);
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+.Pricing_points__jHUkB {
+  margin: 0.35rem 0 0.5rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-gap: 0.55rem;
+  gap: 0.55rem;
+  flex: 1 1;
+}
+
+.Pricing_points__jHUkB li {
+  position: relative;
+  padding-left: 1.1rem;
+  color: var(--ash);
+  font-size: 0.95rem;
+}
+
+.Pricing_points__jHUkB li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--ember);
+}
+
+.Pricing_card__RsOoS .btn {
+  width: 100%;
+  margin-top: auto;
+}
+
+@media (min-width: 640px) {
+  .Pricing_grid__kjo5u {
+    margin-top: 2.75rem;
+  }
+
+  .Pricing_card__RsOoS {
+    padding: 1.6rem 1.4rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .Pricing_grid__kjo5u {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/*!*************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/Problem.module.css ***!
+  \*************************************************************************************************************************************************************************************************************************************************************************/
+.Problem_grid__UA7cc {
+  display: grid;
+  grid-gap: 1rem;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.Problem_item__dYdaN {
+  padding: 1.25rem 1.1rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: inset 0 -1px 0 rgba(255, 142, 93, 0.12);
+  min-width: 0;
+}
+
+.Problem_item__dYdaN h3 {
+  margin: 0 0 0.65rem;
+  font-size: var(--text-h3);
+  font-weight: 500;
+  color: var(--white);
+}
+
+.Problem_item__dYdaN p {
+  margin: 0;
+  color: var(--fog);
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+@media (min-width: 640px) {
+  .Problem_grid__UA7cc {
+    margin-top: 2.75rem;
+  }
+
+  .Problem_item__dYdaN {
+    padding: 1.5rem 1.35rem;
+  }
+}
+
+@media (min-width: 800px) {
+  .Problem_grid__UA7cc {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/*!***********************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/Proof.module.css ***!
+  \***********************************************************************************************************************************************************************************************************************************************************************/
+.Proof_wrap__eYfCW {
+  padding: 2rem 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--void-soft);
+}
+
+.Proof_inner__swhFX {
+  display: grid;
+  grid-gap: 1.5rem;
+  gap: 1.5rem;
+}
+
+.Proof_stat__SEdpl {
+  text-align: left;
+}
+
+.Proof_value__vW4cn {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3.5vw, 2.35rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--white);
+  line-height: 1;
+}
+
+.Proof_label__fQV42 {
+  margin: 0.55rem 0 0;
+  max-width: 22ch;
+  color: var(--fog);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+@media (min-width: 800px) {
+  .Proof_wrap__eYfCW {
+    padding: 2.75rem 0;
+  }
+
+  .Proof_inner__swhFX {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+  }
+}
+
+/*!****************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/SiteHeader.module.css ***!
+  \****************************************************************************************************************************************************************************************************************************************************************************/
+.SiteHeader_header__qIri_ {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  border-bottom: 1px solid var(--border);
+  background: rgba(14, 9, 24, 0.9);
+  -webkit-backdrop-filter: blur(16px);
+          backdrop-filter: blur(16px);
+}
+
+.SiteHeader_inner__WNu1_ {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  grid-gap: 0.75rem;
+  gap: 0.75rem;
+  min-height: 4.25rem;
+}
+
+.SiteHeader_brand__R0hRG {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  justify-self: start;
+  min-width: 0;
+}
+
+.SiteHeader_icon__7HCub {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.SiteHeader_logo__XTR9l {
+  width: auto;
+  height: 1.35rem;
+  max-width: min(42vw, 9.5rem);
+  object-fit: contain;
+}
+
+.SiteHeader_nav__xC76B {
+  display: none;
+  gap: 1.35rem;
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--fog);
+  justify-self: center;
+}
+
+.SiteHeader_nav__xC76B a:hover {
+  color: var(--white);
+}
+
+.SiteHeader_right__n4Vn2 {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  justify-self: end;
+}
+
+.SiteHeader_cta__T3o_g {
+  font-size: 0.9rem;
+  min-height: 2.6rem;
+  padding: 0.55rem 0.9rem;
+  white-space: nowrap;
+}
+
+.SiteHeader_ctaFull__byYew {
+  display: none;
+}
+
+.SiteHeader_ctaShort__m78Ga {
+  display: inline;
+}
+
+.SiteHeader_menuBtn__rREFQ {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--white);
+  cursor: pointer;
+  padding: 0;
+}
+
+.SiteHeader_menuBars__NrRHv,
+.SiteHeader_menuClose__PAq7n {
+  position: relative;
+  display: block;
+  width: 1.1rem;
+  height: 2px;
+  background: var(--white);
+  border-radius: 2px;
+}
+
+.SiteHeader_menuBars__NrRHv::before,
+.SiteHeader_menuBars__NrRHv::after,
+.SiteHeader_menuClose__PAq7n::before,
+.SiteHeader_menuClose__PAq7n::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--white);
+  border-radius: 2px;
+}
+
+.SiteHeader_menuBars__NrRHv::before {
+  top: -6px;
+}
+
+.SiteHeader_menuBars__NrRHv::after {
+  top: 6px;
+}
+
+.SiteHeader_menuClose__PAq7n {
+  background: transparent;
+}
+
+.SiteHeader_menuClose__PAq7n::before {
+  top: 0;
+  transform: rotate(45deg);
+}
+
+.SiteHeader_menuClose__PAq7n::after {
+  top: 0;
+  transform: rotate(-45deg);
+}
+
+.SiteHeader_mobilePanel__TXVNX {
+  display: none;
+  border-top: 1px solid var(--border);
+  background: rgba(14, 9, 24, 0.98);
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.28s ease;
+}
+
+.SiteHeader_mobileOpen__YASr_ {
+  display: block;
+  max-height: 28rem;
+}
+
+.SiteHeader_mobileNav__wisuv {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.75rem 1.25rem 1.25rem;
+}
+
+.SiteHeader_mobileNav__wisuv a {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--ash);
+  padding: 0.85rem 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.SiteHeader_mobileNav__wisuv a:hover {
+  color: var(--white);
+}
+
+.SiteHeader_mobileCta__CMzF2 {
+  margin-top: 0.85rem;
+  width: 100%;
+  border-bottom: none !important;
+}
+
+@media (min-width: 640px) {
+  .SiteHeader_inner__WNu1_ {
+    min-height: 4.75rem;
+    gap: 1rem;
+  }
+
+  .SiteHeader_icon__7HCub {
+    width: 44px;
+    height: 44px;
+  }
+
+  .SiteHeader_logo__XTR9l {
+    height: 1.7rem;
+    max-width: none;
+  }
+
+  .SiteHeader_cta__T3o_g {
+    font-size: 1rem;
+    min-height: 3.1rem;
+    padding: 0.8rem 1.45rem;
+  }
+
+  .SiteHeader_ctaFull__byYew {
+    display: inline;
+  }
+
+  .SiteHeader_ctaShort__m78Ga {
+    display: none;
+  }
+}
+
+@media (min-width: 960px) {
+  .SiteHeader_inner__WNu1_ {
+    grid-template-columns: 1fr auto 1fr;
+  }
+
+  .SiteHeader_nav__xC76B {
+    display: flex;
+  }
+
+  .SiteHeader_menuBtn__rREFQ,
+  .SiteHeader_mobilePanel__TXVNX,
+  .SiteHeader_mobileOpen__YASr_ {
+    display: none;
+  }
+
+  .SiteHeader_right__n4Vn2 {
+    justify-self: end;
+  }
+}
+
+/*!**************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/Solution.module.css ***!
+  \**************************************************************************************************************************************************************************************************************************************************************************/
+.Solution_split__8hMEz {
+  display: grid;
+  grid-gap: 2.5rem;
+  gap: 2.5rem;
+}
+
+.Solution_pillars__Ht1cR {
+  display: grid;
+  grid-gap: 0.85rem;
+  gap: 0.85rem;
+}
+
+.Solution_pillar__ZXk2v {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-gap: 0.85rem;
+  gap: 0.85rem;
+  align-items: start;
+  padding: 1.1rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.Solution_index__EJ9rr {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ember);
+}
+
+.Solution_pillar__ZXk2v h3 {
+  margin: 0 0 0.4rem;
+  font-size: var(--text-h3);
+  font-weight: 500;
+}
+
+.Solution_pillar__ZXk2v p {
+  margin: 0;
+  color: var(--fog);
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+@media (min-width: 640px) {
+  .Solution_pillar__ZXk2v {
+    gap: 1rem;
+    padding: 1.25rem 1.2rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .Solution_split__8hMEz {
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    align-items: center;
+    gap: 3.5rem;
+  }
+}
+
+/*!**********************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/Team.module.css ***!
+  \**********************************************************************************************************************************************************************************************************************************************************************/
+.Team_list__7itP1 {
+  list-style: none;
+  margin: 2rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-gap: 0.85rem;
+  gap: 0.85rem;
+}
+
+.Team_person__L6jmJ {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  padding: 1rem 1.05rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.Team_name__UNX_n {
+  font-family: var(--font-display);
+  font-size: var(--text-h3);
+  font-weight: 500;
+  color: var(--white);
+}
+
+.Team_role__zB5Fz {
+  color: var(--fog);
+  font-size: var(--text-sm);
+}
+
+@media (min-width: 640px) {
+  .Team_list__7itP1 {
+    margin-top: 2.75rem;
+  }
+
+  .Team_person__L6jmJ {
+    padding: 1.15rem 1.25rem;
+  }
+}
+
+@media (min-width: 800px) {
+  .Team_list__7itP1 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/*!**************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[5].use[3]!./components/Waitlist.module.css ***!
+  \**************************************************************************************************************************************************************************************************************************************************************************/
+.Waitlist_wrap__aNCy9 {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 45% 55% at 90% 10%, rgba(255, 73, 44, 0.2), transparent 55%),
+    radial-gradient(ellipse 40% 45% at 10% 90%, rgba(107, 33, 239, 0.14), transparent 50%),
+    var(--void);
+  border-top: 1px solid var(--border);
+}
+
+.Waitlist_wrap__aNCy9 h2 {
+  max-width: 16ch;
+}
+
+.Waitlist_ctaBlock__sfuQp {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.Waitlist_ctaBlock__sfuQp .btn {
+  width: 100%;
+}
+
+.Waitlist_hint__oPVHp {
+  margin: 1rem 0 0;
+  color: var(--fog);
+  font-size: 0.9rem;
+}
+
+@media (min-width: 560px) {
+  .Waitlist_ctaBlock__sfuQp {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 2.25rem;
+  }
+
+  .Waitlist_ctaBlock__sfuQp .btn {
+    width: auto;
+  }
+}
+

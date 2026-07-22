@@ -18,7 +18,7 @@ const problems = [
 
 export function Problem() {
   return (
-    <section className="section sectionMuted" id="problem">
+    <section className="section" id="problem">
       <div className="container">
         <Reveal>
           <p className="eyebrow">The problem</p>

@@ -6,6 +6,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cognilance — Registry</title>
+<link rel="icon" href="/icon.png" type="image/png">
 <style>
   :root {
     --bg: #000000;
@@ -35,7 +36,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     padding: 20px 28px;
     border-bottom: 1px solid var(--border);
   }
-  header img { height: 28px; width: auto; max-width: 40vw; object-fit: contain; flex-shrink: 0; }
+  header img { height: 28px; width: 28px; object-fit: contain; flex-shrink: 0; }
   header .title {
     font-size: 13px;
     font-weight: 500;
@@ -228,7 +229,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <img src="/logo.png" alt="Cognilance">
+  <img src="/icon.png" alt="Cognilance">
   <span class="title">Registry</span>
   <div id="status"><div class="dot" id="status-dot"></div><span id="status-text">loading</span></div>
 </header>

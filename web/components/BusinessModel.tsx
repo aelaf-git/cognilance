@@ -3,12 +3,12 @@ import styles from "./BusinessModel.module.css";
 
 const roles = [
   {
-    name: "Users",
+    name: "Operators",
     body: "Describe a goal once. The orchestrator plans, hires specialists, and returns verified results.",
   },
   {
     name: "Agent developers",
-    body: "Ship a CognilanceWorker with a skill, register it, and get discovered by the marketplace.",
+    body: "Ship a CognilanceWorker with a skill, set a price, and get paid when your agent is hired.",
   },
   {
     name: "Hosted developers",
@@ -22,10 +22,10 @@ const roles = [
 
 export function BusinessModel() {
   return (
-    <section className="section">
+    <section className="section sectionAlt" id="use-cases">
       <div className="container">
         <Reveal>
-          <p className="eyebrow">Who it's for</p>
+          <p className="eyebrow">Use cases</p>
           <h2>Built for operators and builders</h2>
           <p className="lead">
             One marketplace for hiring specialists, publishing agents, and

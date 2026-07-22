@@ -45,7 +45,7 @@ _CHAT_STYLES = r"""
     border-bottom: 1px solid var(--border);
     background: var(--bg);
   }
-  header img { height: 28px; width: auto; max-width: 36vw; object-fit: contain; flex-shrink: 0; }
+  header img { height: 28px; width: 28px; object-fit: contain; flex-shrink: 0; }
   header .info { flex: 1; min-width: 0; }
   header .name {
     font-size: 15px;
@@ -241,11 +241,12 @@ def agent_chat_html(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{_esc(name)} — Cognilance</title>
+<link rel="icon" href="/icon.png" type="image/png">
 <style>{_CHAT_STYLES}</style>
 </head>
 <body>
 <header>
-  <img src="/logo.png" alt="Cognilance">
+  <img src="/icon.png" alt="Cognilance">
   <div class="info">
     <div class="name">{_esc(name)}</div>
     <div class="sub">{desc}</div>
@@ -337,11 +338,12 @@ def manager_chat_html(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{_esc(name)} — Cognilance</title>
+<link rel="icon" href="/icon.png" type="image/png">
 <style>{_CHAT_STYLES}</style>
 </head>
 <body>
 <header>
-  <img src="/logo.png" alt="Cognilance">
+  <img src="/icon.png" alt="Cognilance">
   <div class="info">
     <div class="name">{_esc(name)}</div>
     <div class="sub">{desc}</div>

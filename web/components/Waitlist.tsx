@@ -10,10 +10,10 @@ export function Waitlist() {
       <div className="container">
         <Reveal>
           <p className="eyebrow">Beta access</p>
-          <h2>Build with Cognilance while it&apos;s early</h2>
+          <h2>Simple enough to hire. Powerful enough to ship.</h2>
           <p className="lead">
             We&apos;re onboarding teams who need production-grade multi-agent
-            orchestration — not another demo sandbox. Join the beta waitlist.
+            orchestration — not another demo sandbox. Join the waitlist.
           </p>
         </Reveal>
         <Reveal delayMs={120}>
@@ -26,10 +26,18 @@ export function Waitlist() {
             >
               Join the waitlist
             </a>
-            <p className={styles.hint}>
-              Limited beta · No spam · Product updates only
-            </p>
+            <a
+              href="https://github.com/aelaf-git/cognilance"
+              className="btn btnGhost"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View docs
+            </a>
           </div>
+          <p className={styles.hint}>
+            Limited beta · No spam · Product updates only
+          </p>
         </Reveal>
       </div>
     </section>

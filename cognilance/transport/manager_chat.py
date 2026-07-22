@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
-from cognilance.assets import LOGO_PATH
+from cognilance.assets import ICON_PATH, LOGO_PATH
 from cognilance.ui.dev_chat import manager_chat_html
 
 ManagerHandlerFn = Callable[[Any, str], Awaitable[str]]
@@ -40,6 +40,12 @@ class ManagerChatServer:
             if not LOGO_PATH.is_file():
                 raise HTTPException(status_code=404, detail="Logo not found")
             return FileResponse(LOGO_PATH, media_type="image/png")
+
+        @self.app.get("/icon.png")
+        async def icon() -> FileResponse:
+            if not ICON_PATH.is_file():
+                raise HTTPException(status_code=404, detail="Icon not found")
+            return FileResponse(ICON_PATH, media_type="image/png")
 
         @self.app.get("/chat", response_class=HTMLResponse)
         async def chat_page() -> str:
