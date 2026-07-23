@@ -8,11 +8,11 @@ const WAITLIST =
   "https://docs.google.com/forms/d/e/1FAIpQLScV72qv_wHi7nWeNXm76kjI9lYYKV740lULDBs6nWH0xuALnQ/viewform?usp=publish-editor";
 
 const LINKS = [
-  { href: "#product", label: "Product" },
-  { href: "#how", label: "How It Works" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "#developers", label: "For Developers" },
-  { href: "#founders", label: "Founders" },
+  { href: "/#product", label: "Product" },
+  { href: "/#how", label: "How It Works" },
+  { href: "/#pricing", label: "Pricing" },
+  { href: "/developers", label: "Developers" },
+  { href: "/#founders", label: "Founders" },
 ];
 
 export function SiteHeader() {
@@ -30,7 +30,7 @@ export function SiteHeader() {
   return (
     <header className={styles.header}>
       <div className={`container ${styles.inner}`}>
-        <a href="#top" className={styles.brand} onClick={close}>
+        <a href="/" className={styles.brand} onClick={close}>
           <Image
             src="/brand/icon.png"
             alt=""

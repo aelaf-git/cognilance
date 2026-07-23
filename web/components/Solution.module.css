@@ -60,7 +60,7 @@
   background: var(--surface);
   padding: 1.1rem 0.95rem 1.2rem;
   overflow: hidden;
-  /* Full tall frame — does not resize across phases */
+  /* Full tall frame: does not resize across phases */
   min-height: clamp(34rem, 78vh, 46rem);
   display: flex;
   flex-direction: column;
@@ -533,7 +533,7 @@
   transition: opacity 0.35s ease, visibility 0.35s ease;
 }
 
-/* ===== Phases — opacity only; layout height stays locked ===== */
+/* ===== Phases: opacity only; layout height stays locked ===== */
 
 .diagram[data-phase="closeup"] .closeup,
 .diagram[data-phase="closeup"] .closeupOutro {

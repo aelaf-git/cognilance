@@ -1,17 +1,14 @@
 import ClickSpark from "@/components/ClickSpark";
 import { BusinessModel } from "@/components/BusinessModel";
-import { Developers } from "@/components/Developers";
 import { Footer } from "@/components/Footer";
 import { Hero } from "@/components/Hero";
 import { HowItWorks } from "@/components/HowItWorks";
-import { Market } from "@/components/Market";
 import { Pricing } from "@/components/Pricing";
 import { Problem } from "@/components/Problem";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SocialProof } from "@/components/SocialProof";
 import { Solution } from "@/components/Solution";
 import { Team } from "@/components/Team";
-import { Waitlist } from "@/components/Waitlist";
 
 export default function HomePage() {
   return (
@@ -31,10 +28,7 @@ export default function HomePage() {
         <HowItWorks />
         <BusinessModel />
         <Pricing />
-        <Developers />
-        <Market />
         <Team />
-        <Waitlist />
       </main>
       <Footer />
     </ClickSpark>

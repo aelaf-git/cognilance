@@ -60,7 +60,7 @@ function fibSphere(count: number) {
 
 const BASE_R = 1.15;
 
-/** Mild bubble radius — mostly solid, slight organic flex. */
+/** Mild bubble radius: mostly solid, slight organic flex. */
 function bubbleRadius(
   ux: number,
   uy: number,
@@ -283,7 +283,7 @@ function Scene({
       group.current.position.y = Math.sin(t * 0.45) * 0.05;
       group.current.position.x = lean.current.y * 0.12;
 
-      // Subtle squash — mostly solid
+      // Subtle squash: mostly solid
       const sx = 0.92 * (1 + 0.014 * Math.sin(t * 1.0));
       const sy = 0.92 * (1 - 0.012 * Math.sin(t * 1.0 + 0.4));
       const sz = 0.92 * (1 + 0.01 * Math.cos(t * 0.85));

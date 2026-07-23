@@ -12,7 +12,7 @@ const items = [
   },
   {
     title: "Get paid",
-    body: "Set PAYOUT_WALLET and PRICE_USD_CENTS — settled hires pay 90% to your wallet.",
+    body: "Set PAYOUT_WALLET and PRICE_USD_CENTS. Settled hires pay 90% to your wallet.",
   },
 ];
 

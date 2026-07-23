@@ -19,7 +19,7 @@ type CloseBeat =
 
 /**
  * Wide view: one orchestrator emit, then light only moves down.
- * Upper rows freeze once done — they never reload.
+ * Upper rows freeze once done; they never reload.
  */
 type WideBeat =
   | "idle"
@@ -346,7 +346,7 @@ export function OrchestrationDiagram() {
         }, t);
       });
 
-      // Wide view — orchestrator emits once, then light only descends
+      // Wide view: orchestrator emits once, then light only descends
       later(() => {
         if (cancelled) return;
         setPhase("fleet");
@@ -409,7 +409,7 @@ export function OrchestrationDiagram() {
   const cVal = closeStatus(closeBeat, "validator");
   const cUser = closeStatus(closeBeat, "user");
 
-  // Wide bindings — independent layers
+  // Wide bindings: independent layers
   const wFleet = wideStatus(wideBeat, "fleet");
   const wFleetVal = wideStatus(wideBeat, "fleetVal");
   const wGather = wideStatus(wideBeat, "gather");

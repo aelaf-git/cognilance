@@ -6,46 +6,68 @@ const WAITLIST =
 
 const tiers = [
   {
-    name: "Beta access",
-    price: "Free",
-    detail: "Join the waitlist and build with Cognilance while it's early.",
+    name: "Free",
+    price: "$0",
+    detail: "Join the waitlist for early access to Cognilance.",
     points: [
-      "Orchestrator chat UI",
-      "Hire marketplace agents",
-      "Validation stage included",
+      "Access free agents",
+      "Limited tokens",
+      "Core orchestrator chat",
+      "Community support",
     ],
     cta: "Join the waitlist",
     href: WAITLIST,
     external: true,
     featured: true,
+    comingSoon: false,
   },
   {
-    name: "Agent hires",
-    price: "Pay per hire",
-    detail: "Specialist agents price their own work. Escrow settles when the job is done.",
+    name: "Pro",
+    price: "$ --",
+    detail: "For operators who need more capacity and specialist agents.",
     points: [
-      "Devnet USDC today",
-      "90% to the agent developer",
-      "Refunds on failed missions",
+      "Higher token limits",
+      "Hire marketplace agents",
+      "Validation stage included",
+      "Priority support",
     ],
-    cta: "See how it works",
-    href: "#how",
+    cta: "Coming soon",
+    href: "#pricing",
     external: false,
     featured: false,
+    comingSoon: true,
   },
   {
-    name: "Publish agents",
-    price: "Earn",
-    detail: "Ship a CognilanceWorker, set a price, and get paid when you're hired.",
+    name: "Expert",
+    price: "$ --",
+    detail: "Advanced limits and tooling for heavy production workloads.",
     points: [
-      "Register via the SDK",
-      "Host locally or on Agent Host",
-      "Track hires in the developer portal",
+      "Expanded token pool",
+      "Advanced agent access",
+      "Faster orchestration",
+      "Priority routing",
     ],
-    cta: "For developers",
-    href: "#developers",
+    cta: "Coming soon",
+    href: "#pricing",
     external: false,
     featured: false,
+    comingSoon: true,
+  },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    detail: "Security, scale, and support for teams shipping with Cognilance.",
+    points: [
+      "Custom token limits",
+      "Dedicated support",
+      "Team workspaces",
+      "SLA and security review",
+    ],
+    cta: "Coming soon",
+    href: "#pricing",
+    external: false,
+    featured: false,
+    comingSoon: true,
   },
 ];
 
@@ -55,10 +77,10 @@ export function Pricing() {
       <div className="container">
         <Reveal>
           <p className="eyebrow">Pricing</p>
-          <h2>Start free. Pay for specialists.</h2>
+          <h2>Simple plans. Start free.</h2>
           <p className="lead">
-            Cognilance is in beta — operators join free, then hire priced agents
-            from the marketplace as they need them.
+            Start on Free. Pro, Expert, and Enterprise are coming soon. Join
+            the waitlist for early access.
           </p>
         </Reveal>
         <div className={styles.grid}>
@@ -67,7 +89,12 @@ export function Pricing() {
               <article
                 className={`${styles.card} ${tier.featured ? styles.featured : ""}`}
               >
-                <p className={styles.name}>{tier.name}</p>
+                <div className={styles.cardTop}>
+                  <p className={styles.name}>{tier.name}</p>
+                  {tier.comingSoon ? (
+                    <span className={styles.soon}>Coming soon</span>
+                  ) : null}
+                </div>
                 <p className={styles.price}>{tier.price}</p>
                 <p className={styles.detail}>{tier.detail}</p>
                 <ul className={styles.points}>
@@ -75,15 +102,21 @@ export function Pricing() {
                     <li key={point}>{point}</li>
                   ))}
                 </ul>
-                <a
-                  href={tier.href}
-                  className={`btn ${tier.featured ? "btnPrimary" : "btnGhost"}`}
-                  {...(tier.external
-                    ? { target: "_blank", rel: "noreferrer" }
-                    : {})}
-                >
-                  {tier.cta}
-                </a>
+                {tier.comingSoon ? (
+                  <span className={`btn btnGhost ${styles.disabledCta}`}>
+                    {tier.cta}
+                  </span>
+                ) : (
+                  <a
+                    href={tier.href}
+                    className={`btn ${tier.featured ? "btnPrimary" : "btnGhost"}`}
+                    {...(tier.external
+                      ? { target: "_blank", rel: "noreferrer" }
+                      : {})}
+                  >
+                    {tier.cta}
+                  </a>
+                )}
               </article>
             </Reveal>
           ))}
