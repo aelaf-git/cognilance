@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import ClickSpark from "@/components/ClickSpark";
 import { Footer } from "@/components/Footer";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -50,9 +51,9 @@ export default function DevelopersPage() {
               back soon.
             </p>
             <div className={styles.actions}>
-              <a href="/" className="btn btnGhost">
+              <Link href="/" className="btn btnGhost">
                 Back to home
-              </a>
+              </Link>
             </div>
           </div>
         </section>
