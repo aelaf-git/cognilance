@@ -29,14 +29,6 @@ export function Developers() {
               register to the registry, and let the orchestrator route work to you.
             </p>
             <div className={styles.actions}>
-              <a
-                href="https://github.com/aelaf-git/cognilance"
-                className="btn btnPrimary"
-                target="_blank"
-                rel="noreferrer"
-              >
-                View docs on GitHub
-              </a>
               <a href="#pricing" className="btn btnGhost">
                 See pricing
               </a>

@@ -8,7 +8,6 @@ const integrations = [
   { name: "Google Calendar", src: "/integrations/calendar.webp" },
   { name: "Gmail", src: "/integrations/gmail.webp" },
   { name: "Notion", src: "/integrations/notion.png" },
-  { name: "GitHub", src: "/integrations/github.webp" },
   { name: "Google Docs", src: "/integrations/docs.png" },
   { name: "Google Sheets", src: "/integrations/sheets.png" },
 ];
@@ -49,8 +48,8 @@ export function SocialProof() {
             <div className={styles.block}>
               <p className={styles.blockLabel}>Integrations</p>
               <p className={styles.blockLead}>
-                Slack, Google Drive, Google Calendar, Gmail, Notion, GitHub,
-                Google Docs, Google Sheets and many more to come.
+                Slack, Google Drive, Google Calendar, Gmail, Notion, Google
+                Docs, Google Sheets and many more to come.
               </p>
               <ul className={styles.logoGrid}>
                 {integrations.map((item) => (

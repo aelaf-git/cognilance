@@ -27,14 +27,6 @@ export function Hero() {
             >
               Join the waitlist
             </a>
-            <a
-              href="https://github.com/aelaf-git/cognilance"
-              className="btn btnGhost"
-              target="_blank"
-              rel="noreferrer"
-            >
-              View docs
-            </a>
           </div>
         </div>
 

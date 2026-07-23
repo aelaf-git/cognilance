@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import styles from "./SiteHeader.module.css";
 
@@ -30,7 +31,7 @@ export function SiteHeader() {
   return (
     <header className={styles.header}>
       <div className={`container ${styles.inner}`}>
-        <a href="/" className={styles.brand} onClick={close}>
+        <Link href="/" className={styles.brand} onClick={close}>
           <Image
             src="/brand/icon.png"
             alt=""
@@ -47,14 +48,20 @@ export function SiteHeader() {
             className={styles.logo}
             priority
           />
-        </a>
+        </Link>
 
         <nav className={styles.nav} aria-label="Primary">
-          {LINKS.map((link) => (
-            <a key={link.href} href={link.href}>
-              {link.label}
-            </a>
-          ))}
+          {LINKS.map((link) =>
+            link.href.includes("#") ? (
+              <a key={link.href} href={link.href}>
+                {link.label}
+              </a>
+            ) : (
+              <Link key={link.href} href={link.href}>
+                {link.label}
+              </Link>
+            ),
+          )}
         </nav>
 
         <div className={styles.right}>
@@ -85,11 +92,17 @@ export function SiteHeader() {
         className={`${styles.mobilePanel} ${open ? styles.mobileOpen : ""}`}
       >
         <nav className={styles.mobileNav} aria-label="Mobile">
-          {LINKS.map((link) => (
-            <a key={link.href} href={link.href} onClick={close}>
-              {link.label}
-            </a>
-          ))}
+          {LINKS.map((link) =>
+            link.href.includes("#") ? (
+              <a key={link.href} href={link.href} onClick={close}>
+                {link.label}
+              </a>
+            ) : (
+              <Link key={link.href} href={link.href} onClick={close}>
+                {link.label}
+              </Link>
+            ),
+          )}
           <a
             href={WAITLIST}
             className={`btn btnPrimary ${styles.mobileCta}`}

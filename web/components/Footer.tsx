@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import styles from "./Footer.module.css";
 
 const WAITLIST =
@@ -24,11 +25,6 @@ const columns = [
     title: "Resources",
     links: [
       { href: "/developers", label: "Developers" },
-      {
-        href: "https://github.com/aelaf-git/cognilance",
-        label: "GitHub",
-        external: true,
-      },
     ],
   },
   {
@@ -47,7 +43,7 @@ export function Footer() {
       <div className={styles.shell}>
         <div className={styles.top}>
           <div className={styles.brandCol}>
-            <a href="/" className={styles.brand}>
+            <Link href="/" className={styles.brand}>
               <Image
                 src="/brand/icon.png"
                 alt=""
@@ -56,7 +52,7 @@ export function Footer() {
                 className={styles.icon}
               />
               <span className={styles.brandName}>Cognilance</span>
-            </a>
+            </Link>
             <p className={styles.blurb}>
               Automate without babysitting. Hire specialist agents and ship
               work that finishes itself.
@@ -78,14 +74,15 @@ export function Footer() {
                 <ul className={styles.linkList}>
                   {column.links.map((link) => (
                     <li key={link.label}>
-                      <a
-                        href={link.href}
-                        {...("external" in link && link.external
-                          ? { target: "_blank", rel: "noreferrer" }
-                          : {})}
-                      >
-                        {link.label}
-                      </a>
+                      {"external" in link && link.external ? (
+                        <a href={link.href} target="_blank" rel="noreferrer">
+                          {link.label}
+                        </a>
+                      ) : link.href.includes("#") ? (
+                        <a href={link.href}>{link.label}</a>
+                      ) : (
+                        <Link href={link.href}>{link.label}</Link>
+                      )}
                     </li>
                   ))}
                 </ul>
