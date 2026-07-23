@@ -1,27 +1,65 @@
 .grid {
   display: grid;
-  gap: 1.25rem;
-  margin-top: 2.75rem;
+  gap: 1.75rem;
+  margin-top: 2rem;
 }
 
-.card {
-  padding: 1.5rem 0;
-  border-top: 1px solid var(--line);
+.group {
+  min-width: 0;
+  padding: 0;
 }
 
-.card h3 {
-  font-size: 1.3rem;
-  margin-bottom: 0.55rem;
+.group h3 {
+  margin: 0 0 0.35rem;
+  font-size: var(--text-h3);
+  font-weight: 500;
+  color: var(--white);
 }
 
-.card p {
-  margin: 0;
-  color: var(--muted);
+.note {
+  margin: 0 0 0.85rem;
+  font-size: var(--text-sm);
+  color: var(--ember);
+  letter-spacing: 0.02em;
+}
+
+.list {
+  list-style: none;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.list li {
+  position: relative;
+  padding-left: 0.95rem;
+  color: var(--fog);
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+.list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: var(--ember);
+  opacity: 0.75;
+}
+
+@media (min-width: 640px) {
+  .grid {
+    margin-top: 2.75rem;
+    gap: 2rem 2.5rem;
+  }
 }
 
 @media (min-width: 900px) {
   .grid {
-    grid-template-columns: repeat(2, 1fr);
-    column-gap: 3rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

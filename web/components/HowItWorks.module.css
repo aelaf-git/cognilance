@@ -1,45 +1,61 @@
 .list {
   list-style: none;
-  margin: 3rem 0 0;
+  margin: 2rem 0 0;
   padding: 0;
   display: grid;
-  gap: 0;
+  gap: 0.85rem;
 }
 
 .row {
   display: grid;
-  grid-template-columns: 3.5rem 1fr;
-  gap: 1rem;
-  padding: 1.5rem 0;
-  border-top: 1px solid var(--line);
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem;
+  align-items: start;
+  padding: 1.15rem 1rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  min-width: 0;
 }
 
-.row:last-child {
-  border-bottom: 1px solid var(--line);
+.row > div {
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .list {
+    margin-top: 2.75rem;
+  }
+
+  .row {
+    gap: 1.15rem;
+    padding: 1.35rem 1.25rem;
+  }
 }
 
 .num {
   font-family: var(--font-display);
-  font-weight: 700;
   font-size: 1.1rem;
-  color: var(--mint);
+  font-weight: 400;
+  color: var(--ember);
+  line-height: 1.2;
 }
 
 .row h3 {
-  font-size: 1.45rem;
-  margin-bottom: 0.4rem;
+  margin: 0 0 0.4rem;
+  font-size: var(--text-h3);
+  font-weight: 500;
 }
 
 .row p {
   margin: 0;
-  color: var(--muted);
-  max-width: 40rem;
+  color: var(--fog);
+  font-size: var(--text-body);
+  line-height: 1.55;
 }
 
 @media (min-width: 800px) {
-  .row {
-    grid-template-columns: 5rem 1fr;
-    gap: 1.5rem;
-    padding: 1.85rem 0;
+  .list {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

@@ -59,25 +59,25 @@ function DataChart({
           <ResponsiveContainer width="100%" height="100%">
             {chartType === "line" ? (
               <LineChart data={series} margin={{ left: 0, right: 8, top: 8 }}>
-                <CartesianGrid vertical={false} stroke="#2a2a2a" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#888", fontSize: 11 }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: "#888", fontSize: 11 }} />
+                <CartesianGrid vertical={false} stroke="#2c2834" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#9d9797", fontSize: 11 }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fill: "#9d9797", fontSize: 11 }} />
                 <Tooltip
-                  contentStyle={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 8 }}
+                  contentStyle={{ background: "#15101f", border: "1px solid #2c2834", borderRadius: 8 }}
                   labelStyle={{ color: "#fff" }}
                 />
-                <Line dataKey="value" type="monotone" stroke="#22c55e" strokeWidth={2} dot={false} />
+                <Line dataKey="value" type="monotone" stroke="#ff492c" strokeWidth={2} dot={false} />
               </LineChart>
             ) : (
               <BarChart data={series} margin={{ left: 0, right: 8, top: 8 }}>
-                <CartesianGrid vertical={false} stroke="#2a2a2a" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#888", fontSize: 11 }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: "#888", fontSize: 11 }} />
+                <CartesianGrid vertical={false} stroke="#2c2834" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#9d9797", fontSize: 11 }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fill: "#9d9797", fontSize: 11 }} />
                 <Tooltip
-                  contentStyle={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 8 }}
+                  contentStyle={{ background: "#15101f", border: "1px solid #2c2834", borderRadius: 8 }}
                   labelStyle={{ color: "#fff" }}
                 />
-                <Bar dataKey="value" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="value" fill="#fd8925" radius={[4, 4, 0, 0]} />
               </BarChart>
             )}
           </ResponsiveContainer>

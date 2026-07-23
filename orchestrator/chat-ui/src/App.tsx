@@ -231,12 +231,12 @@ export default function App() {
       <header className="shrink-0 border-b border-border bg-background px-3 py-3 sm:px-5 sm:py-4">
         <div className="flex flex-wrap items-center gap-2 sm:gap-4">
           <img
-            src="/logo.png"
+            src="/icon.png"
             alt="Cognilance"
             className="h-6 w-auto object-contain sm:h-7"
           />
           <div className="min-w-0 flex-1 sm:flex-none">
-            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:text-[11px]">
+            <p className="truncate font-display text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:text-[11px]">
               Orchestrator Agent
             </p>
           </div>

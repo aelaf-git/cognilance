@@ -12,7 +12,8 @@ export default defineConfig({
   },
   build: {
     outDir: "../src/agent_host/static",
-    emptyOutDir: true,
+    // Keep brand assets (logo.png / icon.png) that live alongside the SPA.
+    emptyOutDir: false,
     cssCodeSplit: false,
   },
 });

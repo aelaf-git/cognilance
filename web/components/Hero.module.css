@@ -1,110 +1,75 @@
 .hero {
   position: relative;
-  isolation: isolate;
-  min-height: min(92vh, 860px);
-  display: grid;
-  align-items: end;
-  overflow: hidden;
-  padding: 5rem 0 4.5rem;
-  color: var(--mist);
-  background: var(--ink);
+  overflow: visible;
+  min-height: auto;
+  padding: clamp(2.5rem, 7vw, 5.5rem) 0 clamp(3rem, 8vw, 6rem);
+  border-bottom: 1px solid var(--border);
 }
 
 .atmosphere {
   position: absolute;
   inset: 0;
-  z-index: -1;
   background:
-    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(31, 168, 154, 0.35), transparent 55%),
-    radial-gradient(ellipse 70% 50% at 85% 10%, rgba(45, 212, 191, 0.18), transparent 50%),
-    radial-gradient(ellipse 90% 70% at 50% 100%, rgba(26, 42, 38, 0.9), transparent 60%),
-    linear-gradient(165deg, #06100e 0%, #0c1412 42%, #12241f 100%);
+    radial-gradient(ellipse 60% 50% at 85% 35%, rgba(255, 73, 44, 0.2), transparent 60%),
+    radial-gradient(ellipse 45% 40% at 15% 20%, rgba(253, 137, 37, 0.16), transparent 55%),
+    radial-gradient(ellipse 50% 45% at 50% 100%, rgba(255, 12, 0, 0.1), transparent 50%);
   animation: heroWash 1.2s ease both;
+  pointer-events: none;
 }
 
-.atmosphere::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(232, 244, 241, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(232, 244, 241, 0.04) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 85%);
-}
-
-.content {
+.grid {
   position: relative;
-  padding-bottom: 1rem;
-}
-
-.chip {
-  display: flex;
-  flex-wrap: wrap;
+  z-index: 1;
+  display: grid;
+  gap: 2rem;
   align-items: center;
-  gap: 0.85rem;
-  margin-bottom: 1.5rem;
 }
 
-.tagline {
-  color: rgba(232, 244, 241, 0.72);
-  font-size: 0.86rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.brand {
-  margin: 0 0 1rem;
-  font-family: var(--font-display);
-  font-size: clamp(3.2rem, 10vw, 6.5rem);
-  font-weight: 800;
-  letter-spacing: -0.055em;
-  line-height: 0.92;
+.copy {
+  max-width: 34rem;
+  min-width: 0;
 }
 
 .headline {
-  max-width: 14ch;
-  font-size: clamp(1.85rem, 4.6vw, 3.15rem);
-  font-weight: 700;
-  color: rgba(232, 244, 241, 0.94);
+  font-family: var(--font-display);
+  font-size: var(--text-h1);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  color: var(--white);
+  max-width: 18ch;
 }
 
 .sub {
-  margin: 1.25rem 0 0;
-  max-width: 34rem;
-  color: rgba(232, 244, 241, 0.7);
-  font-size: clamp(1.05rem, 2vw, 1.2rem);
+  margin: 0.85rem 0 0;
+  max-width: 20ch;
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 3.5vw, 1.85rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--ash);
 }
 
 .actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.75rem;
-  margin-top: 2rem;
+  margin-top: 1.5rem;
 }
 
-.actions :global(.btnGhost) {
-  border-color: rgba(232, 244, 241, 0.25);
-  color: var(--mist);
+.actions :global(.btn) {
+  width: 100%;
 }
 
-.actions :global(.btnGhost:hover) {
-  border-color: var(--mint-bright);
-  color: #fff;
+.visual {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.actions :global(.btnPrimary) {
-  background: var(--mint);
-  color: var(--ink);
-}
-
-.actions :global(.btnPrimary:hover) {
-  background: var(--mint-bright);
-}
-
-.rise1 {
-  animation: heroRise 0.8s ease 0.05s both;
-}
 .rise2 {
   animation: heroRise 0.85s ease 0.15s both;
 }
@@ -118,10 +83,25 @@
   animation: heroRise 0.9s ease 0.52s both;
 }
 
-@media (max-width: 640px) {
+@media (min-width: 640px) {
+  .actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+  }
+
+  .actions :global(.btn) {
+    width: auto;
+  }
+}
+
+@media (min-width: 960px) {
   .hero {
-    align-items: center;
-    min-height: 88vh;
-    padding-top: 4rem;
+    min-height: min(100vh, 920px);
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
+    gap: 1.5rem 2rem;
   }
 }

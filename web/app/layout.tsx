@@ -1,31 +1,35 @@
 import type { Metadata } from "next";
-import { Manrope, Syne } from "next/font/google";
+import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const syne = Syne({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-syne",
+  variable: "--font-space",
   display: "swap",
-  weight: ["600", "700", "800"],
+  weight: ["300", "400", "500", "600", "700"],
 });
 
-const manrope = Manrope({
+const ibmPlex = IBM_Plex_Sans({
   subsets: ["latin"],
-  variable: "--font-manrope",
+  variable: "--font-plex",
   display: "swap",
   weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://cognilance.ai"),
-  title: "Cognilance — Marketplace of Minds (Beta)",
+  title: "Cognilance AI",
   description:
-    "One AI agent hallucinates. A thousand, verified, don't. Trustworthy autonomous AI built for production, not demos. Currently in beta.",
+    "Hire specialized AI agents you can see and control. Verified multi-agent orchestration built for production, not demos.",
+  icons: {
+    icon: [{ url: "/brand/icon.png", type: "image/png" }],
+    apple: [{ url: "/brand/icon.png", type: "image/png" }],
+  },
   openGraph: {
-    title: "Cognilance — Marketplace of Minds",
+    title: "Cognilance AI",
     description:
-      "Verified, persistent, unsupervised multi-agent orchestration. Currently in beta.",
-    images: ["/logo.png"],
+      "Verified, persistent, unsupervised multi-agent orchestration.",
+    images: ["/brand/logo.png"],
   },
 };
 
@@ -36,7 +40,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${syne.variable} ${manrope.variable}`}>{children}</body>
+      <body className={`${spaceGrotesk.variable} ${ibmPlex.variable}`}>
+        {children}
+      </body>
     </html>
   );
 }

@@ -16,20 +16,21 @@ def _esc_js(value: str) -> str:
 
 _CHAT_STYLES = r"""
   :root {
-    --bg: #000000;
-    --surface: #0a0a0a;
-    --surface2: #111111;
-    --border: #222222;
+    --bg: #0e0918;
+    --surface: #1a1624;
+    --surface2: #15101f;
+    --border: #2c2834;
     --text: #ffffff;
-    --muted: #888888;
-    --dim: #555555;
+    --muted: #c9c5c5;
+    --dim: #9d9797;
+    --ember: #ff492c;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { -webkit-text-size-adjust: 100%; }
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
     height: 100vh;
     height: 100dvh;
     display: flex;
@@ -45,9 +46,10 @@ _CHAT_STYLES = r"""
     border-bottom: 1px solid var(--border);
     background: var(--bg);
   }
-  header img { height: 28px; width: auto; max-width: 36vw; object-fit: contain; flex-shrink: 0; }
+  header img { height: 28px; width: 28px; object-fit: contain; flex-shrink: 0; }
   header .info { flex: 1; min-width: 0; }
   header .name {
+    font-family: "Space Grotesk", system-ui, sans-serif;
     font-size: 15px;
     font-weight: 600;
     color: var(--text);
@@ -167,11 +169,11 @@ _CHAT_STYLES = r"""
     max-height: 140px;
     font-family: inherit;
   }
-  #input:focus { outline: none; border-color: var(--muted); }
+  #input:focus { outline: none; border-color: rgba(255, 73, 44, 0.45); }
   #input::placeholder { color: var(--dim); }
   #send {
-    background: var(--text);
-    color: var(--bg);
+    background: var(--ember);
+    color: #ffffff;
     border: none;
     border-radius: 4px;
     padding: 0 22px;
@@ -241,11 +243,15 @@ def agent_chat_html(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{_esc(name)} — Cognilance</title>
+<link rel="icon" href="/icon.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>{_CHAT_STYLES}</style>
 </head>
 <body>
 <header>
-  <img src="/logo.png" alt="Cognilance">
+  <img src="/icon.png" alt="Cognilance">
   <div class="info">
     <div class="name">{_esc(name)}</div>
     <div class="sub">{desc}</div>
@@ -337,11 +343,15 @@ def manager_chat_html(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{_esc(name)} — Cognilance</title>
+<link rel="icon" href="/icon.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>{_CHAT_STYLES}</style>
 </head>
 <body>
 <header>
-  <img src="/logo.png" alt="Cognilance">
+  <img src="/icon.png" alt="Cognilance">
   <div class="info">
     <div class="name">{_esc(name)}</div>
     <div class="sub">{desc}</div>

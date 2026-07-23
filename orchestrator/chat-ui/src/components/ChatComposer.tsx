@@ -49,7 +49,7 @@ export function ChatComposer({
           rows={1}
           placeholder={isStreaming ? "Running… tap Stop to cancel" : "Describe what you need…"}
           disabled={disabled || isStreaming}
-          className="min-h-[44px] flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-white placeholder:text-dim focus:border-muted focus:outline-none disabled:opacity-50 sm:min-h-[48px] sm:px-4 sm:py-3"
+          className="min-h-[44px] flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-white placeholder:text-dim focus:border-ember/50 focus:outline-none disabled:opacity-50 sm:min-h-[48px] sm:px-4 sm:py-3"
         />
         {isStreaming ? (
           <button
