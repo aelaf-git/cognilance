@@ -1,0 +1,128 @@
+.wrap {
+  border-bottom: 1px solid var(--border);
+  background: var(--void-soft);
+}
+
+.blocks {
+  display: grid;
+  gap: 2.5rem;
+  margin-top: 2rem;
+}
+
+.blockLabel {
+  margin: 0 0 0.65rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  text-transform: none;
+  color: var(--white);
+  line-height: 1.15;
+}
+
+.blockLead {
+  margin: 0 0 1.35rem;
+  max-width: 42rem;
+  color: var(--ash);
+  font-size: var(--text-lead);
+  line-height: 1.55;
+}
+
+.backer {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.backer:hover {
+  border-color: rgba(255, 73, 44, 0.35);
+  background: var(--surface);
+}
+
+.backerLogo {
+  width: auto;
+  height: 4.5rem;
+  object-fit: contain;
+}
+
+.backerName {
+  font-family: var(--font-display);
+  font-size: var(--text-h3);
+  font-weight: 500;
+  color: var(--white);
+}
+
+.logoGrid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.logoItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--ash);
+  font-size: var(--text-sm);
+}
+
+.logo {
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.more {
+  border-style: dashed;
+  color: var(--fog);
+}
+
+.moreMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  color: var(--ember);
+  font-family: var(--font-display);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+@media (min-width: 640px) {
+  .blocks {
+    margin-top: 2.75rem;
+  }
+
+  .logoGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 960px) {
+  .blocks {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.35fr);
+    gap: 3rem;
+    align-items: start;
+  }
+
+  .logoGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

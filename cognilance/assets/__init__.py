@@ -4,6 +4,7 @@ from pathlib import Path
 
 ASSETS_DIR = Path(__file__).resolve().parent
 LOGO_PATH = ASSETS_DIR / "logo.png"
+ICON_PATH = ASSETS_DIR / "icon.png"
 INTEGRATIONS_DIR = ASSETS_DIR / "integrations"
 
 # Prefer known extensions per integration id (served at /integrations/logos/{id}).
@@ -48,6 +49,7 @@ __all__ = [
     "INTEGRATIONS_DIR",
     "INTEGRATION_LOGO_FILES",
     "LOGO_PATH",
+    "ICON_PATH",
     "integration_logo_media_type",
     "integration_logo_path",
 ]

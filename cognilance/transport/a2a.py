@@ -10,7 +10,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
-from cognilance.assets import LOGO_PATH
+from cognilance.assets import ICON_PATH, LOGO_PATH
 from cognilance.core.models import AgentCard, Task, TaskResult, TaskState
 from cognilance.ui.dev_chat import agent_chat_html
 
@@ -76,6 +76,12 @@ class A2AServer:
             if not LOGO_PATH.is_file():
                 raise HTTPException(status_code=404, detail="Logo not found")
             return FileResponse(LOGO_PATH, media_type="image/png")
+
+        @self.app.get("/icon.png")
+        async def icon() -> FileResponse:
+            if not ICON_PATH.is_file():
+                raise HTTPException(status_code=404, detail="Icon not found")
+            return FileResponse(ICON_PATH, media_type="image/png")
 
         def _chat_page() -> str:
             tags = [t.lower() for t in self._agent_card.tags]

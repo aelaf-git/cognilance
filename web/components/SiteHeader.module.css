@@ -1,61 +1,228 @@
 .header {
   position: sticky;
   top: 0;
-  z-index: 40;
-  backdrop-filter: blur(14px);
-  background: rgba(246, 250, 248, 0.82);
-  border-bottom: 1px solid var(--line);
+  z-index: 100;
+  border-bottom: 1px solid var(--border);
+  background: rgba(14, 9, 24, 0.92);
+  backdrop-filter: blur(16px);
 }
 
 .inner {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 1.25rem;
-  min-height: 4rem;
+  gap: 0.75rem;
+  min-height: 4.25rem;
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
-  font-family: var(--font-display);
-  font-weight: 760;
-  font-size: 1.1rem;
-  letter-spacing: -0.03em;
+  gap: 0.55rem;
+  justify-self: start;
+  min-width: 0;
 }
 
-.brand img {
-  width: 1.75rem;
-  height: 1.75rem;
+.icon {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.logo {
+  width: auto;
+  height: 1.35rem;
+  max-width: min(42vw, 9.5rem);
   object-fit: contain;
 }
 
 .nav {
   display: none;
-  gap: 1.4rem;
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 0.92rem;
-  font-weight: 600;
+  gap: 1.35rem;
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--fog);
+  justify-self: center;
+  text-transform: capitalize;
 }
 
 .nav a:hover {
-  color: var(--ink);
+  color: var(--white);
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  justify-self: end;
 }
 
 .cta {
-  margin-left: auto;
-  min-height: 2.4rem;
-  padding: 0.55rem 1rem;
-  font-size: 0.86rem;
+  font-size: 0.9rem;
+  min-height: 2.6rem;
+  padding: 0.55rem 0.9rem;
+  white-space: nowrap;
+  text-transform: capitalize;
 }
 
-@media (min-width: 820px) {
+.ctaFull {
+  display: none;
+}
+
+.ctaShort {
+  display: inline;
+}
+
+.menuBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--white);
+  cursor: pointer;
+  padding: 0;
+}
+
+.menuBars,
+.menuClose {
+  position: relative;
+  display: block;
+  width: 1.1rem;
+  height: 2px;
+  background: var(--white);
+  border-radius: 2px;
+}
+
+.menuBars::before,
+.menuBars::after,
+.menuClose::before,
+.menuClose::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--white);
+  border-radius: 2px;
+}
+
+.menuBars::before {
+  top: -6px;
+}
+
+.menuBars::after {
+  top: 6px;
+}
+
+.menuClose {
+  background: transparent;
+}
+
+.menuClose::before {
+  top: 0;
+  transform: rotate(45deg);
+}
+
+.menuClose::after {
+  top: 0;
+  transform: rotate(-45deg);
+}
+
+.mobilePanel {
+  display: none;
+  border-top: 1px solid var(--border);
+  background: rgba(14, 9, 24, 0.98);
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.28s ease;
+}
+
+.mobileOpen {
+  display: block;
+  max-height: 28rem;
+}
+
+.mobileNav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.75rem 1.25rem 1.25rem;
+}
+
+.mobileNav a {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--ash);
+  padding: 0.85rem 0.35rem;
+  border-bottom: 1px solid var(--border);
+  text-transform: capitalize;
+}
+
+.mobileNav a:hover {
+  color: var(--white);
+}
+
+.mobileCta {
+  margin-top: 0.85rem;
+  width: 100%;
+  border-bottom: none !important;
+}
+
+@media (min-width: 640px) {
+  .inner {
+    min-height: 4.75rem;
+    gap: 1rem;
+  }
+
+  .icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .logo {
+    height: 1.7rem;
+    max-width: none;
+  }
+
+  .cta {
+    font-size: 1rem;
+    min-height: 3.1rem;
+    padding: 0.8rem 1.45rem;
+  }
+
+  .ctaFull {
+    display: inline;
+  }
+
+  .ctaShort {
+    display: none;
+  }
+}
+
+@media (min-width: 960px) {
+  .inner {
+    grid-template-columns: 1fr auto 1fr;
+  }
+
   .nav {
     display: flex;
   }
 
-  .cta {
-    margin-left: 0;
+  .menuBtn,
+  .mobilePanel,
+  .mobileOpen {
+    display: none;
+  }
+
+  .right {
+    justify-self: end;
   }
 }

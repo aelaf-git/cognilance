@@ -19,7 +19,9 @@ from agent_host.store import AgentStore, HostedAgent
 from agent_host.ui import developer_portal_html
 from agent_host.upload import UploadError, extract_zip
 
-LOGO_PATH = get_settings().repo_root / "cognilance" / "assets" / "logo.png"
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+LOGO_PATH = _STATIC_DIR / "logo.png"
+ICON_PATH = _STATIC_DIR / "icon.png"
 
 
 class AgentResponse(BaseModel):
@@ -123,6 +125,12 @@ def create_app() -> FastAPI:
         if not LOGO_PATH.is_file():
             raise HTTPException(status_code=404, detail="Logo not found")
         return FileResponse(LOGO_PATH, media_type="image/png")
+
+    @app.get("/icon.png")
+    async def icon() -> FileResponse:
+        if not ICON_PATH.is_file():
+            raise HTTPException(status_code=404, detail="Icon not found")
+        return FileResponse(ICON_PATH, media_type="image/png")
 
     @app.get("/", response_class=HTMLResponse)
     async def portal() -> str:

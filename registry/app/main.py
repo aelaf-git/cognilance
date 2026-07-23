@@ -22,6 +22,7 @@ from app.ws import TraceHub
 logger = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 LOGO_PATH = STATIC_DIR / "logo.png"
+ICON_PATH = STATIC_DIR / "icon.png"
 
 
 async def _stale_agent_loop() -> None:
@@ -79,6 +80,12 @@ def create_app() -> FastAPI:
         if not LOGO_PATH.is_file():
             raise HTTPException(status_code=404, detail="Logo not found")
         return FileResponse(LOGO_PATH, media_type="image/png")
+
+    @app.get("/icon.png")
+    async def icon() -> FileResponse:
+        if not ICON_PATH.is_file():
+            raise HTTPException(status_code=404, detail="Icon not found")
+        return FileResponse(ICON_PATH, media_type="image/png")
 
     @app.get("/dashboard", response_class=HTMLResponse)
     async def dashboard() -> str:

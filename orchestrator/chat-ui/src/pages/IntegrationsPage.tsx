@@ -3,12 +3,12 @@ import type { AppIntegration } from "@/types";
 
 /** Fallback initials when an image fails to load. */
 const LOGO_FALLBACK: Record<string, { bg: string; label: string }> = {
-  drive: { bg: "bg-blue-500/20 text-blue-400", label: "GD" },
-  gmail: { bg: "bg-red-500/20 text-red-400", label: "GM" },
-  calendar: { bg: "bg-sky-500/20 text-sky-400", label: "GC" },
+  drive: { bg: "bg-ember/15 text-ember-soft", label: "GD" },
+  gmail: { bg: "bg-ember/15 text-ember", label: "GM" },
+  calendar: { bg: "bg-ember/15 text-ember-soft", label: "GC" },
   notion: { bg: "bg-white/10 text-white", label: "N" },
-  slack: { bg: "bg-purple-500/20 text-purple-300", label: "S" },
-  github: { bg: "bg-zinc-500/20 text-zinc-200", label: "GH" },
+  slack: { bg: "bg-ember/15 text-ember-soft", label: "S" },
+  github: { bg: "bg-surface text-muted", label: "GH" },
 };
 
 export function IntegrationLogo({ logo }: { logo: string }) {
@@ -57,7 +57,7 @@ export function IntegrationsPage({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
-        <img src="/logo.png" alt="Cognilance" className="h-6 w-auto object-contain sm:h-7" />
+        <img src="/icon.png" alt="Cognilance" className="h-6 w-6 object-contain sm:h-7 sm:w-7" />
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
             Integrations
