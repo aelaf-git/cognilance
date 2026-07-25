@@ -1,7 +1,8 @@
-.next
-node_modules
+.next/
+node_modules/
 .env
 .env.*
 !.env.example
 *.tsbuildinfo
 .DS_Store
+out/
