@@ -1,1 +1,0 @@
-self.__REACT_LOADABLE_MANIFEST="{\"components/EnergyBubble/EnergyBubble.tsx -> ./BinarySphereCanvas\":{\"id\":\"components/EnergyBubble/EnergyBubble.tsx -> ./BinarySphereCanvas\",\"files\":[\"static/chunks/_app-pages-browser_components_EnergyBubble_BinarySphereCanvas_tsx.js\"]}}"
