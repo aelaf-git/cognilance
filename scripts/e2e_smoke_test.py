@@ -17,12 +17,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "orchestrator" / "src"))
 
 REGISTRY = "http://127.0.0.1:8088"
-AGENT_PORTS = (8101, 8102, 8103)
-AGENT_SCRIPTS = (
-    "agents/research_agent.py",
-    "agents/data_analyst.py",
-    "agents/python_code_writer.py",
+
+# Current marketplace agents under agents/*/agent.py
+AGENT_DIRS = (
+    "agents/email_writer",
+    "agents/web_scraper",
+    "agents/link_validator",
+    "agents/proposal_writer",
+    "agents/docs_creator",
 )
+AGENT_PORTS = (8101, 8102, 8103, 8104, 8105)
 
 
 def wait_http(url: str, *, timeout: float = 30.0) -> None:
@@ -39,11 +43,12 @@ def wait_http(url: str, *, timeout: float = 30.0) -> None:
 
 def start_agents() -> list[subprocess.Popen]:
     procs: list[subprocess.Popen] = []
-    for script in AGENT_SCRIPTS:
+    for directory in AGENT_DIRS:
+        agent_dir = ROOT / directory
         procs.append(
             subprocess.Popen(
-                [sys.executable, "-u", str(ROOT / script)],
-                cwd=ROOT,
+                [sys.executable, "-u", "agent.py"],
+                cwd=agent_dir,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
             )
@@ -54,8 +59,9 @@ def start_agents() -> list[subprocess.Popen]:
 
 
 async def run_graph(prompt: str, *, thread_id: str | None = None) -> dict:
-    from orchestrator.graph import graph
+    from orchestrator.graph import ensure_graph
 
+    graph = await ensure_graph()
     config = {"configurable": {"thread_id": thread_id or str(uuid.uuid4())}}
     return await graph.ainvoke(
         {"messages": [HumanMessage(content=prompt)]},
@@ -79,7 +85,9 @@ async def main() -> None:
     print("2) Starting agents...")
     procs = start_agents()
     try:
-        discover = httpx.get(f"{REGISTRY}/v1/agents/discover", params={"limit": 10}, timeout=5.0)
+        discover = httpx.get(
+            f"{REGISTRY}/v1/agents/discover", params={"limit": 20}, timeout=5.0
+        )
         discover.raise_for_status()
         agents = discover.json().get("agents", [])
         print(f"   {len(agents)} agent(s) online: {[a['name'] for a in agents]}")
@@ -92,7 +100,7 @@ async def main() -> None:
         assert simple.get("route") == "simple", "expected simple route"
         assert "text-card" not in _ui_names(simple), "text-card should not be emitted"
 
-        print("4) Orchestrator — complex route (research)...")
+        print("4) Orchestrator — complex route (web research)...")
         research = await run_graph(
             "Research the history of transformers in machine learning",
             thread_id="smoke-complex",

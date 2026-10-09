@@ -20,6 +20,7 @@ class Conversation:
     title: str
     created_at: datetime
     updated_at: datetime
+    user_id: str | None = None
 
 
 @dataclass
@@ -73,51 +74,74 @@ class ConversationStore:
             }
             if "ui" not in columns:
                 conn.execute("ALTER TABLE conversation_messages ADD COLUMN ui TEXT")
+            conv_cols = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+            if "user_id" not in conv_cols:
+                conn.execute("ALTER TABLE conversations ADD COLUMN user_id TEXT")
+                conn.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_conversations_user
+                    ON conversations(user_id)
+                    """
+                )
 
     def ensure_conversation(
         self,
         conversation_id: str,
         *,
         title: str = "New conversation",
+        user_id: str | None = None,
     ) -> Conversation:
         existing = self.get_conversation(conversation_id)
         if existing:
+            if user_id and not existing.user_id:
+                with self._conn() as conn:
+                    conn.execute(
+                        "UPDATE conversations SET user_id = ? WHERE id = ? AND user_id IS NULL",
+                        (user_id, conversation_id),
+                    )
+                existing.user_id = user_id
             return existing
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
                 """
-                INSERT INTO conversations (id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO conversations (id, title, created_at, updated_at, user_id)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (conversation_id, title[:120], now, now),
+                (conversation_id, title[:120], now, now, user_id),
             )
         return Conversation(
             id=conversation_id,
             title=title[:120],
             created_at=datetime.fromisoformat(now),
             updated_at=datetime.fromisoformat(now),
+            user_id=user_id,
         )
 
-    def create_conversation(self, *, title: str = "New conversation") -> Conversation:
+    def create_conversation(
+        self, *, title: str = "New conversation", user_id: str | None = None
+    ) -> Conversation:
         conversation_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
                 """
-                INSERT INTO conversations (id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO conversations (id, title, created_at, updated_at, user_id)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (conversation_id, title[:120], now, now),
+                (conversation_id, title[:120], now, now, user_id),
             )
         return Conversation(
             id=conversation_id,
             title=title[:120],
             created_at=datetime.fromisoformat(now),
             updated_at=datetime.fromisoformat(now),
+            user_id=user_id,
         )
 
-    def get_conversation(self, conversation_id: str) -> Conversation | None:
+    def get_conversation(
+        self, conversation_id: str, *, user_id: str | None = None
+    ) -> Conversation | None:
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT * FROM conversations WHERE id = ?",
@@ -125,12 +149,16 @@ class ConversationStore:
             ).fetchone()
         if not row:
             return None
-        return Conversation(
+        conv = Conversation(
             id=row["id"],
             title=row["title"],
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
+            user_id=row["user_id"] if "user_id" in row.keys() else None,
         )
+        if user_id and conv.user_id and conv.user_id != user_id:
+            return None
+        return conv
 
     def first_user_message(self, conversation_id: str) -> str | None:
         with self._conn() as conn:
@@ -193,18 +221,31 @@ class ConversationStore:
             "latest_status": row["latest_status"],
         }
 
-    def list_conversations(self, *, limit: int = 30) -> list[Conversation]:
+    def list_conversations(
+        self, *, limit: int = 30, user_id: str | None = None
+    ) -> list[Conversation]:
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
+            if user_id:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM conversations
+                    WHERE user_id = ?
+                    ORDER BY updated_at DESC LIMIT ?
+                    """,
+                    (user_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
         return [
             Conversation(
                 id=row["id"],
                 title=row["title"],
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
+                user_id=row["user_id"] if "user_id" in row.keys() else None,
             )
             for row in rows
         ]

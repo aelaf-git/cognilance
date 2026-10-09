@@ -4,20 +4,33 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import uuid
 
 from fastapi import Request, Response
 
 COOKIE_NAME = "orchestrator_uid"
+_log = logging.getLogger(__name__)
+
+
+def _demo_mode() -> bool:
+    return os.getenv("COGNILANCE_DEMO", "").strip() in {"1", "true", "yes"}
 
 
 def _secret() -> bytes:
-    return (
-        os.getenv("ORCHESTRATOR_SESSION_SECRET")
-        or os.getenv("INTEGRATION_ENCRYPTION_KEY")
-        or "cognilance-dev-insecure-session"
-    ).encode()
+    explicit = os.getenv("ORCHESTRATOR_SESSION_SECRET")
+    if explicit:
+        return explicit.encode()
+    if _demo_mode():
+        _log.warning(
+            "ORCHESTRATOR_SESSION_SECRET unset; using insecure demo default "
+            "(COGNILANCE_DEMO=1)"
+        )
+        return b"cognilance-dev-insecure-session"
+    raise RuntimeError(
+        "ORCHESTRATOR_SESSION_SECRET is required (or set COGNILANCE_DEMO=1 for local demo)"
+    )
 
 
 def _sign(value: str) -> str:

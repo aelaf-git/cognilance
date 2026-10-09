@@ -19,11 +19,12 @@ from orchestrator.context import current_conversation_id, current_mission_id, cu
 from orchestrator.graph import ensure_graph, init_graph
 from orchestrator.integrations.oauth import OAuthService
 from orchestrator.conversations.store import ConversationStore
-from orchestrator.mission_runner import stream_mission_graph
 from orchestrator.missions.finalize import finalize_session_status
 from orchestrator.missions.session_type import SessionType
 from orchestrator.missions.models import MissionStatus
 from orchestrator.missions.store import MissionStore
+from orchestrator.runtime.event_bus import event_bus
+from orchestrator.runtime.runner import stream_mission_graph
 from orchestrator.subscriptions.store import SubscriptionStore
 from orchestrator.subscriptions.session_sync import enrich_session_dict, stop_listener_for_mission
 from orchestrator.subscriptions.ticker import tick_subscriptions
@@ -250,9 +251,10 @@ def create_app() -> FastAPI:
         return JSONResponse(content={"app_id": app_id, "connected": False})
 
     @app.get("/conversations")
-    async def list_conversations() -> JSONResponse:
+    async def list_conversations(request: Request) -> JSONResponse:
+        user_id = _user(request)
         conversations = []
-        for c in conv_store.list_conversations(limit=50):
+        for c in conv_store.list_conversations(limit=50, user_id=user_id):
             stats = conv_store.session_stats(c.id)
             listeners = [
                 s.to_dict()
@@ -272,8 +274,8 @@ def create_app() -> FastAPI:
         return JSONResponse(content={"conversations": conversations})
 
     @app.post("/conversations")
-    async def create_conversation() -> JSONResponse:
-        conversation = conv_store.create_conversation()
+    async def create_conversation(request: Request) -> JSONResponse:
+        conversation = conv_store.create_conversation(user_id=_user(request))
         return JSONResponse(
             content={
                 "id": conversation.id,
@@ -286,8 +288,8 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/conversations/{conversation_id}")
-    async def get_conversation(conversation_id: str) -> JSONResponse:
-        conversation = conv_store.get_conversation(conversation_id)
+    async def get_conversation(conversation_id: str, request: Request) -> JSONResponse:
+        conversation = conv_store.get_conversation(conversation_id, user_id=_user(request))
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         messages = [
@@ -320,8 +322,10 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/conversations/{conversation_id}/active-doc")
-    async def get_conversation_active_doc(conversation_id: str) -> JSONResponse:
-        if not conv_store.get_conversation(conversation_id):
+    async def get_conversation_active_doc(
+        conversation_id: str, request: Request
+    ) -> JSONResponse:
+        if not conv_store.get_conversation(conversation_id, user_id=_user(request)):
             raise HTTPException(status_code=404, detail="Conversation not found")
         active_doc = DraftStore().get_active_doc(conversation_id)
         return JSONResponse(
@@ -329,8 +333,10 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/conversations/{conversation_id}/sessions")
-    async def list_conversation_sessions(conversation_id: str) -> JSONResponse:
-        if not conv_store.get_conversation(conversation_id):
+    async def list_conversation_sessions(
+        conversation_id: str, request: Request
+    ) -> JSONResponse:
+        if not conv_store.get_conversation(conversation_id, user_id=_user(request)):
             raise HTTPException(status_code=404, detail="Conversation not found")
         sessions = [
             enrich_session_dict(m, sub_store=sub_store)
@@ -340,8 +346,8 @@ def create_app() -> FastAPI:
 
     @app.delete("/conversations/{conversation_id}")
     @app.post("/conversations/{conversation_id}/delete")
-    async def delete_conversation(conversation_id: str) -> JSONResponse:
-        if not conv_store.get_conversation(conversation_id):
+    async def delete_conversation(conversation_id: str, request: Request) -> JSONResponse:
+        if not conv_store.get_conversation(conversation_id, user_id=_user(request)):
             raise HTTPException(status_code=404, detail="Conversation not found")
         removed = store.delete_missions_for_conversation(conversation_id)
         sub_store.stop_for_conversation(conversation_id)
@@ -355,8 +361,10 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/conversations/{conversation_id}/subscriptions")
-    async def list_conversation_subscriptions(conversation_id: str) -> JSONResponse:
-        if not conv_store.get_conversation(conversation_id):
+    async def list_conversation_subscriptions(
+        conversation_id: str, request: Request
+    ) -> JSONResponse:
+        if not conv_store.get_conversation(conversation_id, user_id=_user(request)):
             raise HTTPException(status_code=404, detail="Conversation not found")
         subs = [
             s.to_dict()
@@ -369,7 +377,7 @@ def create_app() -> FastAPI:
         conversation_id: str,
         request: Request,
     ) -> StreamingResponse:
-        if not conv_store.get_conversation(conversation_id):
+        if not conv_store.get_conversation(conversation_id, user_id=_user(request)):
             raise HTTPException(status_code=404, detail="Conversation not found")
 
         after_id = int(request.query_params.get("after", "0") or "0")
@@ -579,11 +587,20 @@ def create_app() -> FastAPI:
         text = str(payload.get("text", "")).strip()
         if not text:
             raise HTTPException(status_code=400, detail="text is required")
+        user_id = _user(request)
         conversation_id = (
             str(payload.get("conversation_id") or payload.get("thread_id") or "").strip()
             or str(uuid.uuid4())
         )
-        conv_store.ensure_conversation(conversation_id, title=text[:80])
+        existing = conv_store.get_conversation(conversation_id, user_id=user_id)
+        if (
+            existing is None
+            and conv_store.get_conversation(conversation_id) is not None
+        ):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        conv_store.ensure_conversation(
+            conversation_id, title=text[:80], user_id=user_id
+        )
         prior_history = conv_store.to_langchain_messages(conversation_id)
         conv_store.append_message(conversation_id, role="user", content=text)
         if len(prior_history) == 0:
@@ -593,16 +610,13 @@ def create_app() -> FastAPI:
             instruction=text,
             thread_id=thread_id,
             conversation_id=conversation_id,
+            user_id=user_id,
         )
         mission_id = mission.id
-        user_id = _user(request)
         current_user_id.set(user_id)
         client_tz = client_timezone_from_request(request, payload)
         if client_tz:
             activate_user_timezone(user_id, from_client=client_tz)
-
-        async def persist(event: dict[str, Any]) -> None:
-            store.append_event(mission_id, event)
 
         async def run_and_mark() -> None:
             final_text: str | None = None
@@ -633,7 +647,8 @@ def create_app() -> FastAPI:
                             content=str(final_text),
                             ui=json.dumps(rich_ui[-1]) if rich_ui else None,
                         )
-                await persist(event)
+                store.append_event(mission_id, event)
+                await event_bus.publish(mission_id, event)
 
             try:
                 async for _line in stream_mission_graph(
@@ -641,6 +656,7 @@ def create_app() -> FastAPI:
                     thread_id,
                     history=prior_history,
                     on_event=persist_with_status,
+                    use_checkpointer=False,
                 ):
                     current = store.get_mission(mission_id)
                     if current and current.status == MissionStatus.CANCELLED:
@@ -666,15 +682,19 @@ def create_app() -> FastAPI:
                     store.update_status(
                         mission_id, MissionStatus.CANCELLED, error="Aborted by user"
                     )
-                    store.append_event(
-                        mission_id, {"event": "session_aborted", "reason": "user"}
-                    )
+                    abort_evt = {"event": "session_aborted", "reason": "user"}
+                    store.append_event(mission_id, abort_evt)
+                    await event_bus.publish(mission_id, abort_evt)
                 raise
             except Exception as exc:
                 current = store.get_mission(mission_id)
                 if current and current.status != MissionStatus.CANCELLED:
                     store.update_status(mission_id, MissionStatus.FAILED, error=str(exc))
+                    err_evt = {"event": "error", "message": str(exc)}
+                    store.append_event(mission_id, err_evt)
+                    await event_bus.publish(mission_id, err_evt)
             finally:
+                await event_bus.close(mission_id)
                 current_conversation_id.reset(conv_token)
                 current_mission_id.reset(mission_token)
 
@@ -688,31 +708,26 @@ def create_app() -> FastAPI:
                 "session_type": mission.session_type.value,
             }
             yield f"data: {json.dumps(created)}\n\n"
+            # Attach before the producer starts so no events are lost.
+            queue = event_bus.attach(mission_id)
             task = asyncio.create_task(run_and_mark())
             _register_mission_task(mission_id, task)
             try:
-                after_id = 0
-                while not task.done():
-                    events = store.list_events(mission_id, after_id=after_id)
-                    for event in events:
-                        eid = event.pop("_event_id", None)
-                        if eid:
-                            after_id = int(eid)
-                        yield f"data: {json.dumps(event)}\n\n"
+                async for event in event_bus.drain(queue):
+                    yield f"data: {json.dumps(event)}\n\n"
                     current = store.get_mission(mission_id)
                     if current and current.status == MissionStatus.CANCELLED:
                         if not task.done():
                             task.cancel()
                         break
-                    await asyncio.sleep(0.15)
-                events = store.list_events(mission_id, after_id=after_id)
-                for event in events:
-                    event.pop("_event_id", None)
-                    yield f"data: {json.dumps(event)}\n\n"
-                if store.get_mission(mission_id) and store.get_mission(mission_id).status == MissionStatus.CANCELLED:
+                if (
+                    store.get_mission(mission_id)
+                    and store.get_mission(mission_id).status == MissionStatus.CANCELLED
+                ):
                     yield f"data: {json.dumps({'event': 'session_aborted', 'reason': 'user'})}\n\n"
                     yield f"data: {json.dumps({'event': 'done', 'thread_id': thread_id, 'aborted': True})}\n\n"
             finally:
+                event_bus.detach(mission_id, queue)
                 if not task.done():
                     try:
                         await task

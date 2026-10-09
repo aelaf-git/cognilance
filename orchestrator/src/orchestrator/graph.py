@@ -42,21 +42,29 @@ _builder = (
 _checkpointer_cm: AbstractAsyncContextManager[AsyncSqliteSaver] | None = None
 _checkpointer: AsyncSqliteSaver | None = None
 graph: Any = None
+_graph_no_checkpoint: Any = None
 
 
 async def init_graph() -> None:
-    """Compile the graph with an async SQLite checkpointer (call once at startup)."""
-    global graph, _checkpointer, _checkpointer_cm
-    if graph is not None:
+    """Compile graphs: chat (no checkpointer) + optional Studio (with checkpointer)."""
+    global graph, _checkpointer, _checkpointer_cm, _graph_no_checkpoint
+    if graph is not None and _graph_no_checkpoint is not None:
         return
+    # Chat / missions: ConversationStore is memory — no orphan checkpoints.
+    _graph_no_checkpoint = _builder.compile()
+    _graph_no_checkpoint.name = "Cognilance Orchestrator"
+
     checkpoint_path = str(ensure_db_dir().parent / "checkpoints.db")
     _checkpointer_cm = AsyncSqliteSaver.from_conn_string(checkpoint_path)
     _checkpointer = await _checkpointer_cm.__aenter__()
     graph = _builder.compile(checkpointer=_checkpointer)
-    graph.name = "Cognilance Orchestrator"
+    graph.name = "Cognilance Orchestrator (Studio)"
 
 
-async def ensure_graph() -> Any:
-    if graph is None:
+async def ensure_graph(*, with_checkpointer: bool = False) -> Any:
+    """Return compiled graph. Chat uses with_checkpointer=False by default."""
+    if graph is None or _graph_no_checkpoint is None:
         await init_graph()
-    return graph
+    if with_checkpointer:
+        return graph
+    return _graph_no_checkpoint

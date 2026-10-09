@@ -14,12 +14,12 @@ from pydantic import BaseModel, Field
 
 from orchestrator.integrations.client import IntegrationClient
 from orchestrator.integrations.gmail_params import format_email_draft, format_send_email_result
-from orchestrator.integrations.routing import (
+from orchestrator.presenters.results import (
+    format_calendar_list_result,
     format_document_result,
     format_gmail_list_result,
-    format_subscription_result,
-    format_calendar_list_result,
     format_recurring_result,
+    format_subscription_result,
 )
 from orchestrator.tools.web import format_web_fetch_result, format_web_search_result
 from orchestrator.llm import get_llm, get_structured_llm, last_user_text, to_chat_messages
@@ -395,7 +395,7 @@ async def _run_validation_stage(
     query: str,
     conversation: list[BaseMessage] | None,
 ) -> list[SubtaskResult]:
-    """Always validate before delivery; apply one correction round on issues."""
+    """Validate only when the plan includes a *-validation skill (opt-in)."""
     worker_subtasks = [s for s in subtasks if not _is_validator_subtask(s)]
     worker_ok = [
         results_by_id[s["id"]]
@@ -405,58 +405,20 @@ async def _run_validation_stage(
     if not worker_ok:
         return all_results
 
+    planned_skills = {
+        skill for s in subtasks if _is_validator_skill(skill := _hire_skill_of(s)) and skill
+    }
+    # No automatic self-validation or unsolicited validator hires.
+    if not planned_skills:
+        return all_results
+
     validator_subtask: Subtask | None = None
     validation_data: dict[str, Any] | None = None
     self_validated = False
 
-    # 1) Validators the planner already included in the plan.
     planned_issue = _find_planned_validation_issue(subtasks, results_by_id)
-    planned_skills = {
-        skill for s in subtasks if _is_validator_skill(skill := _hire_skill_of(s)) and skill
-    }
     if planned_issue:
         validator_subtask, validation_data = planned_issue
-    else:
-        output_text = "\n\n---\n\n".join(_result_output_text(r) for r in worker_ok)
-
-        # 2) Online validator agents not already in the plan.
-        extra_validators = [
-            (agent, skill)
-            for agent, skill in _catalog_validators(catalog_agents)
-            if skill not in planned_skills
-        ]
-        if extra_validators:
-            emit_status("Validating results before delivery…")
-        for agent, skill in extra_validators:
-            synthetic: Subtask = {
-                "id": f"validate-{skill}",
-                "title": f"Validate output ({skill})",
-                "instruction": (
-                    "Validate this output before it is delivered to the user. "
-                    "Report issues only when something is actually wrong.\n\n"
-                    f"User request:\n{query}\n\nOutput:\n{output_text}"
-                ),
-                "skill": skill,
-                "tool": f"hire:{skill}",
-                "assignee": agent.name,
-                "depends_on": [],
-            }
-            result = await _run_subtask(
-                synthetic, manager, router, conversation=conversation, prior_results=results_by_id
-            )
-            results_by_id[synthetic["id"]] = result
-            data = _validation_issue_data(result)
-            if data:
-                validator_subtask, validation_data = synthetic, data
-                break
-
-        # 3) No validator agents anywhere — the orchestrator validates itself.
-        if validation_data is None and not extra_validators and not planned_skills:
-            emit_status("Validating results before delivery…")
-            self_validated = True
-            data = await _run_self_validation(query, output_text)
-            if data.get("status") == "issues_found":
-                validation_data = data
 
     if not validation_data:
         return all_results

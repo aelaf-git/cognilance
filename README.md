@@ -120,6 +120,9 @@ See [Agents](#agents) and [Orchestrator (generative UI)](#orchestrator-generativ
 
 ## Architecture
 
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full system design (router-first
+planning, tool-proxy, SSE event bus, conversation ownership).
+
 ```
 ┌─────────────────┐     discover / register     ┌──────────────────┐
 │ CognilanceManager│ ──────────────────────────► │ Registry         │
@@ -471,11 +474,13 @@ planner → [simple] thinking → ui_selector → END
 ```
 
 1. **User input** — prompt submitted via the chat UI (`POST /chat/stream`) or API
-2. **Planning** — Planner classifies complexity and queries the registry in parallel, streams thinking, then builds a dynamic plan from **available** agents only
-3. **Routing** — **Simple** → Thinking Agent; **Complex** → multi-subtask plan (Python-code requests auto-route to the `python-code` specialist when registered)
+2. **Router-first planning** — `DeterministicRouter` handles known intents (email, Docs, proposals, web, …) with **zero** planner LLM calls; only open-ended requests use one LLM plan call
+3. **Routing** — **Simple** → Thinking Agent; **Complex** → multi-subtask plan
 4. **Task delegation** — Task Agent runs subtasks in dependency layers (`asyncio.gather` within each layer)
-5. **Execution** — specialists hired via `CognilanceManager` by skill slug; Thinking Agent handles gaps
-6. **Output rendering** — UI Selector picks a rich React component (`research-sources`, `data-chart`, `python-code`) and streams it to the client
+5. **Execution** — specialists hired via `CognilanceManager` by skill slug; tool-proxy keeps OAuth on the orchestrator
+6. **Output rendering** — UI Selector picks a rich React component; SSE is pushed via an in-process event bus (reconnect still polls mission events)
+
+Details: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ### Internal agents
 
