@@ -10,6 +10,20 @@ agents/
     requirements.txt   # agent-specific deps
     cognilance.json    # optional manifest (Agent Host uploads)
     README.md
+  docs_creator/
+    agent.py           # CognilanceWorker entry
+    proxy.py           # orchestrator Docs proxy client
+    requirements.txt
+    cognilance.json
+    README.md
+  proposal_writer/
+    agent.py           # CognilanceWorker entry
+    proxy.py           # orchestrator Docs proxy client
+    docs_ir.py         # proposal/report IR → Docs requests
+    charts.py          # matplotlib ChartSpec → PNG
+    requirements.txt
+    cognilance.json
+    README.md
   web_scraper/
     agent.py           # CognilanceWorker entry
     scrape.py          # search / fetch / clean helpers
@@ -36,9 +50,9 @@ With the registry up:
 ./scripts/start_agents.sh
 ```
 
-Discovers every `agents/*/agent.py` (Email Writer, Web Scraper, Link Validator,
-and any you add later), installs each agent's requirements, starts them from
-their own folder, and waits on health checks. Ctrl+C stops all of them.
+Discovers every `agents/*/agent.py` (Email Writer, Docs Creator, Proposal Writer,
+Web Scraper, Link Validator, and any you add later), installs each agent's requirements, starts
+them from their own folder, and waits on health checks. Ctrl+C stops all of them.
 
 ## Email Writer
 
@@ -47,6 +61,27 @@ Skill `email-writing`, port `8101`. See [`email_writer/README.md`](email_writer/
 ```bash
 pip install -e . -r agents/email_writer/requirements.txt
 python agents/email_writer/agent.py
+```
+
+## Proposal Writer
+
+Skill `proposal-writing`, port `8104`. See [`proposal_writer/README.md`](proposal_writer/README.md).
+Long-form Google Docs proposals/reports with native tables and matplotlib chart images.
+Requires Google Drive connected in the orchestrator.
+
+```bash
+pip install -e . -r agents/proposal_writer/requirements.txt
+python agents/proposal_writer/agent.py
+```
+
+## Docs Creator
+
+Skill `docs-creating`, port `8105`. See [`docs_creator/README.md`](docs_creator/README.md).
+Creates an empty titled Google Doc (no body). Requires Google Drive connected.
+
+```bash
+pip install -e . -r agents/docs_creator/requirements.txt
+python agents/docs_creator/agent.py
 ```
 
 ## Web Scraper

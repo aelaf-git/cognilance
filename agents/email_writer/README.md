@@ -17,4 +17,4 @@ python agent.py
 Requires `GROQ_API_KEY` in `agents/email_writer/.env`,
 registry on `:8088`, and orchestrator with Gmail connected.
 
-Optional: `GROQ_MODEL` (default `llama-3.3-70b-versatile`).
+Optional: `GROQ_MODEL` (default `openai/gpt-oss-120b`).

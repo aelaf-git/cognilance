@@ -19,5 +19,5 @@ python agent.py
 
 Requires `GROQ_API_KEY` in `agents/web_scraper/.env` and the registry on `:8088`.
 
-Optional in `.env`: `GROQ_MODEL` (default `llama-3.3-70b-versatile`),
+Optional in `.env`: `GROQ_MODEL` (default `openai/gpt-oss-120b`),
 `TAVILY_API_KEY`, `SERPER_API_KEY` (preferred search providers when set).

@@ -30,6 +30,134 @@ def _query_mentions(query: str, *terms: str) -> bool:
     return any(term in q for term in terms)
 
 
+def _is_proposal_task(query: str) -> bool:
+    """True when the user wants a long-form proposal, report, RFP, or SOW Doc."""
+    q = query.lower()
+    proposal_terms = (
+        "proposal",
+        "rfp",
+        "sow",
+        "statement of work",
+        "business report",
+        "write a report",
+        "create a report",
+        "long-form",
+        "long form",
+    )
+    if not _query_mentions(q, *proposal_terms):
+        return False
+    # Avoid hijacking inbox/email or pure Drive file listing.
+    if _query_mentions(q, "email", "gmail", "inbox", "send mail"):
+        return False
+    return True
+
+
+def _is_proposal_revise(query: str) -> bool:
+    """True when the user is editing/expanding an existing proposal Doc section."""
+    q = query.lower()
+    if _query_mentions(q, "email", "gmail", "inbox", "send mail"):
+        return False
+    edit_verbs = (
+        "edit",
+        "revise",
+        "expand",
+        "rewrite",
+        "update",
+        "improve",
+        "add more",
+        "add detail",
+        "more detail",
+        "lengthen",
+        "shorten",
+        "fix",
+        "change the",
+        "change ",
+        "make the",
+        "make it",
+        "justify",
+        "justified",
+        "align",
+        "alignment",
+    )
+    section_hints = (
+        "executive summary",
+        "summary",
+        "section",
+        "scope",
+        "pricing",
+        "timeline",
+        "milestone",
+        "proposal",
+        "introduction",
+        "conclusion",
+        "next steps",
+        "why us",
+        "findings",
+        "recommendation",
+        "document",
+        "doc",
+        "paragraph",
+        "text",
+    )
+    if not _query_mentions(q, *edit_verbs):
+        return False
+    # Style-only asks ("make alignment justified") count as revise without a section name.
+    if _query_mentions(
+        q,
+        "justify",
+        "justified",
+        "align",
+        "alignment",
+        "left",
+        "center",
+        "centre",
+        "right",
+    ):
+        return True
+    return _query_mentions(q, *section_hints) or _query_mentions(
+        q, "document", "google doc", "the doc", "this doc"
+    )
+
+
+def _is_docs_create_task(query: str) -> bool:
+    """True when the user wants a new (usually empty) Google Doc, not a proposal."""
+    if _is_proposal_task(query):
+        return False
+    q = query.lower()
+    if not is_google_docs_task(query) and not _query_mentions(
+        q, "create a document", "new document", "blank doc", "empty doc"
+    ):
+        return False
+    if not _query_mentions(
+        q,
+        "create",
+        "new doc",
+        "new document",
+        "new google doc",
+        "new google document",
+        "make a",
+        "make me",
+        "blank",
+        "empty",
+    ):
+        return False
+    if _query_mentions(q, "write to", "append", "add to", "edit the", "update the"):
+        return False
+    return True
+
+
+def _proposal_hire_subtask(query: str, *, title: str) -> Subtask:
+    return {
+        "id": "proposal-writer",
+        "title": title,
+        "instruction": query,
+        "tool": "hire:proposal-writing",
+        "skill": "proposal-writing",
+        "assignee": "proposal-writing",
+        "depends_on": [],
+    }
+
+
 def integration_subtasks_for_query(
     query: str,
     client: IntegrationClient,
@@ -43,7 +171,12 @@ def integration_subtasks_for_query(
 
     conv_id = current_conversation_id.get() or ""
     has_pending_email = DraftStore().has_pending_email(conv_id) if conv_id else False
+    has_proposal_draft = DraftStore().has_proposal_draft(conv_id) if conv_id else False
     email_agent_available = has_agent_for_skill(catalog_agents or [], "email-writing")
+    proposal_agent_available = has_agent_for_skill(
+        catalog_agents or [], "proposal-writing"
+    )
+    docs_creator_available = has_agent_for_skill(catalog_agents or [], "docs-creating")
 
     if is_acknowledgment(query) and not has_pending_email:
         return None
@@ -94,6 +227,39 @@ def integration_subtasks_for_query(
     if client.is_connected(user_id, "google-drive") and is_google_docs_task(
         query, conversation
     ):
+        if proposal_agent_available and (
+            _is_proposal_task(query)
+            or (has_proposal_draft and _is_proposal_revise(query))
+        ):
+            return [
+                _proposal_hire_subtask(
+                    query,
+                    title=(
+                        "Revise proposal / report in Google Docs"
+                        if _is_proposal_revise(query)
+                        else "Write proposal / report in Google Docs"
+                    ),
+                )
+            ]
+        # Pending proposal Doc + revise language: never fall through to append write_document.
+        if proposal_agent_available and has_proposal_draft and _is_proposal_revise(query):
+            return [
+                _proposal_hire_subtask(
+                    query, title="Revise proposal / report in Google Docs"
+                )
+            ]
+        if docs_creator_available and _is_docs_create_task(query):
+            return [
+                {
+                    "id": "docs-creator",
+                    "title": "Create empty Google Doc",
+                    "instruction": query,
+                    "tool": "hire:docs-creating",
+                    "skill": "docs-creating",
+                    "assignee": "docs-creating",
+                    "depends_on": [],
+                }
+            ]
         action = google_docs_action(query, conversation)
         return [
             {
@@ -106,6 +272,26 @@ def integration_subtasks_for_query(
                 "assignee": "google-drive",
                 "depends_on": [],
             }
+        ]
+
+    # Proposal/report even without explicit "Google Doc" wording when Drive + agent available.
+    if (
+        proposal_agent_available
+        and client.is_connected(user_id, "google-drive")
+        and (
+            _is_proposal_task(query)
+            or (has_proposal_draft and _is_proposal_revise(query))
+        )
+    ):
+        return [
+            _proposal_hire_subtask(
+                query,
+                title=(
+                    "Revise proposal / report in Google Docs"
+                    if _is_proposal_revise(query)
+                    else "Write proposal / report in Google Docs"
+                ),
+            )
         ]
 
     if email_agent_available and client.is_connected(user_id, "gmail"):
@@ -263,6 +449,26 @@ def format_document_result(result: dict[str, Any]) -> str:
     if not url and document_id:
         url = f"https://docs.google.com/document/d/{document_id}/edit"
 
+    status = str(result.get("status") or "")
+    message = str(result.get("message") or "").strip()
+
+    # Style/alignment outcomes: prefer the agent's explicit message (incl. already-applied).
+    if status in {"already_applied", "applied"} or (
+        result.get("alignment") and message and status in {"published", "already_applied", "applied"}
+    ):
+        lines = [message] if message else [
+            f'Alignment update on "{name}" ({status or "applied"}).'
+        ]
+        if url and status != "already_applied":
+            lines.append(f"Open: {url}")
+        return "\n".join(lines)
+
+    if status == "created":
+        lines = [f'Created empty Google Doc "{name}".']
+        if url:
+            lines.append(f"Open: {url}")
+        return "\n".join(lines)
+
     if result.get("text") is not None:
         preview = str(result.get("text", ""))[:500]
         lines = [f'Read document "{name}".']
@@ -281,6 +487,45 @@ def format_document_result(result: dict[str, Any]) -> str:
             lines.append("Text formatting was applied via the Google Docs API.")
         if url:
             lines.append(f"Open: {url}")
+        return "\n".join(lines)
+
+    if result.get("request_count") and result.get("document_id") and not result.get("alignment"):
+        lines = [
+            f'Applied {result["request_count"]} Google Docs formatting update(s).',
+        ]
+        if result.get("title") or result.get("name"):
+            lines.insert(
+                0,
+                f'Published Google Doc "{result.get("title") or result.get("name")}".',
+            )
+        if url:
+            lines.append(f"Open: {url}")
+        return "\n".join(lines)
+
+    if result.get("text_preview") is not None and result.get("mime_type"):
+        preview = str(result.get("text_preview") or "")[:500]
+        lines = [f'Exported Google Doc ({result.get("mime_type")}).']
+        if url:
+            lines.append(f"Open: {url}")
+        if preview:
+            lines.append(f"\nContent preview:\n{preview}")
+        return "\n".join(lines)
+
+    if status in {"published", "draft", "preview"} and (
+        result.get("title") or result.get("sections")
+    ):
+        title = result.get("title") or "Proposal"
+        if status == "draft":
+            lines = [f'Draft ready — "{title}".']
+        elif status == "preview":
+            lines = [f'Preview of "{title}".']
+        else:
+            lines = [f'Published Google Doc "{title}".']
+        if url:
+            lines.append(f"Open: {url}")
+        notes = str(result.get("format_notes") or "").strip()
+        if notes:
+            lines.append(f"Formatting: {notes}")
         return "\n".join(lines)
 
     lines = [f'Created Google Doc "{name}".']

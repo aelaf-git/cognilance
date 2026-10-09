@@ -5,6 +5,7 @@ import {
   ConversationSidebar,
   ConversationSidebarCollapsed,
 } from "@/components/ConversationSidebar";
+import { DocsWorkspacePanel } from "@/components/DocsWorkspacePanel";
 import { MarketplaceAgentsModal } from "@/components/MarketplaceAgentsModal";
 import {
   SessionDetailCollapsed,
@@ -12,6 +13,7 @@ import {
   SessionListPanel,
 } from "@/components/SessionDetailPanel";
 import { ResizeHandle } from "@/components/ResizeHandle";
+import { useActiveDoc } from "@/hooks/useActiveDoc";
 import { useConversations } from "@/hooks/useConversations";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useOrchestrator } from "@/hooks/useOrchestrator";
@@ -19,6 +21,8 @@ import {
   usePanelLayout,
   MIN_DETAIL_W,
   MAX_DETAIL_W,
+  MIN_DOCS_W,
+  MAX_DOCS_W,
   MIN_SIDEBAR_W,
   MAX_SIDEBAR_W,
 } from "@/hooks/usePanelLayout";
@@ -48,15 +52,26 @@ export default function App() {
     detailExpanded,
     sidebarWidth,
     detailWidth,
+    docsWidth,
     toggleSidebar,
     toggleDetail,
     resizeSidebar,
     resizeDetail,
+    resizeDocs,
     getSidebarWidth,
     getDetailWidth,
+    getDocsWidth,
     persistSidebarWidth,
     persistDetailWidth,
+    persistDocsWidth,
   } = usePanelLayout();
+
+  const {
+    activeDoc,
+    open: docsOpen,
+    pushFromEvent,
+    dismiss: dismissDocs,
+  } = useActiveDoc(activeConversationId);
 
   const {
     chatMessages,
@@ -70,7 +85,7 @@ export default function App() {
     conversationId,
     newChat,
     selectConversation,
-  } = useOrchestrator(refreshConversations);
+  } = useOrchestrator(refreshConversations, undefined, pushFromEvent);
 
   const modalSession = modalSessionId
     ? (conversationSessions.find((s) => s.id === modalSessionId) ?? null)
@@ -343,8 +358,43 @@ export default function App() {
           />
         </main>
 
-        {/* Sessions — desktop rail / mobile drawer */}
-        {detailExpanded ? (
+        {/* Docs workspace — takes the right side while a Doc is active */}
+        {docsOpen && activeDoc ? (
+          <>
+            {isMobile ? (
+              <button
+                type="button"
+                className="fixed inset-0 z-40 bg-black/60"
+                aria-label="Close document"
+                onClick={dismissDocs}
+              />
+            ) : null}
+            {!isMobile ? (
+              <ResizeHandle
+                invert
+                getWidth={getDocsWidth}
+                setWidth={resizeDocs}
+                min={MIN_DOCS_W}
+                max={MAX_DOCS_W}
+                onResizeEnd={persistDocsWidth}
+              />
+            ) : null}
+            <div
+              className={
+                isMobile
+                  ? "fixed inset-0 z-50 flex flex-col overflow-hidden bg-background shadow-2xl"
+                  : "flex h-full shrink-0 flex-col overflow-hidden border-l border-border"
+              }
+              style={isMobile ? undefined : { width: docsWidth }}
+            >
+              <DocsWorkspacePanel
+                doc={activeDoc}
+                onClose={dismissDocs}
+                isMobile={isMobile}
+              />
+            </div>
+          </>
+        ) : detailExpanded ? (
           <>
             {isMobile ? (
               <button

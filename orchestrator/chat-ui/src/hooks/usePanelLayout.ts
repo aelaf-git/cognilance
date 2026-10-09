@@ -5,16 +5,27 @@ const KEYS = {
   detailExpanded: "cognilance_detail_expanded",
   sidebarWidth: "cognilance_sidebar_width",
   detailWidth: "cognilance_detail_width",
+  docsWidth: "cognilance_docs_width",
 } as const;
 
 const DEFAULT_SIDEBAR_W = 288;
 const DEFAULT_DETAIL_W = 384;
+const DEFAULT_DOCS_W = 520;
 const MIN_SIDEBAR_W = 200;
 const MAX_SIDEBAR_W = 480;
 const MIN_DETAIL_W = 260;
 const MAX_DETAIL_W = 560;
+const MIN_DOCS_W = 320;
+const MAX_DOCS_W = 900;
 
-export { MIN_SIDEBAR_W, MAX_SIDEBAR_W, MIN_DETAIL_W, MAX_DETAIL_W };
+export {
+  MIN_SIDEBAR_W,
+  MAX_SIDEBAR_W,
+  MIN_DETAIL_W,
+  MAX_DETAIL_W,
+  MIN_DOCS_W,
+  MAX_DOCS_W,
+};
 
 function readBool(key: string, defaultValue: boolean) {
   try {
@@ -54,11 +65,16 @@ export function usePanelLayout() {
   const [detailWidth, setDetailWidth] = useState(() =>
     readWidth(KEYS.detailWidth, DEFAULT_DETAIL_W),
   );
+  const [docsWidth, setDocsWidth] = useState(() =>
+    readWidth(KEYS.docsWidth, DEFAULT_DOCS_W),
+  );
 
   const sidebarWidthRef = useRef(sidebarWidth);
   const detailWidthRef = useRef(detailWidth);
+  const docsWidthRef = useRef(docsWidth);
   sidebarWidthRef.current = sidebarWidth;
   detailWidthRef.current = detailWidth;
+  docsWidthRef.current = docsWidth;
 
   const toggleSidebar = useCallback(() => {
     setSidebarExpanded((prev) => {
@@ -86,8 +102,14 @@ export function usePanelLayout() {
     detailWidthRef.current = width;
   }, []);
 
+  const resizeDocs = useCallback((width: number) => {
+    setDocsWidth(width);
+    docsWidthRef.current = width;
+  }, []);
+
   const getSidebarWidth = useCallback(() => sidebarWidthRef.current, []);
   const getDetailWidth = useCallback(() => detailWidthRef.current, []);
+  const getDocsWidth = useCallback(() => docsWidthRef.current, []);
 
   const persistSidebarWidth = useCallback(() => {
     localStorage.setItem(KEYS.sidebarWidth, String(sidebarWidthRef.current));
@@ -97,18 +119,26 @@ export function usePanelLayout() {
     localStorage.setItem(KEYS.detailWidth, String(detailWidthRef.current));
   }, []);
 
+  const persistDocsWidth = useCallback(() => {
+    localStorage.setItem(KEYS.docsWidth, String(docsWidthRef.current));
+  }, []);
+
   return {
     sidebarExpanded,
     detailExpanded,
     sidebarWidth,
     detailWidth,
+    docsWidth,
     toggleSidebar,
     toggleDetail,
     resizeSidebar,
     resizeDetail,
+    resizeDocs,
     getSidebarWidth,
     getDetailWidth,
+    getDocsWidth,
     persistSidebarWidth,
     persistDetailWidth,
+    persistDocsWidth,
   };
 }

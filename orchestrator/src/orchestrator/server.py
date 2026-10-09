@@ -30,7 +30,8 @@ from orchestrator.subscriptions.ticker import tick_subscriptions
 from orchestrator.users.timezone import activate_user_timezone, client_timezone_from_request
 from orchestrator.ui.chat import orchestrator_chat_html
 from orchestrator.apps.store import init_all_stores
-from orchestrator.tool_proxy import gmail_router
+from orchestrator.drafts.store import DraftStore
+from orchestrator.tool_proxy import docs_router, gmail_router
 
 _UI_STATIC = Path(__file__).resolve().parent / "ui" / "static"
 LOGO_PATH = _UI_STATIC / "logo.png"
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
         version="0.3.0",
     )
     app.include_router(gmail_router)
+    app.include_router(docs_router)
 
     @app.middleware("http")
     async def session_middleware(request: Request, call_next):
@@ -303,6 +305,7 @@ def create_app() -> FastAPI:
             for m in store.list_missions_for_conversation(conversation_id, limit=50)
         ]
         listeners = [s.to_dict() for s in sub_store.list_active_for_conversation(conversation_id)]
+        active_doc = DraftStore().get_active_doc(conversation_id)
         return JSONResponse(
             content={
                 "id": conversation.id,
@@ -312,7 +315,17 @@ def create_app() -> FastAPI:
                 "messages": messages,
                 "sessions": sessions,
                 "active_listeners": listeners,
+                "active_doc": active_doc,
             }
+        )
+
+    @app.get("/conversations/{conversation_id}/active-doc")
+    async def get_conversation_active_doc(conversation_id: str) -> JSONResponse:
+        if not conv_store.get_conversation(conversation_id):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        active_doc = DraftStore().get_active_doc(conversation_id)
+        return JSONResponse(
+            content={"conversation_id": conversation_id, "active_doc": active_doc}
         )
 
     @app.get("/conversations/{conversation_id}/sessions")

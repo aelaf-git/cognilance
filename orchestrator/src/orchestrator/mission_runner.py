@@ -80,6 +80,20 @@ async def stream_mission_graph(
 
     if final and final.get("messages"):
         message = final["messages"][-1]
+        final_data = final.get("final_data") or {}
+        doc_fields: dict[str, str] = {}
+        document_id = str(final_data.get("document_id") or "").strip()
+        if document_id:
+            url = str(final_data.get("url") or "").strip()
+            if not url:
+                url = f"https://docs.google.com/document/d/{document_id}/edit"
+            doc_fields = {
+                "document_id": document_id,
+                "document_url": url,
+                "document_title": str(
+                    final_data.get("title") or final_data.get("name") or "Google Doc"
+                ),
+            }
         payload = {
             "event": "final",
             "thread_id": thread_id,
@@ -91,6 +105,7 @@ async def stream_mission_graph(
             "route": final.get("route"),
             "complexity": final.get("complexity"),
             "subtask_results": final.get("subtask_results") or [],
+            **doc_fields,
         }
         if on_event:
             await on_event(payload)

@@ -68,12 +68,13 @@ def _llm():
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("GROQ_API_KEY is required")
-    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    method = "json_schema" if "gpt-oss" in model.lower() else "function_calling"
     return ChatGroq(
         model=model,
         api_key=api_key,
         temperature=0.2,
-    ).with_structured_output(ScrapeResult)
+    ).with_structured_output(ScrapeResult, method=method)
 
 
 def _history_messages(history: list | None) -> list[dict[str, str]]:

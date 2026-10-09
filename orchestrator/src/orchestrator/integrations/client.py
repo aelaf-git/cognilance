@@ -73,7 +73,11 @@ class IntegrationClient:
                 if integration_id == "google-drive":
                     lines.append(
                         "  Google Docs: create_document {name, content}; "
-                        "write_document {document_id, content, mode, style:{bold, font_size, font_family}}"
+                        "write_document {document_id, content, mode, style:{bold, font_size, font_family}}; "
+                        "batch_update_document / insert_table / insert_image / export_document "
+                        "(prefer hire:docs-creating for new/blank/titled Docs; "
+                        "prefer hire:proposal-writing for proposals, reports, RFP, SOW when that "
+                        "skill is in the marketplace catalog)"
                     )
                 if integration_id == "gmail":
                     lines.append(
@@ -105,6 +109,10 @@ class IntegrationClient:
             "For email: if hire:email-writing is available, use that agent; otherwise ALWAYS "
             "compose_email first and show the draft; only send_email after user approval. "
             "Never send_email on the first request — even if a recipient is given. "
+            "For new/blank/titled Google Docs: if hire:docs-creating is available and Drive is "
+            "connected, use that agent (empty Doc, user writes). "
+            "For proposals/reports/RFP/SOW: if hire:proposal-writing is available and Drive is "
+            "connected, use that agent — do not fall back to raw app:google-drive compose. "
             "Only route to app:* tools that are CONNECTED. "
             "If the user needs a disconnected integration, use thinking and explain how to connect."
         )

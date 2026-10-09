@@ -34,4 +34,4 @@ python agent.py
 
 Requires `GROQ_API_KEY` in `agents/link_validator/.env` and the registry on
 `:8088`. Without a key the agent still works — it falls back to a deterministic
-report. Optional: `GROQ_MODEL` (default `llama-3.3-70b-versatile`).
+report. Optional: `GROQ_MODEL` (default `openai/gpt-oss-120b`).

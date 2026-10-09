@@ -17,9 +17,12 @@ from orchestrator.integrations.oauth import public_base_url
 DEFAULT_TTL_SECONDS = 900  # 15 minutes
 
 GMAIL_SCOPES = frozenset({"gmail:send", "gmail:read", "gmail:search"})
+DOCS_SCOPES = frozenset({"docs:read", "docs:write"})
 
 SCOPE_BY_SKILL: dict[str, list[str]] = {
     "email-writing": sorted(GMAIL_SCOPES),
+    "proposal-writing": sorted(DOCS_SCOPES),
+    "docs-creating": sorted(DOCS_SCOPES),
 }
 
 

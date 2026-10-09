@@ -16,7 +16,7 @@ from orchestrator.integrations.routing import integration_subtasks_for_query
 from orchestrator.tools.time_routing import time_subtasks_for_query
 from orchestrator.tools.web_routing import web_subtasks_for_query
 from orchestrator.subscriptions.recurring_routing import recurring_subtasks_for_query
-from orchestrator.llm import get_llm, last_user_text, to_chat_messages
+from orchestrator.llm import get_llm, get_structured_llm, last_user_text, to_chat_messages
 from orchestrator.registry_cache import (
     catalog_snapshot,
     find_agent_by_skill,
@@ -54,11 +54,17 @@ Think out loud before acting. Write in clear prose (not JSON). Cover:
 7. Never plan to use app:* tools that are NOT CONNECTED
 8. For email compose/send/revise: if email-writing is in the catalog, plan hire:email-writing only —
    do NOT plan app:gmail compose_email/send_email or a separate web+thinking draft pipeline
-9. For web scraping, research, searching, or reading URLs: if web-scraping is in the catalog,
+9. For creating a new/blank/titled Google Doc (not a proposal): if docs-creating is in the
+   catalog and Google Drive is CONNECTED, plan hire:docs-creating only — do NOT plan
+   app:google-drive create_document and do NOT hire proposal-writing for empty Docs.
+10. For proposals, RFPs, SOWs, or long-form reports in Google Docs: if proposal-writing is in the
+   catalog and Google Drive is CONNECTED, plan hire:proposal-writing only — do NOT plan
+   app:google-drive create_document/write_document for those tasks
+11. For web scraping, research, searching, or reading URLs: if web-scraping is in the catalog,
    plan hire:web-scraping only — do NOT plan web:search / web:fetch_url or a web+thinking pipeline
-10. For checking/validating/verifying links or URLs (working, broken, reachable): if
+12. For checking/validating/verifying links or URLs (working, broken, reachable): if
     link-validation is in the catalog, plan hire:link-validation only
-11. VALIDATORS: agents whose skill ends in "-validation" (e.g. link-validation) verify other
+13. VALIDATORS: agents whose skill ends in "-validation" (e.g. link-validation) verify other
     agents' output. After execution the orchestrator ALWAYS runs a validation pass before
     replying — using online validator agents, or validating itself when none are registered —
     and re-hires the responsible agent to fix reported issues. So only plan an explicit
@@ -120,7 +126,7 @@ async def _classify_complexity(
     catalog_text: str,
     capabilities: str,
 ) -> ComplexityDecision:
-    llm = get_llm(temperature=0).with_structured_output(ComplexityDecision)
+    llm = get_structured_llm(ComplexityDecision, temperature=0)
     return await llm.ainvoke(
         [
             {
@@ -459,8 +465,9 @@ async def planner(state: State) -> dict:
         emit("thinking_done", text=thinking)
 
         emit_status("Building execution plan…")
-        llm = get_llm(temperature=0).with_structured_output(PlannerDecision)
-        decision: PlannerDecision = await llm.ainvoke(
+        llm = get_structured_llm(PlannerDecision, temperature=0)
+        try:
+            decision: PlannerDecision = await llm.ainvoke(
             [
                 {
                     "role": "system",
@@ -478,13 +485,23 @@ async def planner(state: State) -> dict:
                         "only when no specialist agent covers it. "
                         "Use web:fetch_url when the user shares a URL to read or summarize. "
                         "For app tools, set action to a supported action and params as needed. "
-                        "For Google Docs (app:google-drive): use create_document with name + "
-                        "content (actual document body, not the user's command); use write_document "
-                        "with document_id, content, mode=append, and optional style "
-                        "(bold, font_size, font_family). Reuse document_id from prior messages. "
+                        "For Google Docs: if docs-creating is in the catalog and the user wants a "
+                        "new/blank/titled Doc (not a proposal), plan EXACTLY one subtask "
+                        "hire:docs-creating — never app:google-drive create_document and never "
+                        "hire:proposal-writing for empty Docs. "
+                        "If docs-creating is NOT in the catalog, use app:google-drive "
+                        "create_document with name only (empty content). "
+                        "Use write_document with document_id, content, mode=append, and optional "
+                        "style (bold, font_size, font_family) when editing an existing non-proposal Doc. "
+                        "Reuse document_id from prior messages. "
                         "EMAIL: If email-writing is in the catalog, plan EXACTLY one subtask "
                         "hire:email-writing for compose, revise, or send — never app:gmail "
                         "compose_email/send_email, and never prepend web or thinking draft steps. "
+                        "PROPOSALS / REPORTS / RFP / SOW: If proposal-writing is in the catalog "
+                        "and Google Drive is CONNECTED, plan EXACTLY one subtask "
+                        "hire:proposal-writing for long-form Docs (tables, charts as images) — "
+                        "never app:google-drive create_document/write_document for those tasks. "
+                        "Same for edit/revise/expand section requests on an existing proposal Doc. "
                         "WEB SCRAPING / RESEARCH: If web-scraping is in the catalog, plan EXACTLY "
                         "one subtask hire:web-scraping for scraping pages, reading URLs, web "
                         "research, or current-information lookups — never web:search / "
@@ -527,6 +544,12 @@ async def planner(state: State) -> dict:
                 },
             ]
         )  # type: ignore[assignment]
+        except Exception:
+            decision = PlannerDecision(
+                reasoning="Plan construction failed; answering directly.",
+                steps=[],
+                subtasks=[],
+            )
 
         complexity = complexity_decision.complexity
         route = "simple" if complexity == "simple" else "complex"

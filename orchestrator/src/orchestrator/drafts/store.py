@@ -90,6 +90,55 @@ class DraftStore:
     def save_email_draft(self, conversation_id: str, payload: dict[str, Any]) -> None:
         self.save_draft(conversation_id, "email", payload)
 
+    def get_proposal_draft(self, conversation_id: str) -> dict[str, Any] | None:
+        return self.get_pending(conversation_id, "proposal")
+
+    def save_proposal_draft(self, conversation_id: str, payload: dict[str, Any]) -> None:
+        self.save_draft(conversation_id, "proposal", payload)
+
+    def get_document_draft(self, conversation_id: str) -> dict[str, Any] | None:
+        return self.get_pending(conversation_id, "document")
+
+    def save_document_draft(self, conversation_id: str, payload: dict[str, Any]) -> None:
+        self.save_draft(conversation_id, "document", payload)
+
+    def has_proposal_draft(self, conversation_id: str) -> bool:
+        draft = self.get_proposal_draft(conversation_id)
+        return bool(draft and draft.get("document_id"))
+
+    def get_active_doc(self, conversation_id: str) -> dict[str, Any] | None:
+        """Return the newest proposal or created Doc for this conversation."""
+        if not conversation_id:
+            return None
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT payload FROM pending_drafts
+                WHERE conversation_id = ? AND kind IN ('proposal', 'document') AND status = ?
+                ORDER BY updated_at DESC
+                """,
+                (conversation_id, _STATUS_PENDING),
+            ).fetchall()
+        for row in rows:
+            try:
+                draft = json.loads(row["payload"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(draft, dict):
+                continue
+            document_id = str(draft.get("document_id") or "").strip()
+            if not document_id:
+                continue
+            url = str(draft.get("url") or "").strip()
+            if not url:
+                url = f"https://docs.google.com/document/d/{document_id}/edit"
+            return {
+                "document_id": document_id,
+                "url": url,
+                "title": str(draft.get("title") or draft.get("name") or "Google Doc"),
+            }
+        return None
+
     def mark_sent(self, conversation_id: str, kind: str = "email") -> None:
         if not conversation_id:
             return
