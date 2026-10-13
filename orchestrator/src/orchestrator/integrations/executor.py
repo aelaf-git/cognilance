@@ -222,6 +222,8 @@ class IntegrationExecutor:
                 "document_id": document_id,
                 "title": doc.get("title"),
                 "text": self._docs_extract_text(doc),
+                "end_index": self._docs_end_index(doc),
+                "body_content": (doc.get("body") or {}).get("content") or [],
                 "url": f"https://docs.google.com/document/d/{document_id}/edit",
             }
 
@@ -244,11 +246,15 @@ class IntegrationExecutor:
                 )
                 end_index = self._docs_end_index(doc)
                 requests: list[dict[str, Any]] = []
-                if end_index > 1:
+                # Docs forbids deleting the body's trailing segment newline.
+                if end_index > 2:
                     requests.append(
                         {
                             "deleteContentRange": {
-                                "range": {"startIndex": 1, "endIndex": end_index}
+                                "range": {
+                                    "startIndex": 1,
+                                    "endIndex": end_index - 1,
+                                }
                             }
                         }
                     )
@@ -281,7 +287,315 @@ class IntegrationExecutor:
                 "styled": bool(style),
             }
 
+        if action == "batch_update_document":
+            document_id = str(
+                params.get("document_id", params.get("file_id", ""))
+            ).strip()
+            requests = params.get("requests")
+            if not document_id:
+                raise RuntimeError("document_id is required")
+            if not isinstance(requests, list) or not requests:
+                raise RuntimeError("requests must be a non-empty list of Docs API requests")
+            data = await self._google_request(
+                token,
+                "POST",
+                f"https://docs.googleapis.com/v1/documents/{document_id}:batchUpdate",
+                json_body={"requests": requests},
+            )
+            return {
+                "document_id": document_id,
+                "url": f"https://docs.google.com/document/d/{document_id}/edit",
+                "replies": data.get("replies") if isinstance(data, dict) else None,
+                "request_count": len(requests),
+            }
+
+        if action == "export_document":
+            document_id = str(
+                params.get("document_id", params.get("file_id", ""))
+            ).strip()
+            if not document_id:
+                raise RuntimeError("document_id is required")
+            mime = str(
+                params.get("mime_type") or params.get("mimeType") or "text/plain"
+            ).strip()
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                response = await client.get(
+                    f"https://www.googleapis.com/drive/v3/files/{document_id}/export",
+                    headers={"Authorization": f"Bearer {token}"},
+                    params={"mimeType": mime},
+                )
+                if response.status_code >= 400:
+                    raise RuntimeError(response.text)
+                raw = response.content
+            text_preview = ""
+            if mime.startswith("text/") or mime in {"application/rtf", "text/html"}:
+                text_preview = raw.decode("utf-8", errors="replace")[:12000]
+            return {
+                "document_id": document_id,
+                "mime_type": mime,
+                "byte_length": len(raw),
+                "text_preview": text_preview,
+                "url": f"https://docs.google.com/document/d/{document_id}/edit",
+            }
+
+        if action == "insert_table":
+            return await self._docs_insert_table(token, params)
+
+        if action == "insert_image":
+            return await self._docs_insert_image(token, params)
+
         raise RuntimeError(f"Unhandled action: {action}")
+
+    async def _docs_insert_table(
+        self, token: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        document_id = str(params.get("document_id", params.get("file_id", ""))).strip()
+        if not document_id:
+            raise RuntimeError("document_id is required")
+        headers = params.get("headers") or []
+        rows = params.get("rows") or []
+        if not isinstance(headers, list):
+            headers = []
+        if not isinstance(rows, list):
+            rows = []
+        headers_s = [str(h) for h in headers]
+        rows_s = [[str(c) for c in (row if isinstance(row, list) else [row])] for row in rows]
+        col_count = max(len(headers_s), max((len(r) for r in rows_s), default=0), 1)
+        row_count = (1 if headers_s else 0) + max(len(rows_s), 0)
+        if row_count <= 0:
+            raise RuntimeError("table requires headers or rows")
+
+        index = params.get("index")
+        if index is None:
+            doc = await self._google_request(
+                token,
+                "GET",
+                f"https://docs.googleapis.com/v1/documents/{document_id}",
+            )
+            index = max(1, self._docs_end_index(doc) - 1)
+        else:
+            index = int(index)
+
+        await self._google_request(
+            token,
+            "POST",
+            f"https://docs.googleapis.com/v1/documents/{document_id}:batchUpdate",
+            json_body={
+                "requests": [
+                    {
+                        "insertTable": {
+                            "rows": row_count,
+                            "columns": col_count,
+                            "location": {"index": index},
+                        }
+                    }
+                ]
+            },
+        )
+
+        doc = await self._google_request(
+            token,
+            "GET",
+            f"https://docs.googleapis.com/v1/documents/{document_id}",
+        )
+        table = self._docs_find_table_near(doc, index)
+        if not table:
+            return {
+                "document_id": document_id,
+                "url": f"https://docs.google.com/document/d/{document_id}/edit",
+                "rows": row_count,
+                "columns": col_count,
+                "filled": False,
+            }
+
+        cell_matrix = headers_s + [""] * (col_count - len(headers_s)) if headers_s else []
+        data_rows: list[list[str]] = []
+        if headers_s:
+            data_rows.append((headers_s + [""] * col_count)[:col_count])
+        for row in rows_s:
+            data_rows.append((row + [""] * col_count)[:col_count])
+
+        # Fill from bottom-right so earlier indices stay valid.
+        fill_requests: list[dict[str, Any]] = []
+        table_rows = table.get("tableRows") or []
+        for r_i in range(min(len(data_rows), len(table_rows)) - 1, -1, -1):
+            cells = table_rows[r_i].get("tableCells") or []
+            for c_i in range(min(col_count, len(cells)) - 1, -1, -1):
+                text = data_rows[r_i][c_i]
+                if not text:
+                    continue
+                cell = cells[c_i]
+                cell_content = cell.get("content") or []
+                insert_at = None
+                for el in cell_content:
+                    if "startIndex" in el:
+                        insert_at = int(el["startIndex"])
+                        break
+                if insert_at is None:
+                    continue
+                fill_requests.append(
+                    {
+                        "insertText": {
+                            "location": {"index": insert_at},
+                            "text": text,
+                        }
+                    }
+                )
+                if r_i == 0 and headers_s:
+                    fill_requests.append(
+                        {
+                            "updateTextStyle": {
+                                "range": {
+                                    "startIndex": insert_at,
+                                    "endIndex": insert_at + len(text),
+                                },
+                                "textStyle": {"bold": True},
+                                "fields": "bold",
+                            }
+                        }
+                    )
+
+        if fill_requests:
+            await self._google_request(
+                token,
+                "POST",
+                f"https://docs.googleapis.com/v1/documents/{document_id}:batchUpdate",
+                json_body={"requests": fill_requests},
+            )
+
+        return {
+            "document_id": document_id,
+            "url": f"https://docs.google.com/document/d/{document_id}/edit",
+            "rows": row_count,
+            "columns": col_count,
+            "filled": bool(fill_requests),
+            "index": index,
+        }
+
+    async def _docs_insert_image(
+        self, token: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        document_id = str(params.get("document_id", params.get("file_id", ""))).strip()
+        if not document_id:
+            raise RuntimeError("document_id is required")
+
+        index = params.get("index")
+        if index is None:
+            doc = await self._google_request(
+                token,
+                "GET",
+                f"https://docs.googleapis.com/v1/documents/{document_id}",
+            )
+            index = max(1, self._docs_end_index(doc) - 1)
+        else:
+            index = int(index)
+
+        width_pt = float(params.get("width_pt") or params.get("width") or 400)
+        drive_file_id = str(params.get("drive_file_id") or "").strip()
+        image_url = str(params.get("url") or params.get("image_url") or "").strip()
+        content_b64 = params.get("content_base64") or params.get("bytes_base64")
+        mime = str(params.get("mime_type") or params.get("mimeType") or "image/png").strip()
+        name = str(params.get("name") or "chart.png").strip() or "chart.png"
+
+        if not drive_file_id:
+            raw: bytes | None = None
+            if content_b64:
+                raw = base64.b64decode(str(content_b64))
+            elif image_url:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.get(image_url)
+                    if resp.status_code >= 400:
+                        raise RuntimeError(f"Failed to fetch image URL: {resp.status_code}")
+                    raw = resp.content
+                    ctype = resp.headers.get("content-type", "")
+                    if ctype.startswith("image/"):
+                        mime = ctype.split(";")[0].strip()
+            if raw is None:
+                raise RuntimeError(
+                    "insert_image requires content_base64, url, or drive_file_id"
+                )
+            # Upload to Drive as a media file, then reference by URI.
+            meta = json.dumps({"name": name, "mimeType": mime}).encode()
+            body = (
+                b"--boundary\r\n"
+                b"Content-Type: application/json; charset=UTF-8\r\n\r\n"
+                + meta
+                + b"\r\n--boundary\r\n"
+                + f"Content-Type: {mime}\r\n\r\n".encode()
+                + raw
+                + b"\r\n--boundary--"
+            )
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                response = await client.post(
+                    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "multipart/related; boundary=boundary",
+                    },
+                    content=body,
+                )
+                if response.status_code >= 400:
+                    raise RuntimeError(response.text)
+                uploaded = response.json()
+            drive_file_id = str(uploaded.get("id") or "").strip()
+            if not drive_file_id:
+                raise RuntimeError("Drive upload did not return file id")
+
+        # Make readable via Drive URI for Docs insertInlineImage.
+        uri = f"https://docs.google.com/uc?id={drive_file_id}"
+        # Prefer explicit public-ish link via Drive files.get webContentLink when possible.
+        try:
+            meta = await self._google_request(
+                token,
+                "GET",
+                f"https://www.googleapis.com/drive/v3/files/{drive_file_id}",
+                params={"fields": "id,webContentLink,thumbnailLink"},
+            )
+            if isinstance(meta, dict) and meta.get("webContentLink"):
+                uri = str(meta["webContentLink"])
+        except Exception:
+            pass
+
+        await self._google_request(
+            token,
+            "POST",
+            f"https://docs.googleapis.com/v1/documents/{document_id}:batchUpdate",
+            json_body={
+                "requests": [
+                    {
+                        "insertInlineImage": {
+                            "location": {"index": index},
+                            "uri": uri,
+                            "objectSize": {
+                                "width": {"magnitude": width_pt, "unit": "PT"},
+                            },
+                        }
+                    }
+                ]
+            },
+        )
+        return {
+            "document_id": document_id,
+            "drive_file_id": drive_file_id,
+            "url": f"https://docs.google.com/document/d/{document_id}/edit",
+            "index": index,
+            "width_pt": width_pt,
+        }
+
+    @staticmethod
+    def _docs_find_table_near(doc: dict[str, Any], near_index: int) -> dict[str, Any] | None:
+        best: dict[str, Any] | None = None
+        best_dist = 10**9
+        for element in doc.get("body", {}).get("content", []):
+            table = element.get("table")
+            if not table:
+                continue
+            start = int(element.get("startIndex") or 0)
+            dist = abs(start - int(near_index))
+            if dist < best_dist:
+                best = table
+                best_dist = dist
+        return best
 
     @staticmethod
     def _docs_end_index(doc: dict[str, Any]) -> int:
@@ -310,11 +624,18 @@ class IntegrationExecutor:
     ) -> list[dict[str, Any]]:
         if not style or end_index <= start_index:
             return []
+        requests: list[dict[str, Any]] = []
         text_style: dict[str, Any] = {}
         fields: list[str] = []
         if style.get("bold"):
             text_style["bold"] = True
             fields.append("bold")
+        if style.get("italic"):
+            text_style["italic"] = True
+            fields.append("italic")
+        if style.get("underline"):
+            text_style["underline"] = True
+            fields.append("underline")
         font_size = style.get("font_size")
         if font_size is not None:
             text_style["fontSize"] = {"magnitude": float(font_size), "unit": "PT"}
@@ -323,17 +644,46 @@ class IntegrationExecutor:
         if font_family:
             text_style["weightedFontFamily"] = {"fontFamily": str(font_family)}
             fields.append("weightedFontFamily")
-        if not fields:
-            return []
-        return [
-            {
-                "updateTextStyle": {
-                    "range": {"startIndex": start_index, "endIndex": end_index},
-                    "textStyle": text_style,
-                    "fields": ",".join(fields),
+        color = style.get("foreground_color") or style.get("color")
+        if isinstance(color, dict) and {"red", "green", "blue"} & set(color):
+            text_style["foregroundColor"] = {
+                "color": {
+                    "rgbColor": {
+                        "red": float(color.get("red", 0)),
+                        "green": float(color.get("green", 0)),
+                        "blue": float(color.get("blue", 0)),
+                    }
                 }
             }
-        ]
+            fields.append("foregroundColor")
+        if fields:
+            requests.append(
+                {
+                    "updateTextStyle": {
+                        "range": {"startIndex": start_index, "endIndex": end_index},
+                        "textStyle": text_style,
+                        "fields": ",".join(fields),
+                    }
+                }
+            )
+        named = style.get("named_style") or style.get("namedStyleType")
+        if named:
+            para: dict[str, Any] = {"namedStyleType": str(named)}
+            para_fields = ["namedStyleType"]
+            alignment = style.get("alignment")
+            if alignment:
+                para["alignment"] = str(alignment)
+                para_fields.append("alignment")
+            requests.append(
+                {
+                    "updateParagraphStyle": {
+                        "range": {"startIndex": start_index, "endIndex": end_index},
+                        "paragraphStyle": para,
+                        "fields": ",".join(para_fields),
+                    }
+                }
+            )
+        return requests
 
     @classmethod
     def _docs_write_requests(

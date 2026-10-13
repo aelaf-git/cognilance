@@ -14,15 +14,15 @@ from pydantic import BaseModel, Field
 
 from orchestrator.integrations.client import IntegrationClient
 from orchestrator.integrations.gmail_params import format_email_draft, format_send_email_result
-from orchestrator.integrations.routing import (
+from orchestrator.presenters.results import (
+    format_calendar_list_result,
     format_document_result,
     format_gmail_list_result,
-    format_subscription_result,
-    format_calendar_list_result,
     format_recurring_result,
+    format_subscription_result,
 )
 from orchestrator.tools.web import format_web_fetch_result, format_web_search_result
-from orchestrator.llm import get_llm, last_user_text, to_chat_messages
+from orchestrator.llm import get_llm, get_structured_llm, last_user_text, to_chat_messages
 from orchestrator.state import State, Subtask, SubtaskResult
 from orchestrator.streaming import emit, emit_status, stream_llm
 from orchestrator.tools.router import ToolRouter
@@ -95,6 +95,106 @@ def _persist_email_hire_result(data: dict[str, Any] | None) -> None:
         )
     elif status == "sent":
         mark_email_draft_sent(conv_id)
+
+
+def _proposal_draft_payload(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "title": data.get("title") or "",
+        "subtitle": data.get("subtitle") or "",
+        "client": data.get("client") or "",
+        "tone": data.get("tone") or "professional",
+        "sections": data.get("sections") or [],
+        "closing": data.get("closing") or "",
+        "format_notes": data.get("format_notes") or "",
+        "document_id": data.get("document_id"),
+        "url": data.get("url") or "",
+        "status": data.get("status") or "draft",
+    }
+
+
+def _resolve_prior_proposal_draft(
+    *,
+    prior_results: dict[str, SubtaskResult] | None,
+) -> dict[str, Any] | None:
+    """Pass prior proposal IR (title/sections/document_id) into revise hires."""
+    if prior_results:
+        for pr in prior_results.values():
+            data = pr.get("data") or {}
+            if not (data.get("title") or data.get("sections") or data.get("document_id")):
+                continue
+            if str(data.get("status") or "") == "failed":
+                continue
+            return _proposal_draft_payload(data)
+
+    from orchestrator.context import current_conversation_id
+
+    conv_id = current_conversation_id.get() or ""
+    if not conv_id:
+        return None
+    pending = DraftStore().get_proposal_draft(conv_id)
+    if not pending or not pending.get("document_id"):
+        return None
+    return _proposal_draft_payload(pending)
+
+
+def _persist_proposal_hire_result(data: dict[str, Any] | None) -> None:
+    if not data:
+        return
+    if not (data.get("document_id") or data.get("title") or data.get("sections")):
+        return
+    status = str(data.get("status") or "")
+    if status == "failed":
+        return
+    from orchestrator.context import current_conversation_id
+
+    conv_id = current_conversation_id.get() or ""
+    if not conv_id:
+        return
+    DraftStore().save_proposal_draft(conv_id, _proposal_draft_payload(data))
+
+
+def _persist_document_hire_result(data: dict[str, Any] | None) -> None:
+    if not data:
+        return
+    document_id = str(data.get("document_id") or "").strip()
+    if not document_id or str(data.get("status") or "") == "failed":
+        return
+    from orchestrator.context import current_conversation_id
+
+    conv_id = current_conversation_id.get() or ""
+    if not conv_id:
+        return
+    title = str(data.get("title") or data.get("name") or "Google Doc")
+    url = str(data.get("url") or "").strip()
+    if not url:
+        url = f"https://docs.google.com/document/d/{document_id}/edit"
+    DraftStore().save_document_draft(
+        conv_id,
+        {
+            "title": title,
+            "document_id": document_id,
+            "url": url,
+            "status": data.get("status") or "created",
+        },
+    )
+
+
+def _document_event_fields(data: dict[str, Any] | None) -> dict[str, str]:
+    """Structured Doc fields for SSE so the chat UI can open the workspace pane."""
+    if not data:
+        return {}
+    document_id = str(data.get("document_id") or "").strip()
+    if not document_id:
+        return {}
+    url = str(data.get("url") or "").strip()
+    if not url:
+        url = f"https://docs.google.com/document/d/{document_id}/edit"
+    title = str(data.get("title") or data.get("name") or "Google Doc").strip()
+    return {
+        "document_id": document_id,
+        "document_url": url,
+        "document_title": title or "Google Doc",
+    }
 
 
 # --- Validation stage ---------------------------------------------------------
@@ -226,7 +326,7 @@ class SelfValidation(BaseModel):
 
 async def _self_validate(query: str, output_text: str) -> dict[str, Any]:
     """Orchestrator's own validation when no validator agents are registered."""
-    llm = get_llm(temperature=0).with_structured_output(SelfValidation)
+    llm = get_structured_llm(SelfValidation, temperature=0)
     try:
         decision: SelfValidation = await llm.ainvoke(
             [
@@ -295,7 +395,7 @@ async def _run_validation_stage(
     query: str,
     conversation: list[BaseMessage] | None,
 ) -> list[SubtaskResult]:
-    """Always validate before delivery; apply one correction round on issues."""
+    """Validate only when the plan includes a *-validation skill (opt-in)."""
     worker_subtasks = [s for s in subtasks if not _is_validator_subtask(s)]
     worker_ok = [
         results_by_id[s["id"]]
@@ -305,58 +405,20 @@ async def _run_validation_stage(
     if not worker_ok:
         return all_results
 
+    planned_skills = {
+        skill for s in subtasks if _is_validator_skill(skill := _hire_skill_of(s)) and skill
+    }
+    # No automatic self-validation or unsolicited validator hires.
+    if not planned_skills:
+        return all_results
+
     validator_subtask: Subtask | None = None
     validation_data: dict[str, Any] | None = None
     self_validated = False
 
-    # 1) Validators the planner already included in the plan.
     planned_issue = _find_planned_validation_issue(subtasks, results_by_id)
-    planned_skills = {
-        skill for s in subtasks if _is_validator_skill(skill := _hire_skill_of(s)) and skill
-    }
     if planned_issue:
         validator_subtask, validation_data = planned_issue
-    else:
-        output_text = "\n\n---\n\n".join(_result_output_text(r) for r in worker_ok)
-
-        # 2) Online validator agents not already in the plan.
-        extra_validators = [
-            (agent, skill)
-            for agent, skill in _catalog_validators(catalog_agents)
-            if skill not in planned_skills
-        ]
-        if extra_validators:
-            emit_status("Validating results before delivery…")
-        for agent, skill in extra_validators:
-            synthetic: Subtask = {
-                "id": f"validate-{skill}",
-                "title": f"Validate output ({skill})",
-                "instruction": (
-                    "Validate this output before it is delivered to the user. "
-                    "Report issues only when something is actually wrong.\n\n"
-                    f"User request:\n{query}\n\nOutput:\n{output_text}"
-                ),
-                "skill": skill,
-                "tool": f"hire:{skill}",
-                "assignee": agent.name,
-                "depends_on": [],
-            }
-            result = await _run_subtask(
-                synthetic, manager, router, conversation=conversation, prior_results=results_by_id
-            )
-            results_by_id[synthetic["id"]] = result
-            data = _validation_issue_data(result)
-            if data:
-                validator_subtask, validation_data = synthetic, data
-                break
-
-        # 3) No validator agents anywhere — the orchestrator validates itself.
-        if validation_data is None and not extra_validators and not planned_skills:
-            emit_status("Validating results before delivery…")
-            self_validated = True
-            data = await _run_self_validation(query, output_text)
-            if data.get("status") == "issues_found":
-                validation_data = data
 
     if not validation_data:
         return all_results
@@ -560,6 +622,10 @@ async def _run_subtask(
             prior_draft = _resolve_prior_email_draft(prior_results=prior_results)
             if prior_draft:
                 extra_input["prior_draft"] = prior_draft
+        if hire_skill == "proposal-writing":
+            prior_proposal = _resolve_prior_proposal_draft(prior_results=prior_results)
+            if prior_proposal:
+                extra_input["prior_draft"] = prior_proposal
         result = await router.execute(
             manager,
             tool=tool,
@@ -569,6 +635,10 @@ async def _run_subtask(
         )
         if hire_skill == "email-writing" and result.status != "failed":
             _persist_email_hire_result(result.data)
+        if hire_skill == "proposal-writing" and result.status != "failed":
+            _persist_proposal_hire_result(result.data)
+        if hire_skill == "docs-creating" and result.status != "failed":
+            _persist_document_hire_result(result.data)
         payload: SubtaskResult = {
             "subtask_id": subtask_id,
             "text": result.text,
@@ -582,6 +652,7 @@ async def _run_subtask(
             status=result.status,
             assignee=result.assignee,
             text=(result.text or "")[:500],
+            **_document_event_fields(result.data if isinstance(result.data, dict) else None),
         )
         return payload
     except Exception as exc:
@@ -615,6 +686,16 @@ def _merge_data(results: list[SubtaskResult]) -> dict[str, Any]:
                 continue
             else:
                 merged[key] = value
+    # Prefer last result that carries a document_id for the active Doc workspace.
+    for result in reversed(results):
+        data = result.get("data") or {}
+        if data.get("document_id"):
+            merged["document_id"] = data["document_id"]
+            if data.get("url"):
+                merged["url"] = data["url"]
+            if data.get("title") or data.get("name"):
+                merged["title"] = data.get("title") or data.get("name")
+            break
     return merged
 
 
@@ -639,9 +720,12 @@ def _result_facts(results: list[SubtaskResult]) -> str:
             data.get("id") and data.get("sent_body")
         ):
             parts.append(format_send_email_result(data))
-        elif data.get("document_id") or str(data.get("url", "")).startswith(
-            "https://docs.google.com/document/"
-        ):
+        elif data.get("document_id") or data.get("status") in {
+            "published",
+            "preview",
+            "already_applied",
+            "applied",
+        } or str(data.get("url", "")).startswith("https://docs.google.com/document/"):
             parts.append(format_document_result(data))
         elif data.get("subscription_id") or "stopped" in data:
             if data.get("kind") == "recurring_task" or data.get("instruction"):
@@ -678,6 +762,14 @@ async def _synthesize_final(
             data.get("id") and data.get("sent_body")
         ):
             return format_send_email_result(data), False
+        # Style/alignment replies must not be rephrased into "created a Doc".
+        if data.get("status") in {"already_applied", "applied"} or (
+            data.get("alignment") and data.get("message")
+        ):
+            return format_document_result(data), False
+        # Empty titled Docs: keep the agent's "Created empty…" line, no invented body.
+        if data.get("status") == "created":
+            return format_document_result(data), False
         if data.get("subscription_id") or "stopped" in data:
             if data.get("kind") == "recurring_task" or data.get("instruction"):
                 return format_recurring_result(data), False

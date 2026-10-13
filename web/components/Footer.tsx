@@ -5,6 +5,11 @@ import styles from "./Footer.module.css";
 const WAITLIST =
   "https://docs.google.com/forms/d/e/1FAIpQLScV72qv_wHi7nWeNXm76kjI9lYYKV740lULDBs6nWH0xuALnQ/viewform?usp=publish-editor";
 
+const OFFICE_MAPS = "https://maps.app.goo.gl/3CwxEVPkf9WyFR7L8";
+const EMAIL = "cognilance@gmail.com";
+const PHONE = "+251 964 336 078";
+const PHONE_TEL = "+251964336078";
+
 const columns = [
   {
     title: "Product",
@@ -19,6 +24,7 @@ const columns = [
     title: "Company",
     links: [
       { href: "/#founders", label: "Founders" },
+      { href: "/#social-proof", label: "Backers" },
     ],
   },
   {
@@ -57,6 +63,23 @@ export function Footer() {
               Automate without babysitting. Hire specialist agents and ship
               work that finishes itself.
             </p>
+            <div className={styles.contact}>
+              <p className={styles.contactTitle}>Contact</p>
+              <a
+                href={OFFICE_MAPS}
+                className={styles.contactLine}
+                target="_blank"
+                rel="noreferrer"
+              >
+                AI Startup Center, 3rd floor
+              </a>
+              <a href={`mailto:${EMAIL}`} className={styles.contactLine}>
+                {EMAIL}
+              </a>
+              <a href={`tel:${PHONE_TEL}`} className={styles.contactLine}>
+                {PHONE}
+              </a>
+            </div>
             <a
               href={WAITLIST}
               className={`btn btnPrimary ${styles.cta}`}

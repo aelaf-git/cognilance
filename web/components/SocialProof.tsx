@@ -12,6 +12,62 @@ const integrations = [
   { name: "Google Sheets", src: "/integrations/sheets.png" },
 ];
 
+type Backer = {
+  name: string;
+  shortName?: string;
+  src: string;
+  href?: string;
+  width: number;
+  height: number;
+};
+
+const backers: Backer[] = [
+  {
+    name: "Dev3pack",
+    src: "/partners/dev3pack.png",
+    href: "https://dev3pack.com",
+    width: 120,
+    height: 158,
+  },
+  {
+    name: "Ethiopian Artificial Intelligence Institute",
+    shortName: "AI Institute",
+    src: "/partners/ai-institute.png",
+    width: 160,
+    height: 160,
+  },
+];
+
+function BackerCard({ name, shortName, src, href, width, height }: Backer) {
+  const content = (
+    <>
+      <Image
+        src={src}
+        alt={name}
+        width={width}
+        height={height}
+        className={styles.backerLogo}
+      />
+      <span className={styles.backerName}>{shortName ?? name}</span>
+    </>
+  );
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        className={styles.backer}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return <div className={styles.backer}>{content}</div>;
+}
+
 export function SocialProof() {
   return (
     <section className={`section ${styles.wrap}`} id="social-proof">
@@ -25,22 +81,17 @@ export function SocialProof() {
           <Reveal delayMs={80}>
             <div className={styles.block}>
               <p className={styles.blockLabel}>Backers</p>
-              <p className={styles.blockLead}>We are backed by Dev3pack.</p>
-              <a
-                href="https://dev3pack.com"
-                className={styles.backer}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Image
-                  src="/partners/dev3pack.png"
-                  alt="Dev3pack"
-                  width={120}
-                  height={158}
-                  className={styles.backerLogo}
-                />
-                <span className={styles.backerName}>Dev3pack</span>
-              </a>
+              <p className={styles.blockLead}>
+                Backed by Dev3pack and the Ethiopian Artificial Intelligence
+                Institute.
+              </p>
+              <ul className={styles.backerRow}>
+                {backers.map((backer) => (
+                  <li key={backer.name}>
+                    <BackerCard {...backer} />
+                  </li>
+                ))}
+              </ul>
             </div>
           </Reveal>
 

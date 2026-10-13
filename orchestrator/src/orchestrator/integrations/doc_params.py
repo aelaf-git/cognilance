@@ -9,7 +9,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, Field
 
 from orchestrator.integrations.project_context import COGNILANCE_DESCRIPTION, project_context_for_composition
-from orchestrator.llm import get_llm, to_chat_messages
+from orchestrator.llm import get_structured_llm, to_chat_messages
 
 _DOC_URL_RE = re.compile(r"docs\.google\.com/document/d/([a-zA-Z0-9_-]+)")
 _QUOTE_RE = re.compile(r'"([^"]+)"|\'([^\']+)\'|“([^”]+)”|‘([^’]+)’')
@@ -220,7 +220,7 @@ async def compose_document_content(
     context = _conversation_context(conversation)
     project_ctx = project_context_for_composition(instruction + " " + context + " " + plan_context)
     try:
-        llm = get_llm(temperature=0.5).with_structured_output(DocumentContent)
+        llm = get_structured_llm(DocumentContent, temperature=0.5)
         system = (
             "You are a professional document writer for Cognilance.\n"
             "Write clear, substantive document content with headings and paragraphs as appropriate.\n"
@@ -358,7 +358,7 @@ async def prepare_google_doc_params(
 
     try:
         context = _conversation_context(conversation)
-        llm = get_llm(temperature=0).with_structured_output(GoogleDocActionParams)
+        llm = get_structured_llm(GoogleDocActionParams, temperature=0)
         system = (
             "Extract structured parameters for a Google Docs API call.\n"
             "CRITICAL: `content` must be the actual text for the document — "

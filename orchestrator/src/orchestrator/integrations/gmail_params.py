@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from orchestrator.drafts.store import DraftStore
 from orchestrator.integrations.project_context import project_context_for_composition
-from orchestrator.llm import get_llm, to_chat_messages
+from orchestrator.llm import get_structured_llm, to_chat_messages
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _SUBJECT_RE = re.compile(r"subject\s*:\s*(.+)", re.IGNORECASE)
@@ -143,7 +143,7 @@ async def compose_email_content(
     project_ctx = project_context_for_composition(instruction + " " + context)
 
     try:
-        llm = get_llm(temperature=0.45).with_structured_output(EmailComposition)
+        llm = get_structured_llm(EmailComposition, temperature=0.45)
         system = (
             "You are a professional email writer for Cognilance.\n"
             "Write a complete email: greeting, substantive body paragraphs, and sign-off.\n"

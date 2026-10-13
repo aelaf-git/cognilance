@@ -26,6 +26,10 @@ if ! grep -q '^GROQ_API_KEY=.\+' .env 2>/dev/null; then
   exit 1
 fi
 
+# Demo-safe secret defaults (production must set real secrets).
+export COGNILANCE_DEMO="${COGNILANCE_DEMO:-1}"
+
+
 mapfile -t AGENT_DIRS < <(
   find agents -mindepth 2 -maxdepth 2 -type f -name agent.py | sed 's|/agent\.py$||' | sort
 )

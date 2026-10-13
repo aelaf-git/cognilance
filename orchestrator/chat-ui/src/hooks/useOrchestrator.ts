@@ -34,6 +34,7 @@ type ConversationMessage = {
 export function useOrchestrator(
   onSessionUpdate?: () => void,
   onSessionStarted?: (sessionId: string) => void,
+  onActiveDocEvent?: (data: Record<string, unknown>) => void,
 ) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [sessionTurns, setSessionTurns] = useState<Record<string, OrchestrationTurn>>({});
@@ -205,6 +206,9 @@ export function useOrchestrator(
     };
   }, [loadConversation]);
 
+  const onActiveDocEventRef = useRef(onActiveDocEvent);
+  onActiveDocEventRef.current = onActiveDocEvent;
+
   const processEvent = useCallback(
     (
       sessionId: string,
@@ -213,6 +217,22 @@ export function useOrchestrator(
       ctx: ReturnType<typeof createEventContext>,
     ) => {
       const event = data.event as string;
+
+      if (
+        (event === "subtask_start" ||
+          event === "subtask_done" ||
+          event === "final" ||
+          event === "plan") &&
+        (data.document_id ||
+          data.document_url ||
+          data.skill ||
+          data.tool ||
+          data.subtasks ||
+          data.data ||
+          data.text)
+      ) {
+        onActiveDocEventRef.current?.(data);
+      }
 
       setSessionTurns((prev) => {
         const turn = prev[sessionId] ?? emptySessionTurn(sessionId);
