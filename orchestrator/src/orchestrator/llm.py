@@ -3,18 +3,41 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from langchain_core.messages import BaseMessage
 from langchain_groq import ChatGroq
+from pydantic import BaseModel
 
 import orchestrator.env  # noqa: F401
+
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+
+
+def groq_model_name() -> str:
+    return os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL)
+
+
+def structured_output_method(model: str | None = None) -> str:
+    """gpt-oss on Groq often emits plain text instead of a required tool call."""
+    name = (model or groq_model_name()).lower()
+    if "gpt-oss" in name:
+        return "json_schema"
+    return "function_calling"
 
 
 def get_llm(temperature: float = 0.2) -> ChatGroq:
     return ChatGroq(
-        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model=groq_model_name(),
         api_key=os.environ["GROQ_API_KEY"],
         temperature=temperature,
+    )
+
+
+def get_structured_llm(schema: type[BaseModel], temperature: float = 0.2) -> Any:
+    return get_llm(temperature=temperature).with_structured_output(
+        schema,
+        method=structured_output_method(),
     )
 
 

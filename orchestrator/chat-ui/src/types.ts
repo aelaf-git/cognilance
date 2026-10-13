@@ -104,6 +104,15 @@ export type UiItem = {
   props: Record<string, unknown>;
 };
 
+export type ActiveDoc = {
+  document_id: string;
+  url: string;
+  title: string;
+  /** Bumps when the agent finishes a write so the iframe can soft-reload. */
+  revision?: number;
+};
+
+
 export type AppIntegration = {
   id: string;
   name: string;

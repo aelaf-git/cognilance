@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage
 from langgraph.graph.ui import push_ui_message
 from pydantic import BaseModel, Field, field_validator
 
-from orchestrator.llm import get_llm
+from orchestrator.llm import get_structured_llm
 from orchestrator.state import State
 from orchestrator.streaming import emit, emit_status, reveal_text
 
@@ -191,7 +191,7 @@ async def ui_selector(state: State) -> dict:
             if key != "body"
         }
         try:
-            llm = get_llm(temperature=0).with_structured_output(UISelection)
+            llm = get_structured_llm(UISelection, temperature=0)
             decision: UISelection = await llm.ainvoke(
                 [
                     {

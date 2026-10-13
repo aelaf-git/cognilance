@@ -17,19 +17,33 @@ from orchestrator.integrations.oauth import public_base_url
 DEFAULT_TTL_SECONDS = 900  # 15 minutes
 
 GMAIL_SCOPES = frozenset({"gmail:send", "gmail:read", "gmail:search"})
+DOCS_SCOPES = frozenset({"docs:read", "docs:write"})
 
 SCOPE_BY_SKILL: dict[str, list[str]] = {
     "email-writing": sorted(GMAIL_SCOPES),
+    "proposal-writing": sorted(DOCS_SCOPES),
+    "docs-creating": sorted(DOCS_SCOPES),
 }
 
 
+def _demo_mode() -> bool:
+    return os.getenv("COGNILANCE_DEMO", "").strip() in {"1", "true", "yes"}
+
+
 def _secret() -> bytes:
-    return (
-        os.getenv("TOOL_PROXY_SIGNING_KEY")
-        or os.getenv("ORCHESTRATOR_SESSION_SECRET")
-        or os.getenv("INTEGRATION_ENCRYPTION_KEY")
-        or "cognilance-dev-insecure-tool-proxy"
-    ).encode()
+    explicit = os.getenv("TOOL_PROXY_SIGNING_KEY")
+    if explicit:
+        return explicit.encode()
+    if _demo_mode():
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "TOOL_PROXY_SIGNING_KEY unset; using insecure demo default (COGNILANCE_DEMO=1)"
+        )
+        return b"cognilance-dev-insecure-tool-proxy"
+    raise RuntimeError(
+        "TOOL_PROXY_SIGNING_KEY is required (or set COGNILANCE_DEMO=1 for local demo)"
+    )
 
 
 def _sign(payload_b64: str) -> str:

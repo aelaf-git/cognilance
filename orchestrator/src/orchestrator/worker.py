@@ -10,7 +10,7 @@ import orchestrator.env  # noqa: F401
 
 from orchestrator.apps.store import init_all_stores
 from orchestrator.graph import init_graph
-from orchestrator.mission_runner import run_mission
+from orchestrator.runtime.runner import run_mission
 from orchestrator.missions.store import MissionStore
 from orchestrator.subscriptions.ticker import tick_subscriptions
 

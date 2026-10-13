@@ -81,6 +81,15 @@ class MissionStore:
                     ON missions(conversation_id)
                     """
                 )
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(missions)")}
+            if "user_id" not in cols:
+                conn.execute("ALTER TABLE missions ADD COLUMN user_id TEXT")
+                conn.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_missions_user
+                    ON missions(user_id)
+                    """
+                )
 
     def recover_stale_running(self, *, max_age_seconds: int = 120) -> int:
         """Mark abandoned running missions as failed (e.g. after worker crash)."""
@@ -118,6 +127,7 @@ class MissionStore:
         thread_id: str | None = None,
         conversation_id: str | None = None,
         session_type: SessionType | None = None,
+        user_id: str | None = None,
     ) -> Mission:
         mission_id = str(uuid.uuid4())
         conversation = conversation_id or thread_id or str(uuid.uuid4())
@@ -129,8 +139,8 @@ class MissionStore:
                 """
                 INSERT INTO missions (
                     id, instruction, status, thread_id, conversation_id,
-                    session_type, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    session_type, created_at, updated_at, user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     mission_id,
@@ -141,6 +151,7 @@ class MissionStore:
                     kind.value,
                     now,
                     now,
+                    user_id,
                 ),
             )
         return Mission(
@@ -150,6 +161,7 @@ class MissionStore:
             thread_id=thread,
             conversation_id=conversation,
             session_type=kind,
+            user_id=user_id,
             created_at=datetime.fromisoformat(now),
             updated_at=datetime.fromisoformat(now),
         )
@@ -367,6 +379,7 @@ class MissionStore:
             thread_id=row["thread_id"],
             conversation_id=raw_conversation or row["thread_id"],
             session_type=SessionType(raw_type or "once"),
+            user_id=row["user_id"] if "user_id" in row.keys() else None,
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
             result_text=row["result_text"],

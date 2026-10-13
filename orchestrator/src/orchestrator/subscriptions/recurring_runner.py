@@ -7,7 +7,7 @@ from typing import Any
 from orchestrator.context import current_conversation_id, current_mission_id, current_user_id, current_user_timezone
 from orchestrator.users.timezone import activate_user_timezone
 from orchestrator.conversations.store import ConversationStore
-from orchestrator.mission_runner import stream_mission_graph
+from orchestrator.runtime.runner import stream_mission_graph
 
 
 async def run_recurring_instruction(
