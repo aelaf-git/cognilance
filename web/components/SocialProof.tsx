@@ -23,18 +23,17 @@ type Backer = {
 
 const backers: Backer[] = [
   {
+    name: "Ethiopian Artificial Intelligence Institute",
+    src: "/partners/ai-institute.png",
+    width: 160,
+    height: 160,
+  },
+  {
     name: "Dev3pack",
     src: "/partners/dev3pack.png",
     href: "https://dev3pack.com",
     width: 120,
     height: 158,
-  },
-  {
-    name: "Ethiopian Artificial Intelligence Institute",
-    shortName: "AI Institute",
-    src: "/partners/ai-institute.png",
-    width: 160,
-    height: 160,
   },
 ];
 
@@ -82,8 +81,8 @@ export function SocialProof() {
             <div className={styles.block}>
               <p className={styles.blockLabel}>Backers</p>
               <p className={styles.blockLead}>
-                Backed by Dev3pack and the Ethiopian Artificial Intelligence
-                Institute.
+                Backed by the Ethiopian Artificial Intelligence Institute and
+                Dev3pack.
               </p>
               <ul className={styles.backerRow}>
                 {backers.map((backer) => (
