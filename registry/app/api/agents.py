@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from prisma import Prisma
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.schemas import (
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/v1/agents", tags=["agents"])
 @router.post("", response_model=AgentResponse)
 async def register_agent(
     body: RegisterAgentRequest,
-    db: Prisma = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> AgentResponse:
     try:
         return await agent_service.register_agent(db, body=body)
@@ -31,7 +31,7 @@ async def register_agent(
 @router.post("/{agent_id}/heartbeat", response_model=StatusResponse)
 async def heartbeat(
     agent_id: str,
-    db: Prisma = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> StatusResponse:
     try:
         agent_uuid = uuid.UUID(agent_id)
@@ -50,7 +50,7 @@ async def discover(
     request: Request,
     limit: int = Query(default=10, ge=1, le=100),
     exclude: str | None = Query(default=None),
-    db: Prisma = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> DiscoverResponse:
     skills = request.query_params.getlist("skills")
     tags = request.query_params.getlist("tags")
@@ -63,7 +63,7 @@ async def discover(
 @router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent(
     agent_id: str,
-    db: Prisma = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> AgentResponse:
     try:
         agent_uuid = uuid.UUID(agent_id)

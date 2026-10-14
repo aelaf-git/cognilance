@@ -14,11 +14,14 @@ import httpx
 from langchain_core.messages import HumanMessage
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "orchestrator" / "src"))
+sys.path.insert(0, str(ROOT / "agents" / "orchestrator"))
+sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "pipeline"))
+sys.path.insert(0, str(ROOT / "SDK"))
 
 REGISTRY = "http://127.0.0.1:8088"
 
-# Current marketplace agents under agents/*/agent.py
+# Worker agents under agents/*/agent.py (excludes orchestrator)
 AGENT_DIRS = (
     "agents/email_writer",
     "agents/web_scraper",
@@ -59,7 +62,7 @@ def start_agents() -> list[subprocess.Popen]:
 
 
 async def run_graph(prompt: str, *, thread_id: str | None = None) -> dict:
-    from orchestrator.graph import ensure_graph
+    from pipeline.graph import ensure_graph
 
     graph = await ensure_graph()
     config = {"configurable": {"thread_id": thread_id or str(uuid.uuid4())}}

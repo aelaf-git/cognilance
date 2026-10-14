@@ -7,10 +7,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from prisma import Prisma
-from prisma.models import Agent
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.models import Agent
 from app.schemas import AgentResponse, RegisterAgentRequest
 
 
@@ -43,60 +44,66 @@ def agent_to_response(agent: Agent) -> AgentResponse:
         visibility=agent.visibility,
         tags=_as_list(agent.tags),
         online=agent.online,
-        last_heartbeat=agent.lastHeartbeat,
+        last_heartbeat=agent.last_heartbeat,
         version=agent.version,
     )
 
 
 async def register_agent(
-    db: Prisma,
+    db: AsyncSession,
     *,
     body: RegisterAgentRequest,
 ) -> AgentResponse:
     now = datetime.now(timezone.utc)
-    agent = await db.agent.create(
-        data={
-            "name": body.name,
-            "url": body.url.rstrip("/"),
-            "description": body.description,
-            "skills": json.dumps(_skill_objects(body.skills)),
-            "visibility": body.visibility,
-            "tags": json.dumps(body.tags),
-            "online": True,
-            "lastHeartbeat": now,
-        }
+    agent = Agent(
+        name=body.name,
+        url=body.url.rstrip("/"),
+        description=body.description,
+        skills=json.dumps(_skill_objects(body.skills)),
+        visibility=body.visibility,
+        tags=json.dumps(body.tags),
+        online=True,
+        last_heartbeat=now,
+        created_at=now,
+        updated_at=now,
     )
+    db.add(agent)
+    await db.commit()
+    await db.refresh(agent)
     return agent_to_response(agent)
 
 
-async def heartbeat(db: Prisma, *, agent_id: UUID | str) -> None:
+async def heartbeat(db: AsyncSession, *, agent_id: UUID | str) -> None:
     now = datetime.now(timezone.utc)
-    result = await db.agent.update_many(
-        where={"id": str(agent_id)},
-        data={"online": True, "lastHeartbeat": now, "updatedAt": now},
+    result = await db.execute(
+        update(Agent)
+        .where(Agent.id == str(agent_id))
+        .values(online=True, last_heartbeat=now, updated_at=now)
     )
-    if result == 0:
+    await db.commit()
+    if result.rowcount == 0:
         raise LookupError("Agent not found")
 
 
-async def get_agent(
-    db: Prisma, *, agent_id: UUID | str
-) -> AgentResponse:
-    agent = await db.agent.find_first(where={"id": str(agent_id)})
+async def get_agent(db: AsyncSession, *, agent_id: UUID | str) -> AgentResponse:
+    agent = await db.get(Agent, str(agent_id))
     if agent is None:
         raise LookupError("Agent not found")
     return agent_to_response(agent)
 
 
 async def discover_agents(
-    db: Prisma,
+    db: AsyncSession,
     *,
     skills: list[str] | None = None,
     tags: list[str] | None = None,
     limit: int = 10,
     exclude_id: str | None = None,
 ) -> list[AgentResponse]:
-    agents = await db.agent.find_many(where={"visibility": "public", "online": True})
+    result = await db.execute(
+        select(Agent).where(Agent.visibility == "public", Agent.online.is_(True))
+    )
+    agents = list(result.scalars().all())
 
     filtered: list[Agent] = []
     for agent in agents:
@@ -114,15 +121,17 @@ async def discover_agents(
             continue
         filtered.append(agent)
 
-    filtered.sort(key=lambda a: a.lastHeartbeat, reverse=True)
+    filtered.sort(key=lambda a: a.last_heartbeat, reverse=True)
     return [agent_to_response(a) for a in filtered[:limit]]
 
 
-async def mark_stale_agents_offline(db: Prisma) -> int:
+async def mark_stale_agents_offline(db: AsyncSession) -> int:
     settings = get_settings()
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=settings.heartbeat_timeout_seconds)
-    result = await db.agent.update_many(
-        where={"online": True, "lastHeartbeat": {"lt": cutoff}},
-        data={"online": False},
+    result = await db.execute(
+        update(Agent)
+        .where(Agent.online.is_(True), Agent.last_heartbeat < cutoff)
+        .values(online=False)
     )
-    return result
+    await db.commit()
+    return int(result.rowcount or 0)

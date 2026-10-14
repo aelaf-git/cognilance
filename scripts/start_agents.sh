@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start every marketplace agent under agents/*/agent.py.
+# Start every worker agent under agents/*/agent.py (excludes agents/orchestrator).
 # Requires the registry at COGNILANCE_REGISTRY_URL (default http://127.0.0.1:8088).
 set -euo pipefail
 
@@ -15,7 +15,9 @@ elif [[ -f .venv/bin/activate ]]; then
 fi
 
 mapfile -t AGENT_DIRS < <(
-  find agents -mindepth 2 -maxdepth 2 -type f -name agent.py | sed 's|/agent\.py$||' | sort
+  find agents -mindepth 2 -maxdepth 2 -type f -name agent.py \
+    ! -path 'agents/orchestrator/*' \
+    -print | sed 's|/agent\.py$||' | sort
 )
 
 if [[ ${#AGENT_DIRS[@]} -eq 0 ]]; then
@@ -49,7 +51,7 @@ done
 if [[ "${registry_ok}" != "true" ]]; then
   echo "ERROR: Registry is not reachable at ${REGISTRY_URL}" >&2
   echo "Start it first:" >&2
-  echo "  cd registry && docker compose watch" >&2
+  echo "  cd registry && docker compose up -d --build" >&2
   exit 1
 fi
 echo "  registry ok"
@@ -71,7 +73,6 @@ for dir in "${AGENT_DIRS[@]}"; do
   port="$(
     sed -nE 's/.*port[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "${dir}/agent.py" | head -1
   )"
-  # Run from the agent folder so local imports (scrape.py, proxy.py, …) resolve.
   echo "  ${name}${port:+ (:${port})} ← ${dir}/agent.py"
   (
     cd "${dir}"
@@ -80,7 +81,6 @@ for dir in "${AGENT_DIRS[@]}"; do
   PIDS+=($!)
 done
 
-# Wait briefly for health endpoints when ports are declared.
 for dir in "${AGENT_DIRS[@]}"; do
   port="$(
     sed -nE 's/.*port[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "${dir}/agent.py" | head -1

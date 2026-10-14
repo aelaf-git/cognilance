@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Expose the local orchestrator chat UI on the internet for free (Cloudflare quick tunnel).
+# Expose the local orchestrator on the internet for free (Cloudflare quick tunnel).
 # Requires: demo already running (./scripts/start_demo.sh) and cloudflared installed.
 set -euo pipefail
 
@@ -22,7 +22,7 @@ if ! command -v cloudflared >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Opening a free public URL for ${LOCAL_URL}/chat ..."
+echo "Opening a free public URL for ${LOCAL_URL} ..."
 echo "(Your laptop must stay on. Tunnel closes when this script stops.)"
 echo ""
 

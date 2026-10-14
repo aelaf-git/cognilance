@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from app.api import agents, health, traces
 from app.config import get_settings
 from app.dashboard import DASHBOARD_HTML
-from app.database import connect_db, disconnect_db, prisma
+from app.database import connect_db, disconnect_db, get_session_factory
 from app.services.agents import mark_stale_agents_offline
 from app.ws import TraceHub
 
@@ -29,7 +29,9 @@ async def _stale_agent_loop() -> None:
     settings = get_settings()
     while True:
         try:
-            count = await mark_stale_agents_offline(prisma)
+            factory = get_session_factory()
+            async with factory() as session:
+                count = await mark_stale_agents_offline(session)
             if count:
                 logger.info("Marked %d stale agent(s) offline", count)
         except Exception:
@@ -56,7 +58,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="Cognilance Registry",
-        description="Production API for the Cognilance AI agent marketplace",
+        description="Production API for the Cognilance AI agent directory",
         version="0.1.0",
         lifespan=lifespan,
     )

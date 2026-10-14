@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from prisma import Prisma
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.schemas import StatusResponse, TraceDetailResponse, TraceEventIn, TraceListResponse
@@ -18,7 +18,7 @@ def get_hub(request: Request) -> TraceHub:
 @router.post("/events", response_model=StatusResponse)
 async def collect_event(
     body: TraceEventIn,
-    db: Prisma = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     hub: TraceHub = Depends(get_hub),
 ) -> StatusResponse:
     payload = await trace_service.ingest_event(db, body=body)
@@ -29,7 +29,7 @@ async def collect_event(
 @router.get("", response_model=TraceListResponse)
 async def list_traces(
     limit: int = Query(default=50, ge=1, le=200),
-    db: Prisma = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> TraceListResponse:
     traces = await trace_service.list_traces(db, limit=limit)
     return TraceListResponse(traces=traces)
@@ -38,7 +38,7 @@ async def list_traces(
 @router.get("/{trace_id}", response_model=TraceDetailResponse)
 async def get_trace(
     trace_id: str,
-    db: Prisma = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> TraceDetailResponse:
     try:
         events = await trace_service.get_trace(db, trace_id=trace_id)

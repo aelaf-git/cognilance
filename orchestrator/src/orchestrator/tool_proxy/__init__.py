@@ -1,6 +1,0 @@
-"""Tool proxy for hired marketplace agents."""
-
-from orchestrator.tool_proxy.docs import router as docs_router
-from orchestrator.tool_proxy.gmail import router as gmail_router
-
-__all__ = ["gmail_router", "docs_router"]

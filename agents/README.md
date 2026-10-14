@@ -41,7 +41,7 @@ agents/
 Every agent loads only its own `agents/<name>/.env` (gitignored). Put `GROQ_API_KEY`
 there when the agent uses an LLM. The orchestrator uses a **DeterministicRouter**
 first: known intents (email, blank Docs, proposals, web scrape, …) force
-`hire:<skill>` when that agent is online and the integration is connected.
+`skill:<skill>` when that agent is online and the integration is connected.
 Keep agents running so they show as online in the registry.
 
 ## Run all agents

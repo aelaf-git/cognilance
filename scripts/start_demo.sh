@@ -29,9 +29,10 @@ fi
 # Demo-safe secret defaults (production must set real secrets).
 export COGNILANCE_DEMO="${COGNILANCE_DEMO:-1}"
 
-
 mapfile -t AGENT_DIRS < <(
-  find agents -mindepth 2 -maxdepth 2 -type f -name agent.py | sed 's|/agent\.py$||' | sort
+  find agents -mindepth 2 -maxdepth 2 -type f -name agent.py \
+    ! -path 'agents/orchestrator/*' \
+    -print | sed 's|/agent\.py$||' | sort
 )
 
 REQS=()
@@ -42,7 +43,11 @@ for dir in "${AGENT_DIRS[@]}"; do
 done
 
 echo "Installing Python packages..."
-pip install -q -e . -e orchestrator "${REQS[@]}"
+pip install -q -e . \
+  -e tools \
+  -e pipeline \
+  -e agents/orchestrator \
+  "${REQS[@]}"
 
 REGISTRY_URL="${COGNILANCE_REGISTRY_URL:-http://127.0.0.1:8088}"
 REGISTRY_HEALTH="${REGISTRY_URL%/}/health"
@@ -90,7 +95,6 @@ for dir in "${AGENT_DIRS[@]}"; do
     sed -nE 's/.*port[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "${dir}/agent.py" | head -1
   )"
   echo "  ${name}${port:+ (:${port})}"
-  # Run from the agent folder so local imports (scrape.py, proxy.py, …) resolve.
   (
     cd "${dir}"
     python -u agent.py
@@ -98,7 +102,6 @@ for dir in "${AGENT_DIRS[@]}"; do
   PIDS+=($!)
 done
 
-# Wait for agent health endpoints if their ports are declared in agent.py.
 AGENT_PORTS=()
 for dir in "${AGENT_DIRS[@]}"; do
   port="$(
@@ -137,7 +140,6 @@ echo ""
 echo "========================================"
 echo "  Cognilance demo is running locally"
 echo "========================================"
-echo "  Chat UI:  http://127.0.0.1:${ORCHESTRATOR_PORT}/chat"
 echo "  Health:   http://127.0.0.1:${ORCHESTRATOR_PORT}/health"
 echo "  Registry: ${REGISTRY_URL}"
 for port in "${AGENT_PORTS[@]}"; do

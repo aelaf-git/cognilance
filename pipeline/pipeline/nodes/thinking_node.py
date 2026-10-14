@@ -1,0 +1,39 @@
+"""Thinking node — simple path handler."""
+
+from __future__ import annotations
+
+from orchestrator.context import current_user_id
+from orchestrator.integrations.client import IntegrationClient
+from pipeline.nodes.thinking import run_thinking
+from pipeline.state import State
+from pipeline.streaming import emit, emit_status, reveal_text
+
+
+async def thinking_node(state: State) -> dict:
+    if state.get("direct_reply"):
+        text = str(state.get("final_text") or "Got it!")
+        reveal_text(text, event="answer")
+        emit("answer_done", text=text)
+        return {
+            "final_text": text,
+            "final_data": {},
+            "answer_streamed": True,
+            "subtask_results": [],
+        }
+
+    conversation = state.get("messages", [])
+    user_id = current_user_id.get()
+    capabilities = IntegrationClient().capabilities_context(user_id)
+    emit_status("Thinking Agent answering…")
+    text, data = await run_thinking(
+        stream=True,
+        conversation=conversation,
+        capabilities=capabilities,
+    )
+    emit("answer_done", text=text)
+    return {
+        "final_text": text,
+        "final_data": data,
+        "answer_streamed": True,
+        "subtask_results": [],
+    }

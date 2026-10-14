@@ -1,0 +1,10 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "orchestrator": "../../pipeline/pipeline/graph.py:graph"
+  },
+  "ui": {
+    "orchestrator": "../../UIs/gen-ui/index.tsx"
+  },
+  "env": "../../.env"
+}

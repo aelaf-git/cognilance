@@ -265,7 +265,6 @@ function renderCard(a) {
       <div class="desc">${esc(a.description || "No description.")}</div>
       <div class="skills">${skills || '<span class="skill">—</span>'}</div>
       <div class="meta">
-        <a class="chat-btn" href="${esc(a.url)}/chat" target="_blank" rel="noreferrer">Chat with agent</a>
         <span>${esc(a.url)}${a.id ? " · " + esc(a.id.slice(0, 8)) : ""}</span>
       </div>
     </div>`;

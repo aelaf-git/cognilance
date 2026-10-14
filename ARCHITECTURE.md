@@ -1,66 +1,52 @@
 # Cognilance architecture
 
-## Packages
-
-| Path | Role |
-|------|------|
-| `cognilance/` | Python SDK (`CognilanceManager` / `CognilanceWorker`, A2A) |
-| `registry/` | Marketplace catalog API (Docker, `:8088`) |
-| `orchestrator/` | LangGraph supervisor + FastAPI chat + OAuth + tool-proxy |
-| `agents/` | Marketplace workers (one folder per skill) |
-| `agent-host/` | Local ZIP upload / run portal |
-| `web/` | Marketing site |
-
-## Chat wire contract (SSE)
-
-Event names the chat UI depends on (keep stable):
-
-| Event | Meaning |
-|-------|---------|
-| `session_created` | Mission/session ids |
-| `catalog` | Online marketplace agents |
-| `thinking` / `thinking_done` | Planner reasoning stream |
-| `plan` | Plan + `subtasks` |
-| `route_decision` | `simple` vs `complex` |
-| `subtask_start` / `subtask_done` | Hire/app execution |
-| `answer` / `answer_done` | Final text stream |
-| `final` | Aggregated result (+ optional `document_id`) |
-| `done` | Stream complete |
-| `error` / `session_aborted` | Failure / cancel |
-
-## Router-first planning
+## Layout
 
 ```
-query → DeterministicRouter
-         ├─ hit  → emit synthetic plan; skip planner LLMs; execute
-         └─ miss → one LLM plan call → execute
+cognilance/          # Next.js landing
+SDK/cognilance/      # Python SDK (import name: cognilance)
+agents/
+  email_writer/      # Worker processes
+  web_scraper/
+  link_validator/
+  proposal_writer/
+  docs_creator/
+  orchestrator/      # FastAPI server, OAuth, drafts, missions
+registry/            # FastAPI + SQLAlchemy async (SQLite)
+UIs/
+  chat/              # Next.js chat
+  gen-ui/            # Generative UI widgets (LangGraph Studio)
+tools/               # Tool router, SkillRunner, tool-proxy, web/time, presenters
+pipeline/            # LangGraph graph, nodes, planning, routing, runtime
+scripts/
 ```
 
-**Policy:** If the catalog has a matching skill and the required integration is connected → `hire:<skill>`. Else if the integration is connected → `app:*`. Else → `thinking` + connect CTA.
+## Request path
 
-## Hire + tool-proxy
+```mermaid
+flowchart LR
+  Orch[agents/orchestrator] --> Pipe[pipeline]
+  Orch --> Tools[tools]
+  Pipe --> Runner[SkillRunner]
+  Runner --> Reg[registry SQLAlchemy]
+  Runner --> Workers[agents workers]
+  Tools --> Proxy[tool_proxy]
+```
 
-1. Orchestrator discovers online agents from the registry.
-2. On `hire:<skill>`, issues a short-lived HMAC grant scoped to that skill.
-3. Agent `proxy.py` calls back to `/tools/gmail/*` or `/tools/docs/*`.
-4. Orchestrator runs Google APIs with the end-user OAuth token.
+1. Clients call the orchestrator (`:8200`).
+2. Planner / DeterministicRouter choose tools: `skill:<slug>`, `app:*`, `web`, `time`, `recurring`, or `thinking`.
+3. **Policy:** If the catalog has a matching skill and the required integration is connected → `skill:<skill>`. Else if the integration is connected → `app:*`. Else → `thinking` + connect CTA.
+4. On `skill:<skill>`, `SkillRunner` resolves an online agent URL from the registry cache and dispatches via `CognilanceManager.run_task` (A2A HTTP).
+5. Grants/tool-proxy stay for Docs/Gmail callbacks when a skill agent needs them.
 
-Agents never hold OAuth secrets.
+## Registry
 
-## Memory
-
-- **ConversationStore** is the source of truth for chat history (`conversation_id`).
-- Missions/sessions are keyed by `conversation_id` and scoped to `user_id`.
-- Chat runs do not rely on LangGraph checkpoint resume across turns.
-
-## Runtime SSE
-
-Live `/chat/stream` pushes events through an in-process event bus (persist + publish). Reconnect/replay uses `GET /missions/{id}/events?after=`.
+Agent directory only: register, heartbeat, discover by skill. No marketplace hire / ZIP host. Persistence is SQLAlchemy 2.x async (`aiosqlite`); tables are created on startup.
 
 ## Demo
 
 ```bash
-COGNILANCE_DEMO=1 ./scripts/start_demo.sh
+./scripts/start_demo.sh
+# Orchestrator: http://127.0.0.1:8200/health
+# Registry: http://127.0.0.1:8088
 ```
-
-Sets demo-safe secret defaults. Production must set distinct `ORCHESTRATOR_SESSION_SECRET` and `TOOL_PROXY_SIGNING_KEY`.

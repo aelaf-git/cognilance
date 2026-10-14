@@ -94,9 +94,14 @@ venv.bak/
 *.db-journal
 db.sqlite3
 db.sqlite3-journal
+registry/*.db
+registry/data/
 
 # --- Node.js / frontend ---
 node_modules/
+cognilance/.next/
+cognilance/out/
+UIs/**/node_modules/
 .next/
 out/
 npm-debug.log*
@@ -110,37 +115,19 @@ pnpm-debug.log*
 .vite/
 *.local
 
-# Generated single-file UI bundles (build from chat-ui / developer-ui)
-orchestrator/src/orchestrator/ui/static/*
-!orchestrator/src/orchestrator/ui/static/.gitkeep
-agent-host/src/agent_host/static/*
-!agent-host/src/agent_host/static/.gitkeep
-
-# --- Solana / Anchor (payments/) ---
-.anchor/
-test-ledger/
-.surfpool/
-**/*-keypair.json
-**/test-wallets/
-payments/target/
-payments/test-ledger/
-payments/.anchor/
-payments/node_modules/
-payments/scripts/test-wallets/
-payments/keys/
+# Generated orchestrator static files
+agents/orchestrator/orchestrator/ui/static/*
+!agents/orchestrator/orchestrator/ui/static/.gitkeep
 
 # --- Cognilance runtime data ---
 data/hosted-agents/
-orchestrator/data/*
-!orchestrator/data/.gitkeep
-orchestrator/.langgraph_api/
+agents/orchestrator/data/*
+!agents/orchestrator/data/.gitkeep
+agents/orchestrator/.langgraph_api/
+SDK/**/__pycache__/
 
-# Generated agent upload archives (source lives in agents/template_agent/)
+# Generated agent upload archives
 agents/*.zip
-
-# Agent Host uploaded/extracted agent workspaces
-agent-host/data/*
-!agent-host/data/.gitkeep
 
 # Logs
 *.log
@@ -154,3 +141,7 @@ docker-compose.override.yml
 *.swp
 *.swo
 *~
+
+# Reference clones (not part of the product)
+chatbot-ui/
+_refs/
