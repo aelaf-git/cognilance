@@ -1,0 +1,76 @@
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    ports:
+      - "8200:8200"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      COGNILANCE_DEMO: "1"
+      COGNILANCE_ORCHESTRATOR_HOST: "0.0.0.0"
+      COGNILANCE_ORCHESTRATOR_PORT: "8200"
+      COGNILANCE_REGISTRY_URL: ${COGNILANCE_REGISTRY_URL:-http://host.docker.internal:8088}
+      COGNILANCE_ORCHESTRATOR_DB: /data/orchestrator.db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - orchestrator_data:/data
+    develop:
+      watch:
+        - action: sync
+          path: ./SDK
+          target: /app/SDK
+        - action: sync
+          path: ./tools
+          target: /app/tools
+        - action: sync
+          path: ./pipeline
+          target: /app/pipeline
+        - action: sync
+          path: ./agents/orchestrator
+          target: /app/agents/orchestrator
+        - action: rebuild
+          path: ./pyproject.toml
+        - action: rebuild
+          path: ./tools/pyproject.toml
+        - action: rebuild
+          path: ./pipeline/pyproject.toml
+        - action: rebuild
+          path: ./agents/orchestrator/pyproject.toml
+        - action: rebuild
+          path: ./Dockerfile.orchestrator
+
+  chat:
+    build:
+      context: ./UIs/chat
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    env_file:
+      - path: ./UIs/chat/.env.local
+        required: false
+    environment:
+      NEXT_TELEMETRY_DISABLED: "1"
+      COGNILANCE_ORCHESTRATOR_URL: http://orchestrator:8200
+    depends_on:
+      - orchestrator
+    develop:
+      watch:
+        - action: sync
+          path: ./UIs/chat
+          target: /app
+          ignore:
+            - node_modules/
+            - .next/
+        - action: rebuild
+          path: ./UIs/chat/package.json
+        - action: rebuild
+          path: ./UIs/chat/package-lock.json
+        - action: rebuild
+          path: ./UIs/chat/Dockerfile
+
+volumes:
+  orchestrator_data:

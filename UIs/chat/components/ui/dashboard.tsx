@@ -2,24 +2,21 @@
 
 import { Sidebar } from "@/components/sidebar/sidebar"
 import { SidebarSwitcher } from "@/components/sidebar/sidebar-switcher"
-import { Button } from "@/components/ui/button"
 import { Tabs } from "@/components/ui/tabs"
-import useHotkey from "@/lib/hooks/use-hotkey"
 import { cn } from "@/lib/utils"
-import { IconChevronCompactRight } from "@tabler/icons-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { FC, useState } from "react"
 import { CommandK } from "../utility/command-k"
 
 export const SIDEBAR_WIDTH = 350
+export const ICON_RAIL_WIDTH = 60
+export const SIDEBAR_PANEL_WIDTH = SIDEBAR_WIDTH - ICON_RAIL_WIDTH
 
 interface DashboardProps {
   children: React.ReactNode
 }
 
 export const Dashboard: FC<DashboardProps> = ({ children }) => {
-  useHotkey("s", () => setShowSidebar(prevState => !prevState))
-
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -34,59 +31,104 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
     localStorage.getItem("showSidebar") !== "false"
   )
 
-  const handleToggleSidebar = () => {
-    setShowSidebar(prevState => !prevState)
-    localStorage.setItem("showSidebar", String(!showSidebar))
+  const leftWidth = ICON_RAIL_WIDTH + (showSidebar ? SIDEBAR_PANEL_WIDTH : 0)
+
+  const setSidebarOpen = (open: boolean) => {
+    setShowSidebar(open)
+    localStorage.setItem("showSidebar", String(open))
+  }
+
+  const handleRailSelect = (nextType: string) => {
+    if (showSidebar && nextType === contentType) {
+      setSidebarOpen(false)
+      return
+    }
+
+    setContentType(nextType)
+    setSidebarOpen(true)
+    router.replace(`${pathname}?tab=${nextType}`)
+  }
+
+  const handleBrandClick = () => {
+    setSidebarOpen(!showSidebar)
   }
 
   return (
     <div className="flex size-full">
       <CommandK />
 
-      <div
-        className={cn(
-          "duration-200 dark:border-none " + (showSidebar ? "border-r-2" : "")
-        )}
-        style={{
-          // Sidebar
-          minWidth: showSidebar ? `${SIDEBAR_WIDTH}px` : "0px",
-          maxWidth: showSidebar ? `${SIDEBAR_WIDTH}px` : "0px",
-          width: showSidebar ? `${SIDEBAR_WIDTH}px` : "0px"
+      <Tabs
+        className="sidebar-shell relative flex h-full shrink-0 flex-col"
+        value={contentType}
+        onValueChange={() => {
+          // Selection is handled in SidebarSwitchItem so re-clicks can collapse.
         }}
+        style={{
+          "--sidebar-left-width": `${leftWidth}px`,
+          "--sidebar-panel-width": `${SIDEBAR_PANEL_WIDTH}px`
+        } as React.CSSProperties}
       >
-        {showSidebar && (
-          <Tabs
-            className="flex h-full"
-            value={contentType}
-            onValueChange={tabValue => {
-              setContentType(tabValue)
-              router.replace(`${pathname}?tab=${tabValue}`)
+        <div
+          className="sidebar-brand-bar sticky top-0 z-30 flex h-14 shrink-0 items-center"
+        >
+          {/* Logo stays pinned in the rail column so it never shifts on expand/collapse */}
+          <button
+            type="button"
+            onClick={handleBrandClick}
+            aria-label={
+              showSidebar ? "Collapse Cognilance sidebar" : "Expand Cognilance sidebar"
+            }
+            className="flex h-full shrink-0 items-center justify-center outline-none focus-visible:outline-none"
+            style={{ width: `${ICON_RAIL_WIDTH}px` }}
+          >
+            <img
+              src="/icon.png"
+              alt=""
+              className="hidden size-8 object-contain dark:block"
+            />
+            <img
+              src="/icon-light.png"
+              alt=""
+              className="size-8 object-contain dark:hidden"
+            />
+          </button>
+
+          {showSidebar && (
+            <span className="sidebar-brand-wordmark brand-wordmark min-w-0 truncate pr-3 text-lg">
+              Cognilance
+            </span>
+          )}
+        </div>
+
+        <div className="flex min-h-0 flex-1">
+          <div
+            className="sidebar-icon-rail sticky top-14 z-20 shrink-0 self-stretch"
+            style={{
+              minWidth: `${ICON_RAIL_WIDTH}px`,
+              maxWidth: `${ICON_RAIL_WIDTH}px`,
+              width: `${ICON_RAIL_WIDTH}px`
             }}
           >
-            <SidebarSwitcher onContentTypeChange={setContentType} />
+            <SidebarSwitcher onContentTypeChange={handleRailSelect} />
+          </div>
 
-            <Sidebar contentType={contentType} showSidebar={showSidebar} />
-          </Tabs>
-        )}
-      </div>
+          <div
+            className={cn(
+              "sidebar-panel h-full overflow-hidden duration-200",
+              showSidebar
+                ? "sidebar-panel-open"
+                : "sidebar-panel-closed"
+            )}
+          >
+            {showSidebar && (
+              <Sidebar contentType={contentType} showSidebar={showSidebar} />
+            )}
+          </div>
+        </div>
+      </Tabs>
 
-      <div className="bg-muted/50 relative flex w-screen min-w-[90%] grow flex-col sm:min-w-fit">
+      <div className="relative flex min-w-0 grow flex-col">
         {children}
-
-        <Button
-          className={cn(
-            "absolute left-[4px] top-[50%] z-10 size-[32px] cursor-pointer"
-          )}
-          style={{
-            // marginLeft: showSidebar ? `${SIDEBAR_WIDTH}px` : "0px",
-            transform: showSidebar ? "rotate(180deg)" : "rotate(0deg)"
-          }}
-          variant="ghost"
-          size="icon"
-          onClick={handleToggleSidebar}
-        >
-          <IconChevronCompactRight size={24} />
-        </Button>
       </div>
     </div>
   )

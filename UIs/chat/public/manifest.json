@@ -19,7 +19,7 @@
       "purpose":"maskable"
     }
   ],
-  "start_url": "/",
+  "start_url": "/local/chat",
   "display": "standalone",
   "theme_color": "#0e0816",
   "background_color": "#0e0816"

@@ -157,6 +157,35 @@ class SubscriptionStore:
         self.set_status(sub.id, SubscriptionStatus.STOPPED)
         return True
 
+    def reactivate(self, subscription_id: str) -> bool:
+        """Re-enable a stopped/paused subscription for background polling."""
+        sub = self.get_subscription(subscription_id)
+        if not sub:
+            return False
+        if sub.status == SubscriptionStatus.ACTIVE:
+            return True
+        interval = max(
+            30,
+            int(sub.config.get("poll_interval_seconds") or 90),
+        )
+        now = datetime.now(timezone.utc)
+        next_check = now + timedelta(seconds=interval)
+        with self._conn() as conn:
+            conn.execute(
+                """
+                UPDATE subscriptions
+                SET status = ?, next_check_at = ?, updated_at = ?, error = NULL
+                WHERE id = ?
+                """,
+                (
+                    SubscriptionStatus.ACTIVE.value,
+                    next_check.isoformat(),
+                    now.isoformat(),
+                    subscription_id,
+                ),
+            )
+        return True
+
     def list_active_for_conversation(self, conversation_id: str) -> list[Subscription]:
         with self._conn() as conn:
             rows = conn.execute(

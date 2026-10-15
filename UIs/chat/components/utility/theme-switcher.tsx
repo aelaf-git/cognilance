@@ -17,9 +17,10 @@ export const ThemeSwitcher: FC<ThemeSwitcherProps> = () => {
 
   return (
     <Button
-      className="flex cursor-pointer space-x-2"
+      className="text-primary hover:bg-primary/10 hover:text-primary flex cursor-pointer space-x-2"
       variant="ghost"
       size="icon"
+      aria-label="Toggle theme"
       onClick={() => handleChange(theme === "light" ? "dark" : "light")}
     >
       {theme === "dark" ? (

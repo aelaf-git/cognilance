@@ -8,6 +8,13 @@ npm install
 npm run dev
 ```
 
+Or with Docker Compose Watch (auto-reloads on file changes):
+
+```bash
+cd cognilance
+docker compose watch
+```
+
 Open [http://localhost:3000](http://localhost:3000).
 
 Optional: set `NEXT_PUBLIC_WAITLIST_ENDPOINT` (see `.env.example`) to POST waitlist emails to your webhook.

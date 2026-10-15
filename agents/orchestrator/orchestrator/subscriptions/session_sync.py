@@ -27,7 +27,7 @@ def enrich_session_dict(
         data["listener_integration"] = sub.integration
         data["listener_kind"] = sub.kind
 
-    if listener_active and mission.status in {MissionStatus.RUNNING, MissionStatus.QUEUED}:
+    if listener_active:
         data["display_status"] = "processing"
     elif mission.session_type == SessionType.ONCE and mission.status == MissionStatus.COMPLETED:
         data["display_status"] = "done"
@@ -75,3 +75,27 @@ def stop_listener_for_mission(
         missions.append_event(mission_id, {"event": "session_aborted"})
         return True
     return stopped
+
+
+def start_listener_for_mission(
+    mission_id: str,
+    *,
+    sub_store: SubscriptionStore | None = None,
+    mission_store: MissionStore | None = None,
+) -> bool:
+    """Resume a long-running session by reactivating its linked subscription."""
+    subs = sub_store or SubscriptionStore()
+    missions = mission_store or MissionStore()
+    mission = missions.get_mission(mission_id)
+    if not mission:
+        return False
+    if mission.session_type != SessionType.RECURRING:
+        return False
+    sub = subs.get_by_mission_id(mission_id)
+    if not sub:
+        return False
+    if not subs.reactivate(sub.id):
+        return False
+    missions.update_status(mission_id, MissionStatus.RUNNING, error=None)
+    missions.append_event(mission_id, {"event": "session_started", "reason": "user"})
+    return True

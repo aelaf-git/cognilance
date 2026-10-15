@@ -10,7 +10,7 @@ import {
   subscribeCognilance
 } from "@/lib/cognilance-store"
 import { cn } from "@/lib/utils"
-import { IconPlugConnected, IconPlus } from "@tabler/icons-react"
+import { IconPlugConnected, IconPlus, IconTrash } from "@tabler/icons-react"
 import { useRouter } from "next/navigation"
 import { FC, useContext, useEffect, useState, useSyncExternalStore } from "react"
 
@@ -27,25 +27,44 @@ type SessionItem = {
   session_type?: string
   display_status?: string
   status?: string
+  listener_active?: boolean
+  subscription_id?: string | null
+  listener_kind?: string | null
+  listener_integration?: string | null
 }
 
 type IntegrationItem = {
   id: string
   name: string
   description?: string
+  logo?: string
   connected?: boolean
   coming_soon?: boolean
 }
 
-function statusLabel(session: SessionItem) {
+function isLongRunningSession(session: SessionItem) {
+  return (
+    session.session_type === "recurring" ||
+    !!session.listener_active ||
+    !!session.subscription_id
+  )
+}
+
+function isSessionRunning(session: SessionItem) {
+  if (session.listener_active) return true
   const status = session.display_status || session.status || ""
-  if (status === "processing" || status === "running" || status === "queued") {
-    return "Running"
-  }
+  return (
+    status === "processing" || status === "running" || status === "queued"
+  )
+}
+
+function statusLabel(session: SessionItem) {
+  if (isSessionRunning(session)) return "Running"
+  const status = session.display_status || session.status || ""
   if (status === "done" || status === "completed") return "Done"
   if (status === "failed") return "Failed"
   if (status === "aborted" || status === "cancelled") return "Stopped"
-  return status || "Done"
+  return status || "Stopped"
 }
 
 export const CognilanceSidebar: FC<{ contentType: string }> = ({
@@ -57,7 +76,8 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
     getCognilanceSnapshot,
     getCognilanceServerSnapshot
   )
-  const { setChatMessages, setUserInput, chatMessages } = useContext(ChatbotUIContext)
+  const { setChatMessages, setUserInput, chatMessages } =
+    useContext(ChatbotUIContext)
 
   useEffect(() => {
     const storedId = getConversationId()
@@ -152,80 +172,218 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
     }
   }
 
-  const startConversation = () => {
-    setCognilanceConversation("", "")
-    setChatMessages([])
-    setUserInput("")
-    router.push("/local/chat")
+  const startConversation = async () => {
+    setError("")
+    try {
+      const created = await cognilanceJson("conversations", { method: "POST" })
+      const item: ConversationItem = {
+        id: created.id,
+        title: created.title || "New conversation",
+        session_count: created.session_count || 0,
+        latest_status: created.latest_status ?? null
+      }
+      setConversations(current => [
+        item,
+        ...current.filter(entry => entry.id !== item.id)
+      ])
+      setCognilanceConversation(item.id, item.title)
+      setChatMessages([])
+      setUserInput("")
+      if (!window.location.pathname.endsWith("/chat")) {
+        router.push("/local/chat")
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Couldn't create a conversation."
+      )
+    }
+  }
+
+  const deleteConversation = async (item: ConversationItem) => {
+    setError("")
+    try {
+      await cognilanceJson(`conversations/${item.id}`, { method: "DELETE" })
+      const remaining = conversations.filter(entry => entry.id !== item.id)
+      setConversations(remaining)
+      if (snapshot.id === item.id) {
+        if (remaining[0]) {
+          await openConversation(remaining[0])
+        } else {
+          setCognilanceConversation("", "")
+          setChatMessages([])
+          setUserInput("")
+        }
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Couldn't delete that conversation."
+      )
+    }
   }
 
   if (contentType === "integrations") {
     return (
       <Panel title="Integrations" loading={loading} error={error}>
-        {integrations.map(item => (
-          <div key={item.id} className="border-border border-b py-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="font-medium">{item.name}</div>
-              <IconPlugConnected size={16} className="text-muted-foreground" />
-            </div>
-            {item.description && (
-              <div className="text-muted-foreground mt-1 text-xs">
-                {item.description}
+        {integrations.map(item => {
+          const logoKey = item.logo || item.id
+          return (
+            <div
+              key={item.id}
+              className="mb-1 rounded-xl bg-[hsl(var(--chat-surface-raised)/0.55)] p-3 transition-colors hover:bg-[hsl(var(--chat-surface-raised))]"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[hsl(var(--chat-surface))] shadow-sm">
+                  <img
+                    src={`/api/cognilance/integrations/logos/${encodeURIComponent(logoKey)}`}
+                    alt=""
+                    className="size-6 object-contain"
+                    onError={event => {
+                      event.currentTarget.style.display = "none"
+                      const fallback = event.currentTarget.nextElementSibling
+                      if (fallback instanceof HTMLElement) {
+                        fallback.style.display = "block"
+                      }
+                    }}
+                  />
+                  <IconPlugConnected
+                    size={18}
+                    className="text-muted-foreground hidden"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">{item.name}</div>
+                  {item.description && (
+                    <div className="text-muted-foreground mt-1 text-xs">
+                      {item.description}
+                    </div>
+                  )}
+                  <div className="mt-2">
+                    {item.coming_soon ? (
+                      <span className="text-muted-foreground text-xs">
+                        Coming soon
+                      </span>
+                    ) : item.connected ? (
+                      <button
+                        type="button"
+                        className="text-xs text-primary"
+                        onClick={async () => {
+                          await cognilanceJson(
+                            `integrations/${item.id}/disconnect`,
+                            { method: "POST" }
+                          )
+                          setIntegrations(current =>
+                            current.map(entry =>
+                              entry.id === item.id
+                                ? { ...entry, connected: false }
+                                : entry
+                            )
+                          )
+                        }}
+                      >
+                        Connected
+                      </button>
+                    ) : (
+                      <a
+                        className="text-xs text-primary"
+                        href={`/api/cognilance/integrations/${item.id}/connect`}
+                      >
+                        Connect
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
-            )}
-            <div className="mt-2">
-              {item.coming_soon ? (
-                <span className="text-muted-foreground text-xs">Coming soon</span>
-              ) : item.connected ? (
-                <button
-                  type="button"
-                  className="text-xs text-primary"
-                  onClick={async () => {
-                    await cognilanceJson(`integrations/${item.id}/disconnect`, {
-                      method: "POST"
-                    })
-                    setIntegrations(current =>
-                      current.map(entry =>
-                        entry.id === item.id
-                          ? { ...entry, connected: false }
-                          : entry
-                      )
-                    )
-                  }}
-                >
-                  Connected
-                </button>
-              ) : (
-                <a
-                  className="text-xs text-primary"
-                  href={`/api/cognilance/integrations/${item.id}/connect`}
-                >
-                  Connect
-                </a>
-              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </Panel>
     )
   }
 
   if (contentType === "sessions") {
-    const short = sessions.filter(item => item.session_type !== "recurring")
-    const long = sessions.filter(item => item.session_type === "recurring")
+    const longRunning = sessions.filter(isLongRunningSession)
+
+    const refreshSessions = async () => {
+      const id = snapshot.id
+      if (!id) return
+      const payload = await cognilanceJson(`conversations/${id}/sessions`)
+      setSessions(payload.sessions || [])
+    }
+
+    const stopSession = async (session: SessionItem) => {
+      try {
+        await cognilanceJson(`sessions/${session.id}/abort`, { method: "POST" })
+        await refreshSessions()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't stop that session.")
+      }
+    }
+
+    const startSession = async (session: SessionItem) => {
+      try {
+        await cognilanceJson(`sessions/${session.id}/start`, { method: "POST" })
+        await refreshSessions()
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Couldn't start that session."
+        )
+      }
+    }
+
     return (
       <Panel title="Sessions" loading={loading} error={error}>
         {!snapshot.id ? (
           <p className="text-muted-foreground text-sm">
-            Open a conversation to see its sessions.
+            Open a conversation to see its background sessions.
           </p>
         ) : (
           <>
             <p className="text-muted-foreground mb-3 text-xs">
-              Runs inside {snapshot.title || "this conversation"}
+              Long-running background tasks for{" "}
+              {snapshot.title || "this conversation"}
             </p>
-            <SessionGroup title="Short" sessions={short} />
-            <SessionGroup title="Long running" sessions={long} />
+            {longRunning.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                No background sessions yet.
+              </p>
+            ) : (
+              longRunning.map(session => {
+                const running = isSessionRunning(session)
+                return (
+                  <div
+                    key={session.id}
+                    className="mb-1 flex items-start justify-between gap-2 rounded-xl bg-[hsl(var(--chat-surface-raised)/0.55)] p-3 transition-colors hover:bg-[hsl(var(--chat-surface-raised))]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="line-clamp-2 text-sm">
+                        {session.instruction || "Background session"}
+                      </div>
+                      <div className="text-muted-foreground mt-1 text-xs">
+                        {statusLabel(session)}
+                        {session.listener_integration
+                          ? ` · ${session.listener_integration}`
+                          : ""}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className={cn(
+                        "shrink-0 text-xs",
+                        running ? "text-destructive" : "text-primary"
+                      )}
+                      onClick={() =>
+                        void (running
+                          ? stopSession(session)
+                          : startSession(session))
+                      }
+                      disabled={!running && !session.subscription_id}
+                    >
+                      {running ? "Stop" : "Start"}
+                    </button>
+                  </div>
+                )
+              })
+            )}
           </>
         )}
       </Panel>
@@ -240,8 +398,8 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
       action={
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={startConversation}
+          className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          onClick={() => void startConversation()}
           aria-label="New conversation"
         >
           <IconPlus size={18} />
@@ -252,21 +410,35 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
         <p className="text-muted-foreground text-sm">No conversations yet.</p>
       )}
       {conversations.map(item => (
-        <button
+        <div
           key={item.id}
-          type="button"
-          onClick={() => openConversation(item)}
           className={cn(
-            "hover:bg-muted w-full rounded-md px-2 py-2 text-left",
-            snapshot.id === item.id && "bg-muted"
+            "group flex w-full items-start gap-1 rounded-xl px-3 py-2.5 transition-colors hover:bg-[hsl(var(--chat-surface-raised)/0.7)]",
+            snapshot.id === item.id &&
+              "bg-[hsl(var(--chat-surface-raised))] shadow-sm"
           )}
         >
-          <div className="truncate text-sm">{item.title || "Conversation"}</div>
-          <div className="text-muted-foreground text-xs">
-            {item.session_count || 0}{" "}
-            {(item.session_count || 0) === 1 ? "session" : "sessions"}
-          </div>
-        </button>
+          <button
+            type="button"
+            onClick={() => openConversation(item)}
+            className="min-w-0 flex-1 text-left"
+          >
+            <div className="truncate text-sm">
+              {item.title || "New conversation"}
+            </div>
+          </button>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-destructive mt-0.5 shrink-0 rounded p-1 opacity-70 hover:opacity-100"
+            aria-label={`Delete ${item.title || "conversation"}`}
+            onClick={event => {
+              event.stopPropagation()
+              void deleteConversation(item)
+            }}
+          >
+            <IconTrash size={16} />
+          </button>
+        </div>
       ))}
     </Panel>
   )
@@ -280,36 +452,15 @@ const Panel: FC<{
   children: React.ReactNode
 }> = ({ title, loading, error, action, children }) => (
   <div className="flex h-full min-h-0 flex-col">
-    <div className="mb-3 flex items-center justify-between">
-      <div className="text-lg font-semibold">{title}</div>
+    <div className="mb-2 flex h-10 items-center justify-between">
+      <div className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight">
+        {title}
+      </div>
       {action}
     </div>
     {error && <p className="text-destructive mb-2 text-xs">{error}</p>}
     <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
       {loading ? <p className="text-muted-foreground text-sm">Loading…</p> : children}
     </div>
-  </div>
-)
-
-const SessionGroup: FC<{ title: string; sessions: SessionItem[] }> = ({
-  title,
-  sessions
-}) => (
-  <div className="mb-4">
-    <div className="text-muted-foreground mb-1 text-xs uppercase tracking-wide">
-      {title}
-    </div>
-    {sessions.length === 0 ? (
-      <p className="text-muted-foreground text-sm">None</p>
-    ) : (
-      sessions.map(session => (
-        <div key={session.id} className="py-2">
-          <div className="line-clamp-2 text-sm">
-            {session.instruction || "Session"}
-          </div>
-          <div className="text-muted-foreground text-xs">{statusLabel(session)}</div>
-        </div>
-      ))
-    )}
   </div>
 )

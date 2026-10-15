@@ -11,14 +11,14 @@ interface MessageMarkdownProps {
 export const MessageMarkdown: FC<MessageMarkdownProps> = ({ content }) => {
   return (
     <MessageMarkdownMemoized
-      className="prose dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 min-w-full space-y-6 break-words"
+      className="prose prose-sm dark:prose-invert prose-headings:font-[family-name:var(--font-display)] prose-headings:font-semibold prose-headings:tracking-tight prose-p:leading-7 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-pre:my-4 prose-pre:rounded-xl prose-pre:border prose-pre:border-border/60 prose-pre:p-0 prose-table:my-4 prose-table:overflow-hidden prose-table:rounded-lg prose-th:bg-muted/70 prose-th:px-3 prose-td:px-3 prose-img:rounded-xl prose-img:border prose-img:border-border/60 min-w-full max-w-none break-words"
       remarkPlugins={[remarkGfm, remarkMath]}
       components={{
         p({ children }) {
-          return <p className="mb-2 last:mb-0">{children}</p>
+          return <p className="mb-3 last:mb-0">{children}</p>
         },
         img({ node, ...props }) {
-          return <img className="max-w-[67%]" {...props} />
+          return <img className="max-w-full sm:max-w-[80%]" {...props} />
         },
         code({ node, className, children, ...props }) {
           const childArray = React.Children.toArray(children)

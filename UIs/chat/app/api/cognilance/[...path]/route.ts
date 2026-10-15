@@ -12,8 +12,11 @@ function allowed(method: string, path: string) {
     /^GET conversations\/[^/]+$/.test(`${method} ${path}`) ||
     /^DELETE conversations\/[^/]+$/.test(`${method} ${path}`) ||
     /^GET conversations\/[^/]+\/sessions$/.test(`${method} ${path}`) ||
+    /^GET integrations\/logos\/[^/]+$/.test(`${method} ${path}`) ||
     /^GET integrations\/[^/]+\/connect$/.test(`${method} ${path}`) ||
-    /^POST integrations\/[^/]+\/disconnect$/.test(`${method} ${path}`)
+    /^POST integrations\/[^/]+\/disconnect$/.test(`${method} ${path}`) ||
+    /^POST sessions\/[^/]+\/abort$/.test(`${method} ${path}`) ||
+    /^POST sessions\/[^/]+\/start$/.test(`${method} ${path}`)
   )
 }
 

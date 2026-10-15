@@ -4,11 +4,24 @@ import { Providers } from "@/components/utility/providers"
 import TranslationsProvider from "@/components/utility/translations-provider"
 import initTranslations from "@/lib/i18n"
 import { Metadata, Viewport } from "next"
-import { Inter } from "next/font/google"
+import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google"
 import { ReactNode } from "react"
 import "./globals.css"
 
-const inter = Inter({ subsets: ["latin"] })
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space",
+  display: "swap",
+  weight: ["300", "400", "500", "600", "700"]
+})
+
+const ibmPlex = IBM_Plex_Sans({
+  subsets: ["latin"],
+  variable: "--font-plex",
+  display: "swap",
+  weight: ["400", "500", "600", "700"]
+})
+
 const APP_NAME = "Cognilance"
 const APP_DEFAULT_TITLE = "Cognilance"
 const APP_TITLE_TEMPLATE = "%s - Cognilance"
@@ -74,8 +87,12 @@ export default async function RootLayout({
   const { t, resources } = await initTranslations(locale, i18nNamespaces)
 
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${spaceGrotesk.variable} ${ibmPlex.variable}`}
+    >
+      <body>
         <Providers attribute="class" defaultTheme="dark">
           <TranslationsProvider
             namespaces={i18nNamespaces}

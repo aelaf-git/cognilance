@@ -3,13 +3,12 @@ import { IconCheck, IconCopy, IconEdit, IconRepeat } from "@tabler/icons-react"
 import { FC, useContext, useEffect, useState } from "react"
 import { WithTooltip } from "../ui/with-tooltip"
 
-export const MESSAGE_ICON_SIZE = 18
+export const MESSAGE_ICON_SIZE = 28
 
 interface MessageActionsProps {
   isAssistant: boolean
   isLast: boolean
   isEditing: boolean
-  isHovering: boolean
   onCopy: () => void
   onEdit: () => void
   onRegenerate: () => void
@@ -19,7 +18,6 @@ export const MessageActions: FC<MessageActionsProps> = ({
   isAssistant,
   isLast,
   isEditing,
-  isHovering,
   onCopy,
   onEdit,
   onRegenerate
@@ -33,8 +31,6 @@ export const MessageActions: FC<MessageActionsProps> = ({
     setShowCheckmark(true)
   }
 
-  const handleForkChat = async () => {}
-
   useEffect(() => {
     if (showCheckmark) {
       const timer = setTimeout(() => {
@@ -45,73 +41,62 @@ export const MessageActions: FC<MessageActionsProps> = ({
     }
   }, [showCheckmark])
 
-  return (isLast && isGenerating) || isEditing ? null : (
-    <div className="text-muted-foreground flex items-center space-x-2">
-      {/* {((isAssistant && isHovering) || isLast) && (
-        <WithTooltip
-          delayDuration={1000}
-          side="bottom"
-          display={<div>Fork Chat</div>}
-          trigger={
-            <IconGitFork
-              className="cursor-pointer hover:opacity-50"
-              size={MESSAGE_ICON_SIZE}
-              onClick={handleForkChat}
-            />
-          }
-        />
-      )} */}
+  const actionClass =
+    "chat-motion flex size-7 items-center justify-center rounded-md transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
 
-      {!isAssistant && isHovering && (
+  return isEditing ? null : (
+    <div className="flex items-center gap-0.5 text-muted-foreground">
+      {!isAssistant && (
         <WithTooltip
           delayDuration={1000}
           side="bottom"
           display={<div>Edit</div>}
           trigger={
-            <IconEdit
-              className="cursor-pointer hover:opacity-50"
-              size={MESSAGE_ICON_SIZE}
+            <button
+              type="button"
+              aria-label="Edit message"
+              className={actionClass}
               onClick={onEdit}
-            />
+            >
+              <IconEdit size={16} />
+            </button>
           }
         />
       )}
 
-      {(isHovering || isLast) && (
-        <WithTooltip
-          delayDuration={1000}
-          side="bottom"
-          display={<div>Copy</div>}
-          trigger={
-            showCheckmark ? (
-              <IconCheck size={MESSAGE_ICON_SIZE} />
-            ) : (
-              <IconCopy
-                className="cursor-pointer hover:opacity-50"
-                size={MESSAGE_ICON_SIZE}
-                onClick={handleCopy}
-              />
-            )
-          }
-        />
-      )}
+      <WithTooltip
+        delayDuration={1000}
+        side="bottom"
+        display={<div>Copy</div>}
+        trigger={
+          <button
+            type="button"
+            aria-label={showCheckmark ? "Copied" : "Copy message"}
+            className={actionClass}
+            onClick={handleCopy}
+          >
+            {showCheckmark ? <IconCheck size={16} /> : <IconCopy size={16} />}
+          </button>
+        }
+      />
 
-      {isLast && (
+      {isAssistant && isLast && !isGenerating && (
         <WithTooltip
           delayDuration={1000}
           side="bottom"
           display={<div>Regenerate</div>}
           trigger={
-            <IconRepeat
-              className="cursor-pointer hover:opacity-50"
-              size={MESSAGE_ICON_SIZE}
+            <button
+              type="button"
+              aria-label="Regenerate response"
+              className={actionClass}
               onClick={onRegenerate}
-            />
+            >
+              <IconRepeat size={16} />
+            </button>
           }
         />
       )}
-
-      {/* {1 > 0 && isAssistant && <MessageReplies />} */}
     </div>
   )
 }

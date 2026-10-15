@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils"
 import { FC } from "react"
 import { TabsTrigger } from "../ui/tabs"
 import { WithTooltip } from "../ui/with-tooltip"
@@ -24,9 +25,15 @@ export const SidebarSwitchItem: FC<SidebarSwitchItemProps> = ({
       }
       trigger={
         <TabsTrigger
-          className="hover:opacity-50"
+          className={cn(
+            "text-primary hover:bg-primary/10 hover:opacity-100",
+            "data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none"
+          )}
           value={contentType}
-          onClick={() => onContentTypeChange(contentType)}
+          onClick={() => {
+            // Re-clicking the active tab must still run our toggle handler.
+            onContentTypeChange(contentType)
+          }}
         >
           {icon}
         </TabsTrigger>

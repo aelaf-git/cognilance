@@ -1,5 +1,10 @@
-import { IconMessage, IconPlayerPlay, IconPlugConnected } from "@tabler/icons-react"
+import {
+  IconMessage,
+  IconPlayerPlay,
+  IconPlugConnected
+} from "@tabler/icons-react"
 import { FC } from "react"
+import { ThemeSwitcher } from "../utility/theme-switcher"
 import { TabsList } from "../ui/tabs"
 import { SidebarSwitchItem } from "./sidebar-switch-item"
 
@@ -13,8 +18,8 @@ export const SidebarSwitcher: FC<SidebarSwitcherProps> = ({
   onContentTypeChange
 }) => {
   return (
-    <div className="flex flex-col border-r-2 pb-5">
-      <TabsList className="bg-background flex h-auto flex-col gap-1 py-2">
+    <div className="flex h-full flex-col justify-between bg-transparent">
+      <TabsList className="flex h-auto w-full flex-col gap-1 bg-transparent py-2">
         <SidebarSwitchItem
           icon={<IconMessage size={SIDEBAR_ICON_SIZE} />}
           contentType="chats"
@@ -36,6 +41,10 @@ export const SidebarSwitcher: FC<SidebarSwitcherProps> = ({
           onContentTypeChange={onContentTypeChange}
         />
       </TabsList>
+
+      <div className="flex w-full justify-center pb-3">
+        <ThemeSwitcher />
+      </div>
     </div>
   )
 }

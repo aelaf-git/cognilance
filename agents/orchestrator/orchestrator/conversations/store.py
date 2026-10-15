@@ -290,6 +290,24 @@ class ConversationStore:
                 (now, conversation_id),
             )
 
+    def delete_last_assistant_message(self, conversation_id: str) -> bool:
+        """Delete the latest message only when it is an assistant response."""
+        with self._conn() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM conversation_messages
+                WHERE id = (
+                    SELECT id FROM conversation_messages
+                    WHERE conversation_id = ?
+                    ORDER BY id DESC
+                    LIMIT 1
+                )
+                AND role = 'assistant'
+                """,
+                (conversation_id,),
+            )
+        return cursor.rowcount > 0
+
     def list_messages(
         self,
         conversation_id: str,

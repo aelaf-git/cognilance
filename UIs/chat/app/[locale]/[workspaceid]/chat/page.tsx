@@ -3,10 +3,8 @@
 import { useChatHandler } from "@/components/chat/chat-hooks/use-chat-handler"
 import { ChatInput } from "@/components/chat/chat-input"
 import { ChatUI } from "@/components/chat/chat-ui"
-import { Brand } from "@/components/ui/brand"
 import { ChatbotUIContext } from "@/context/context"
 import useHotkey from "@/lib/hooks/use-hotkey"
-import { useTheme } from "next-themes"
 import { useContext } from "react"
 
 export default function ChatPage() {
@@ -19,22 +17,41 @@ export default function ChatPage() {
 
   const { handleNewChat, handleFocusChatInput } = useChatHandler()
 
-  const { theme } = useTheme()
-
   return (
     <>
       {chatMessages.length === 0 ? (
-        <div className="relative flex h-full flex-col items-center justify-center">
-          <div className="pointer-events-none absolute mb-24">
-            <Brand theme={theme === "dark" ? "dark" : "light"} />
+        <div className="chat-canvas relative flex h-full min-h-0 flex-col items-center overflow-y-auto px-4">
+          <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center pb-32 pt-16 text-center sm:pb-40">
+            <div className="mb-5 flex size-28 items-center justify-center sm:size-32">
+              <img
+                src="/icon.png"
+                alt="Cognilance"
+                className="hidden size-24 object-contain dark:block sm:size-28"
+              />
+              <img
+                src="/icon-light.png"
+                alt="Cognilance"
+                className="size-24 object-contain dark:hidden sm:size-28"
+              />
+            </div>
+
+            <div className="mb-1.5 text-sm text-muted-foreground">
+              Cognilance
+            </div>
+            <h1 className="font-[family-name:var(--font-display)] text-xl font-medium tracking-tight text-foreground sm:text-2xl">
+              What can we accomplish?
+            </h1>
+            <p className="mt-2 max-w-sm text-xs leading-5 text-muted-foreground sm:text-sm sm:leading-6">
+              Think through a problem, coordinate specialized agents, or turn an
+              idea into finished work.
+            </p>
           </div>
 
-          <div className="flex grow flex-col items-center justify-center" />
-
-          <div className="relative z-10 w-full min-w-[300px] items-end px-2 pb-3 pt-0 sm:w-[600px] sm:pb-8 sm:pt-5 md:w-[700px] lg:w-[700px] xl:w-[800px]">
-            <ChatInput />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-[hsl(var(--chat-canvas))] via-[hsl(var(--chat-canvas)/0.96)] to-transparent px-3 pb-3 pt-12 sm:px-6 sm:pb-6">
+            <div className="pointer-events-auto mx-auto w-full max-w-3xl">
+              <ChatInput />
+            </div>
           </div>
-
         </div>
       ) : (
         <ChatUI />

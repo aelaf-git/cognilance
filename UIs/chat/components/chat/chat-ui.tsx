@@ -15,7 +15,6 @@ import { FC, useContext, useEffect, useState } from "react"
 import { useScroll } from "./chat-hooks/use-scroll"
 import { ChatInput } from "./chat-input"
 import { ChatMessages } from "./chat-messages"
-import { ChatScrollButtons } from "./chat-scroll-buttons"
 import { ChatSecondaryButtons } from "./chat-secondary-buttons"
 
 interface ChatUIProps {}
@@ -46,11 +45,7 @@ export const ChatUI: FC<ChatUIProps> = ({}) => {
     messagesEndRef,
     handleScroll,
     scrollToBottom,
-    setIsAtBottom,
-    isAtTop,
-    isAtBottom,
-    isOverflowing,
-    scrollToTop
+    setIsAtBottom
   } = useScroll()
 
   const [loading, setLoading] = useState(true)
@@ -184,36 +179,27 @@ export const ChatUI: FC<ChatUIProps> = ({}) => {
   }
 
   return (
-    <div className="relative flex h-full flex-col items-center">
-      <div className="absolute left-4 top-2.5 flex justify-center">
-        <ChatScrollButtons
-          isAtTop={isAtTop}
-          isAtBottom={isAtBottom}
-          isOverflowing={isOverflowing}
-          scrollToTop={scrollToTop}
-          scrollToBottom={scrollToBottom}
-        />
-      </div>
-
-      <div className="absolute right-4 top-1 flex h-[40px] items-center space-x-2">
+    <div className="chat-canvas relative flex h-full min-h-0 flex-col items-center overflow-hidden">
+      <div className="absolute right-4 top-3 z-20 flex h-10 items-center space-x-2">
         <ChatSecondaryButtons />
       </div>
 
       <div
-        className="flex size-full flex-col overflow-auto border-b"
+        className="size-full min-h-0 overflow-y-auto overscroll-contain scroll-smooth"
         onScroll={handleScroll}
       >
         <div ref={messagesStartRef} />
 
         <ChatMessages />
 
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef} className="h-28 sm:h-36" />
       </div>
 
-      <div className="relative w-full min-w-[300px] items-end px-2 pb-3 pt-0 sm:w-[600px] sm:pb-8 sm:pt-5 md:w-[700px] lg:w-[700px] xl:w-[800px]">
-        <ChatInput />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-[hsl(var(--chat-canvas))] via-[hsl(var(--chat-canvas)/0.96)] to-transparent px-3 pb-3 pt-12 sm:px-6 sm:pb-6">
+        <div className="pointer-events-auto mx-auto w-full max-w-3xl">
+          <ChatInput />
+        </div>
       </div>
-
     </div>
   )
 }

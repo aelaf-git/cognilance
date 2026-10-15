@@ -8,7 +8,9 @@
 
 > **Currently in beta.** One AI agent hallucinates. A thousand, verified, don’t. Cognilance orchestrates specialized agents — routing each task to the right expert, verifying output, and persisting results.
 
-**Website (marketing):** see [`cognilance/`](cognilance/) — `cd cognilance && npm install && npm run dev` → [http://localhost:3000](http://localhost:3000).
+**Website (marketing):** see [`cognilance/`](cognilance/) — `cd cognilance && docker compose watch` → [http://localhost:3000](http://localhost:3000).
+
+**Chat + orchestrator (Docker):** from the repo root, `docker compose watch` → chat [http://localhost:3001](http://localhost:3001), orchestrator [http://localhost:8200/health](http://localhost:8200/health).
 
 ---
 
@@ -52,11 +54,23 @@ Commercial landing page for Cognilance (beta waitlist, product narrative, team).
 
 ```bash
 cd cognilance
-npm install
-npm run dev
+docker compose watch
+# or: npm install && npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). Optional waitlist webhook: copy [`cognilance/.env.example`](cognilance/.env.example) to `cognilance/.env.local` and set `NEXT_PUBLIC_WAITLIST_ENDPOINT`.
+
+### Chat + orchestrator
+
+```bash
+# From the repo root — watches Python/TS sources and reloads
+docker compose watch
+```
+
+- Chat UI: [http://localhost:3001](http://localhost:3001)
+- Orchestrator health: [http://localhost:8200/health](http://localhost:8200/health)
+
+Uses root `.env` for `GROQ_API_KEY` (and friends). Landing stays on `:3000` via `cognilance/docker-compose.yml` so it does not clash with chat.
 
 ---
 

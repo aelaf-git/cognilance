@@ -224,7 +224,9 @@ export const useChatHandler = () => {
           setChatMessages,
           null
         )
-        const assistantId = tempAssistantChatMessage.message.id
+        const assistantId = isRegeneration
+          ? chatMessages[chatMessages.length - 1]?.message.id
+          : tempAssistantChatMessage.message.id
         const showReply = (text: string) => {
           setFirstTokenReceived(true)
           setChatMessages(previous =>
@@ -253,7 +255,8 @@ export const useChatHandler = () => {
             messageContent,
             newAbortController.signal,
             showReply,
-            showActivity
+            showActivity,
+            isRegeneration
           )
         } catch (error) {
           if (error instanceof Error && error.name === "AbortError") {

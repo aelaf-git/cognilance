@@ -19,6 +19,10 @@ from orchestrator.context import current_conversation_id, current_mission_id, cu
 from pipeline.graph import ensure_graph, init_graph
 from orchestrator.integrations.oauth import OAuthService
 from orchestrator.conversations.store import ConversationStore
+from orchestrator.conversations.title import (
+    fallback_conversation_title,
+    paraphrase_conversation_title,
+)
 from orchestrator.missions.finalize import finalize_session_status
 from orchestrator.missions.session_type import SessionType
 from orchestrator.missions.models import MissionStatus
@@ -26,7 +30,11 @@ from orchestrator.missions.store import MissionStore
 from pipeline.runtime.event_bus import event_bus
 from pipeline.runtime.runner import stream_mission_graph
 from orchestrator.subscriptions.store import SubscriptionStore
-from orchestrator.subscriptions.session_sync import enrich_session_dict, stop_listener_for_mission
+from orchestrator.subscriptions.session_sync import (
+    enrich_session_dict,
+    start_listener_for_mission,
+    stop_listener_for_mission,
+)
 from orchestrator.subscriptions.ticker import tick_subscriptions
 from orchestrator.users.timezone import activate_user_timezone, client_timezone_from_request
 from orchestrator.apps.store import init_all_stores
@@ -491,6 +499,33 @@ def create_app() -> FastAPI:
             }
         )
 
+    @app.post("/sessions/{session_id}/start")
+    async def start_session(session_id: str) -> JSONResponse:
+        mission = store.get_mission(session_id)
+        if not mission:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if mission.session_type != SessionType.RECURRING:
+            raise HTTPException(
+                status_code=400,
+                detail="Only long-running background sessions can be started",
+            )
+        started = start_listener_for_mission(
+            session_id,
+            sub_store=sub_store,
+            mission_store=store,
+        )
+        if not started:
+            raise HTTPException(
+                status_code=400,
+                detail="No background subscription found for this session",
+            )
+        return JSONResponse(
+            content=enrich_session_dict(
+                store.get_mission(session_id) or mission,
+                sub_store=sub_store,
+            )
+        )
+
     @app.delete("/sessions/{session_id}")
     @app.post("/sessions/{session_id}/dismiss")
     async def dismiss_session(session_id: str) -> JSONResponse:
@@ -607,13 +642,33 @@ def create_app() -> FastAPI:
             and conv_store.get_conversation(conversation_id) is not None
         ):
             raise HTTPException(status_code=404, detail="Conversation not found")
+        provisional_title = fallback_conversation_title(text)
         conv_store.ensure_conversation(
-            conversation_id, title=text[:80], user_id=user_id
+            conversation_id, title=provisional_title, user_id=user_id
         )
+        regenerating = bool(payload.get("regenerate")) and existing is not None
+        if regenerating:
+            regenerating = conv_store.delete_last_assistant_message(conversation_id)
         prior_history = conv_store.to_langchain_messages(conversation_id)
-        conv_store.append_message(conversation_id, role="user", content=text)
+        if (
+            regenerating
+            and prior_history
+            and isinstance(prior_history[-1], HumanMessage)
+            and str(prior_history[-1].content).strip() == text
+        ):
+            # The graph appends this prompt to history itself. Keep the persisted
+            # user turn, but omit it here so regeneration does not duplicate it.
+            prior_history = prior_history[:-1]
+        else:
+            conv_store.append_message(conversation_id, role="user", content=text)
         if len(prior_history) == 0:
-            conv_store.touch_conversation(conversation_id, title=text[:80])
+            conversation_title = await paraphrase_conversation_title(text)
+            conv_store.touch_conversation(conversation_id, title=conversation_title)
+        else:
+            current = conv_store.get_conversation(conversation_id)
+            conversation_title = (
+                conv_store.display_title(current) if current else provisional_title
+            )
         thread_id = conversation_id
         mission = store.create_mission(
             instruction=text,
@@ -715,6 +770,7 @@ def create_app() -> FastAPI:
                 "thread_id": thread_id,
                 "conversation_id": conversation_id,
                 "session_type": mission.session_type.value,
+                "title": conversation_title,
             }
             yield f"data: {json.dumps(created)}\n\n"
             # Attach before the producer starts so no events are lost.

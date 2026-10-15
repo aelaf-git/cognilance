@@ -1,7 +1,7 @@
 "use client"
 
 import { FC } from "react"
-import { SIDEBAR_WIDTH } from "../ui/dashboard"
+import { SIDEBAR_PANEL_WIDTH } from "../ui/dashboard"
 import { TabsContent } from "../ui/tabs"
 import { CognilanceSidebar } from "./cognilance-sidebar"
 
@@ -18,15 +18,15 @@ export const Sidebar: FC<SidebarProps> = ({ contentType, showSidebar }) => {
 
   return (
     <TabsContent
-      className="m-0 w-full"
+      className="m-0 h-full w-full"
       style={{
-        minWidth: showSidebar ? `calc(${SIDEBAR_WIDTH}px - 60px)` : "0px",
-        maxWidth: showSidebar ? `calc(${SIDEBAR_WIDTH}px - 60px)` : "0px",
-        width: showSidebar ? `calc(${SIDEBAR_WIDTH}px - 60px)` : "0px"
+        minWidth: showSidebar ? `${SIDEBAR_PANEL_WIDTH}px` : "0px",
+        maxWidth: showSidebar ? `${SIDEBAR_PANEL_WIDTH}px` : "0px",
+        width: showSidebar ? `${SIDEBAR_PANEL_WIDTH}px` : "0px"
       }}
       value={contentType}
     >
-      <div className="flex h-full flex-col p-3">
+      <div className="flex h-full flex-col px-3 pb-3 pt-2">
         <CognilanceSidebar contentType={panel} />
       </div>
     </TabsContent>

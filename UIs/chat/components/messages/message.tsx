@@ -54,7 +54,6 @@ export const Message: FC<MessageProps> = ({
     assistants,
     profile,
     isGenerating,
-    setIsGenerating,
     firstTokenReceived,
     availableLocalModels,
     availableOpenRouterModels,
@@ -72,7 +71,6 @@ export const Message: FC<MessageProps> = ({
 
   const editInputRef = useRef<HTMLTextAreaElement>(null)
 
-  const [isHovering, setIsHovering] = useState(false)
   const [editedMessage, setEditedMessage] = useState(message.content)
 
   const [showImagePreview, setShowImagePreview] = useState(false)
@@ -110,9 +108,18 @@ export const Message: FC<MessageProps> = ({
   }
 
   const handleRegenerate = async () => {
-    setIsGenerating(true)
+    const messageIndex = chatMessages.findIndex(
+      item => item.message.id === message.id
+    )
+    const previousUserMessage = chatMessages
+      .slice(0, messageIndex)
+      .reverse()
+      .find(item => item.message.role === "user")
+
+    if (!previousUserMessage) return
+
     await handleSendMessage(
-      editedMessage || chatMessages[chatMessages.length - 2].message.content,
+      previousUserMessage.message.content,
       chatMessages,
       true
     )
@@ -187,27 +194,21 @@ export const Message: FC<MessageProps> = ({
 
   return (
     <div
-      className={cn(
-        "flex w-full justify-center",
-        message.role === "user" ? "" : "bg-secondary"
-      )}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
+      className="flex w-full justify-center px-3 sm:px-6"
       onKeyDown={handleKeyDown}
     >
-      <div className="relative flex w-full flex-col p-6 sm:w-[550px] sm:px-0 md:w-[650px] lg:w-[650px] xl:w-[700px]">
-        <div className="absolute right-5 top-7 sm:right-0">
-          <MessageActions
-            onCopy={handleCopy}
-            onEdit={handleStartEdit}
-            isAssistant={message.role === "assistant"}
-            isLast={isLast}
-            isEditing={isEditing}
-            isHovering={isHovering}
-            onRegenerate={handleRegenerate}
-          />
-        </div>
-        <div className="space-y-3">
+      <div
+        className={cn(
+          "relative flex w-full max-w-3xl flex-col py-5 sm:py-6",
+          message.role === "user" && "items-end"
+        )}
+      >
+        <div
+          className={cn(
+            "w-full space-y-3",
+            message.role === "user" && "flex flex-col items-end"
+          )}
+        >
           {message.role === "system" ? (
             <div className="flex items-center space-x-4">
               <IconPencil
@@ -218,7 +219,12 @@ export const Message: FC<MessageProps> = ({
               <div className="text-lg font-semibold">Prompt</div>
             </div>
           ) : (
-            <div className="flex items-center space-x-3">
+            <div
+              className={cn(
+                "flex items-center gap-2.5",
+                message.role === "user" && "flex-row-reverse"
+              )}
+            >
               {message.role === "assistant" && !profile ? (
                 <img
                   src={theme === "light" ? "/icon-light.png" : "/icon.png"}
@@ -267,7 +273,7 @@ export const Message: FC<MessageProps> = ({
                 />
               )}
 
-              <div className="font-semibold">
+              <div className="font-[family-name:var(--font-display)] text-sm font-medium tracking-wide">
                 {message.role === "assistant"
                   ? message.assistant_id
                     ? assistants.find(
@@ -285,12 +291,18 @@ export const Message: FC<MessageProps> = ({
           {message.role === "assistant" && activity && activity.length > 0 && (
             <ActivityTrace steps={activity} />
           )}
-          {!firstTokenReceived &&
-          isGenerating &&
-          isLast &&
-          message.role === "assistant" ? (
-            <>
-              {(() => {
+          <div
+            className={cn(
+              "min-w-0 text-[15px] leading-7",
+              message.role === "user" &&
+                "max-w-[88%] rounded-2xl rounded-tr-md border border-[hsl(var(--chat-user-border))] bg-[hsl(var(--chat-user))] px-4 py-3 sm:max-w-[78%]"
+            )}
+          >
+            {!firstTokenReceived &&
+            isGenerating &&
+            isLast &&
+            message.role === "assistant" ? (
+              (() => {
                 switch (toolInUse) {
                   case "none":
                     return (
@@ -313,19 +325,19 @@ export const Message: FC<MessageProps> = ({
                       </div>
                     )
                 }
-              })()}
-            </>
-          ) : isEditing ? (
-            <TextareaAutosize
-              textareaRef={editInputRef}
-              className="text-md"
-              value={editedMessage}
-              onValueChange={setEditedMessage}
-              maxRows={20}
-            />
-          ) : (
-            <MessageMarkdown content={message.content} />
-          )}
+              })()
+            ) : isEditing ? (
+              <TextareaAutosize
+                textareaRef={editInputRef}
+                className="min-h-24 w-full rounded-xl border bg-background/80 p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                value={editedMessage}
+                onValueChange={setEditedMessage}
+                maxRows={20}
+              />
+            ) : (
+              <MessageMarkdown content={message.content} />
+            )}
+          </div>
         </div>
 
         {fileItems.length > 0 && (
@@ -422,6 +434,21 @@ export const Message: FC<MessageProps> = ({
               />
             )
           })}
+        </div>
+        <div
+          className={cn(
+            "mt-2 flex w-full",
+            message.role === "user" ? "justify-end" : "justify-start"
+          )}
+        >
+          <MessageActions
+            onCopy={handleCopy}
+            onEdit={handleStartEdit}
+            isAssistant={message.role === "assistant"}
+            isLast={isLast}
+            isEditing={isEditing}
+            onRegenerate={handleRegenerate}
+          />
         </div>
         {isEditing && (
           <div className="mt-4 flex justify-center space-x-2">

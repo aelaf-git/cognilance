@@ -16,7 +16,8 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         text: payload?.text,
-        conversation_id: payload?.conversation_id
+        conversation_id: payload?.conversation_id,
+        regenerate: payload?.regenerate === true
       })
     })
   } catch {
