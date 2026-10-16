@@ -1,0 +1,7 @@
+id: link_validate
+name: Link validator
+description: Concurrently check that URLs in a text are reachable.
+actions:
+  check:
+    risk: read
+    description: Validate links in params.text (or the instruction).

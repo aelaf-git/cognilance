@@ -1,0 +1,18 @@
+id: email_agent
+name: Email Agent
+model: default
+description: "Drafts emails, reminders, and follow-ups; sending is irreversible and gated."
+tools:
+  - gmail.draft
+  - gmail.send
+  - gmail.search
+  - gmail.list
+  - gmail.read
+  - thinking
+skills:
+  - email_draft
+  - chase
+  - follow_up
+prompts:
+  system: prompts/system.md
+schema: schema.py

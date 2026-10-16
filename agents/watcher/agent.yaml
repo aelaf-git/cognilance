@@ -1,0 +1,16 @@
+id: watcher
+name: Watcher
+model: default
+description: "Monitors inboxes and sources; raises alerts as board tasks."
+tools:
+  - gmail.search
+  - gmail.list
+  - web.search
+  - time.now
+  - thinking
+skills:
+  - monitor
+  - alert
+prompts:
+  system: prompts/system.md
+schema: schema.py

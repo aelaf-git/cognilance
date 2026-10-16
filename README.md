@@ -8,20 +8,17 @@
 
 > **Currently in beta.** One AI agent hallucinates. A thousand, verified, don’t. Cognilance orchestrates specialized agents — routing each task to the right expert, verifying output, and persisting results.
 
-**Website (marketing):** see [`web/`](web/) — `cd web && npm install && npm run dev` → [http://localhost:3000](http://localhost:3000).
+**Website (marketing):** see [`cognilance/`](cognilance/) — `cd cognilance && docker compose watch` → [http://localhost:3000](http://localhost:3000).
+
+**Chat + coordinator (Docker):** from the repo root, `docker compose watch` → chat [http://localhost:3001](http://localhost:3001), coordinator [http://localhost:8200/health](http://localhost:8200/health).
 
 ---
 
 ## Cognilance SDK
 
-Python SDK for building, registering, discovering, and hiring AI agents over the [A2A protocol](https://google.github.io/A2A/).
-
-Two classes, two roles. Pick the one that matches what your code does.
-
-| Class | Role |
-|-------|------|
-| **`CognilanceManager`** | Discovers and hires — never listed on the registry |
-| **`CognilanceWorker`** | Gets hired and delivers work |
+**Deferred.** The runtime no longer dispatches via `CognilanceManager` / A2A hire.
+The [`sdk/`](sdk/) package remains for later marketplace work; day-to-day demos use
+in-process agents under [`agents/`](agents/) and graphs under [`pipelines/`](pipelines/).
 
 ---
 
@@ -37,8 +34,7 @@ Two classes, two roles. Pick the one that matches what your code does.
 - [A2A protocol](#a2a-protocol)
 - [Registry](#registry)
 - [Agents](#agents)
-- [Agent Host (developer portal)](#agent-host-developer-portal)
-- [Orchestrator (generative UI)](#orchestrator-generative-ui)
+- [Coordinator (generative UI)](#coordinator-generative-ui)
 - [CLI reference](#cli-reference)
 - [Local development](#local-development)
 - [Environment variables](#environment-variables)
@@ -52,20 +48,32 @@ Two classes, two roles. Pick the one that matches what your code does.
 Commercial landing page for Cognilance (beta waitlist, product narrative, team).
 
 ```bash
-cd web
-npm install
-npm run dev
+cd cognilance
+docker compose watch
+# or: npm install && npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Optional waitlist webhook: copy [`web/.env.example`](web/.env.example) to `web/.env.local` and set `NEXT_PUBLIC_WAITLIST_ENDPOINT`.
+Open [http://localhost:3000](http://localhost:3000). Optional waitlist webhook: copy [`cognilance/.env.example`](cognilance/.env.example) to `cognilance/.env.local` and set `NEXT_PUBLIC_WAITLIST_ENDPOINT`.
+
+### Chat + coordinator
+
+```bash
+# From the repo root — watches Python/TS sources and reloads
+docker compose watch
+```
+
+- Chat UI: [http://localhost:3001](http://localhost:3001)
+- Coordinator health: [http://localhost:8200/health](http://localhost:8200/health)
+
+Uses root `.env` for `GROQ_API_KEY` (and friends). Landing stays on `:3000` via `cognilance/docker-compose.yml` so it does not clash with chat.
 
 ---
 
 ## Pick your role
 
 ```
-Do I only hire others?              → CognilanceManager
-Do I only do work when hired?       → CognilanceWorker
+Do I only dispatch tasks to others?              → CognilanceManager
+Do I only do work when tasked?       → CognilanceWorker
 ```
 
 | | Manager | Worker |
@@ -73,7 +81,7 @@ Do I only do work when hired?       → CognilanceWorker
 | On registry | No | Yes |
 | A2A server | No | Yes |
 | Discovers agents | Yes | No |
-| Gets hired | No | Yes |
+| Accepts A2A tasks | No | Yes |
 | Handler signature | — | `handle(task)` |
 
 ---
@@ -90,31 +98,29 @@ pip install -e .
 
 ### Configure
 
-Create a `.env` file in the project root (optional — defaults work for local dev):
+Create a `.env` in the project root with at least:
 
 ```bash
-COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
+GROQ_API_KEY=your_groq_key
 ```
 
-### Run a worker
+### Run the durable coordinator demo
 
 ```bash
-# Terminal 1 — registry (Docker, SQLite, auto-reload on code changes)
-cd registry && docker compose watch
-
-# Terminal 2 — an agent (registers + serves over A2A)
-python agents/research_agent.py
+./scripts/start_demo.sh
+# Health: http://127.0.0.1:8200/health
+# Roles:  http://127.0.0.1:8200/skills/online
 ```
 
-### Hire from the orchestrator
+### Run the API directly
 
 ```bash
-python -m orchestrator
+cognilance-coordinator          # API on :8200
+cognilance-coordinator-worker   # optional background worker
+cognilance-evals                # offline agent evals
 ```
 
-Open the chat UI link printed on startup (default `http://127.0.0.1:8200/chat`).
-
-See [Agents](#agents) and [Orchestrator (generative UI)](#orchestrator-generative-ui) for the full flow.
+See [Agents](#agents) and [Coordinator (generative UI)](#coordinator-generative-ui) for the full flow.
 
 ---
 
@@ -137,19 +143,19 @@ planning, tool-proxy, SSE event bus, conversation ownership).
 └─────────────────┘                             └────────────────────┘
 ```
 
-**Managers are not listed on the registry.** `CognilanceManager.hire()` sends HTTP directly to a worker URL. Use `manager.chat(handler)` for a local browser UI (optional); workers call `run()` or `chat()` to expose A2A endpoints.
+**Managers are not listed on the registry.** `CognilanceManager.run_task()` sends HTTP directly to a worker URL. Use `manager.chat(handler)` for a local browser UI (optional); workers call `run()` or `chat()` to expose A2A endpoints.
 
-**Typical hire chain:**
+**Typical skill dispatch:**
 
 ```
-Manager ──hires──► Worker
+Manager ──run_task──► Worker
 ```
 
 ---
 
 ## CognilanceManager
 
-Orchestrator that discovers and hires agents. Not listed on the registry.
+Client that discovers agents and runs tasks. Not listed on the registry.
 
 ```python
 from cognilance import CognilanceManager
@@ -159,7 +165,7 @@ async def run(query: str) -> str:
         agents = await manager.discover(skills=["translation"])
         if not agents:
             return "No translators available"
-        result = await manager.hire(agents[0], input_text=query)
+        result = await manager.run_task(agents[0], input_text=query)
         return result.output.text
 ```
 
@@ -170,7 +176,7 @@ async def handle(manager: CognilanceManager, message: str) -> str:
     agents = await manager.discover(skills=["translation"])
     if not agents:
         return "No translators available"
-    result = await manager.hire(agents[0], input_text=message)
+    result = await manager.run_task(agents[0], input_text=message)
     return result.output.text
 
 async def main():
@@ -184,8 +190,8 @@ async def main():
 |--------|-------------|
 | `from_env()` | Create from `COGNILANCE_REGISTRY_URL` |
 | `discover(skills, tags, limit)` | Search the registry; returns `list[AgentCard]` |
-| `hire(agent, input_text, input_data)` | Send a task; returns `TaskResult` |
-| `discover_and_hire(...)` | Discover best match and hire, or run a local fallback |
+| `run_task(agent, input_text, input_data)` | Send a task; returns `TaskResult` |
+| `discover_and_run(...)` | Discover best match and run a task, or run a local fallback |
 | `chat(handler, description, port, open_ui)` | Local browser chat UI + terminal loop (not listed on registry) |
 | `register(name, url, skills, ...)` | List an externally-hosted agent on the registry |
 | `get_agent(agent_id)` | Fetch a single agent card by ID |
@@ -194,7 +200,7 @@ async def main():
 
 ## CognilanceWorker
 
-Leaf worker — registers on the marketplace and delivers work when hired. Does not hire others.
+Leaf worker — registers on the registry and delivers work when tasked. Does not dispatch to others.
 
 ```python
 from cognilance import CognilanceWorker
@@ -290,249 +296,60 @@ curl -X POST http://localhost:8001/a2a/tasks \
 
 ## Registry
 
-The registry is a **separate service** from the Python SDK. Agents built with the SDK talk to it over HTTP via `RegistryClient`. It lives in [`registry/`](registry/).
-
-```
-┌─────────────────────┐              HTTP (open API)              ┌──────────────────────┐
-│  Cognilance SDK     │ ─────────────────────────────────────►│  Registry API        │
-│  (pip install)      │   register · discover · heartbeat     │  (FastAPI)           │
-│                     │   trace events                        │                      │
-└─────────────────────┘                                       └──────────┬───────────┘
-                                                                         │
-                                                                         ▼
-                                                              ┌──────────────────────┐
-                                                              │  SQLite              │
-                                                              └──────────────────────┘
-```
-
-### Features
-
-- **SDK-compatible HTTP API** — same contract as `RegistryClient` in the Python SDK
-- **Prisma schema** — `prisma/schema.prisma` defines all tables; type-safe async Python client
-- **SQLite** — zero setup, database file at `prisma/dev.db`
-- **Heartbeat + stale detection** — agents go offline after 90s without a heartbeat
-- **Trace collector** — `POST /v1/traces/events` with WebSocket broadcast
-- **Dashboard** — `GET /dashboard` (agent list)
-
-### Quick start (Docker)
-
-```bash
-cd registry
-docker compose watch
-```
-
-`docker compose watch` syncs `app/` into the container and restarts uvicorn on changes. For a one-off run without file watching:
-
-```bash
-docker compose up --build
-```
-
-| URL | Description |
-|-----|-------------|
-| http://localhost:8088/health | Health check |
-| http://localhost:8088/dashboard | Agent marketplace UI |
-| http://localhost:8088/v1/agents/discover | Public agent search |
-
-### Local development
-
-**Requirements:** Python 3.11+
-
-```bash
-cd registry
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-
-python -m prisma generate
-python -m prisma db push
-
-uvicorn app.main:app --reload --port 8080
-```
-
-The database is a single file: **`prisma/dev.db`** (gitignored). Point the SDK at `http://127.0.0.1:8080` when running uvicorn locally.
-
-### Prisma workflow
-
-| Command | Purpose |
-|---------|---------|
-| `python -m prisma generate` | Generate the async Python client from `schema.prisma` |
-| `python -m prisma db push` | Apply schema to SQLite |
-| `python -m prisma studio` | Browse data in a web UI |
-
-Schema lives in **`prisma/schema.prisma`**.
-
-### API reference
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check |
-| POST | `/v1/agents` | Register agent |
-| GET | `/v1/agents/discover` | Search public online agents |
-| GET | `/v1/agents/{id}` | Get agent by ID |
-| POST | `/v1/agents/{id}/heartbeat` | Keep agent online |
-| POST | `/v1/traces/events` | Ingest trace event |
-| GET | `/v1/traces` | List recent traces |
-| GET | `/v1/traces/{id}` | Trace detail |
-| WS | `/v1/traces/ws` | Live trace stream |
-| GET | `/dashboard` | Web UI |
-
-### Backend environment variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `file:./prisma/dev.db` | SQLite database path |
-| `HOST` | `0.0.0.0` | Bind address |
-| `PORT` | `8080` | Listen port |
-| `HEARTBEAT_TIMEOUT_SECONDS` | `90` | Mark agents offline after this gap |
-| `STALE_CHECK_INTERVAL_SECONDS` | `30` | Background stale-agent sweep interval |
-| `CORS_ORIGINS` | `*` | Allowed CORS origins |
-
-### Connecting the SDK
-
-```bash
-# Terminal 1 — registry
-cd registry && docker compose watch
-
-# Terminal 2 — agent
-export COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
-python agents/research_agent.py
-```
+**Removed.** Specialists are in-process roles; there is no discovery/hire path.
 
 ---
 
 ## Agents
 
-The [`agents/`](agents/) folder contains independent `CognilanceWorker` processes that register on the marketplace and are hired by the orchestrator via the registry.
-
-| Agent | Skill | Port | Output shape | UI component |
-|-------|-------|------|--------------|--------------|
-| `email_writer/agent.py` | `email-writing` | 8101 | `{ to, subject, body, status }` | `email-draft` |
-
-The Email Writer uses **Gemini** for composition and calls back into the orchestrator Gmail **proxy** for send/read (no OAuth in the agent). See [`agents/README.md`](agents/README.md).
-
-### Run the agent
-
-```bash
-pip install -r agents/email_writer/requirements.txt
-
-# GEMINI_API_KEY + registry in repo root .env
-python agents/email_writer/agent.py      # :8101
-```
-
-Start with registry check:
-
-```bash
-./scripts/start_agents.sh
-```
+Specialists are **in-process agents** under [`agents/`](agents/): `coordinator`, `report_writer`, `concept_note_writer`, `email_agent`, `researcher`, `watcher`. Each folder has `agent.yaml` (allowed tool ids), `prompts/`, and `schema.py`. They share a durable task board; tools run through the permission broker. See [`agents/README.md`](agents/README.md).
 
 ---
 
-## Agent Host (developer portal)
+## Agent Host
 
-The [`agent-host/`](agent-host/) service lets developers **upload agent ZIPs**, run them locally on dynamic ports (`8104`–`8199`), and auto-register with the registry — the orchestrator discovers them like built-in agents in `agents/`.
+Removed.
 
-| URL | Description |
-|-----|-------------|
-| http://127.0.0.1:8300/ | Developer portal (upload, start/stop, logs) |
-| http://127.0.0.1:8300/health | Health check |
-| http://127.0.0.1:8300/api/agents | Hosted agent list (JSON) |
+## Coordinator (generative UI)
 
-### Host your agent
-
-1. Package your agent as a ZIP (see [`agents/README.md`](agents/README.md) for the Email Writer pattern)
-2. Start registry, then Agent Host:
-
-```bash
-cd registry && docker compose watch   # :8088
-./scripts/start_agent_host.sh         # :8300
-```
-
-3. Open http://127.0.0.1:8300 — upload your `.zip`, **configure environment variables** (e.g. `GROQ_API_KEY`), then click **Upload agent** and **Start**
-4. Confirm the agent appears on the [registry dashboard](http://127.0.0.1:8088/dashboard)
-5. Start the orchestrator and ask for a task matching your agent's skill
-
-Uploaded agents are launched via `cognilance run <entry> --port <allocated>` so ports do not collide with built-ins on `8101`–`8103`.
-
-**Security:** the Agent Host executes arbitrary Python on your machine with no sandbox — local development only.
-
-Rebuild the portal UI after frontend changes:
-
-```bash
-cd agent-host/developer-ui && npm install && npm run build
-```
-
----
-
-## Orchestrator (generative UI)
-
-The [`orchestrator/`](orchestrator/) implements the **Cognilance Orchestrator execution algorithm** as a LangGraph pipeline with per-thread sessions (`thread_id` + `MemorySaver` checkpointer) and registry catalog caching (60s TTL per thread).
+The coordinator hosts durable **Runs** with a LangGraph board-centric pipeline and SQLite checkpointer.
 
 ### Algorithm
 
 ```
-planner → [simple] thinking → ui_selector → END
-        → [complex] task    → ui_selector → END
+START → seed → coordinator_plan → specialists → coordinator_assemble → ui_selector → END
 ```
 
-1. **User input** — prompt submitted via the chat UI (`POST /chat/stream`) or API
-2. **Router-first planning** — `DeterministicRouter` handles known intents (email, Docs, proposals, web, …) with **zero** planner LLM calls; only open-ended requests use one LLM plan call
-3. **Routing** — **Simple** → Thinking Agent; **Complex** → multi-subtask plan
-4. **Task delegation** — Task Agent runs subtasks in dependency layers (`asyncio.gather` within each layer)
-5. **Execution** — specialists hired via `CognilanceManager` by skill slug; tool-proxy keeps OAuth on the orchestrator
-6. **Output rendering** — UI Selector picks a rich React component; SSE is pushed via an in-process event bus (reconnect still polls mission events)
+Pipelines live in [`pipelines/`](pipelines/): `coordinator_board` (LLM-planned) plus preset
+boards `weekly_report`, `concept_note`, `email_followup`.
+
+1. **User / schedule / event** — creates a durable Run
+2. **Coordinator** — decomposes into board tasks for specialists
+3. **Specialists** — claim tasks and call allowed tools (risk-graded; approval for irreversible)
+4. **Assemble** — structured results → Gen UI selector when props exist
 
 Details: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-### Internal agents
+### Roles
 
-| Agent | Node | Role |
-|-------|------|------|
-| Planner | `planner` | Complexity + catalog + plan + thinking stream |
-| Thinking | `thinking` | Simple path and subtask fallback |
-| Task | `task` | Parallel/sequential subtask execution |
-| UI Selector | `ui_selector` | Generative UI component selection |
+| Agent | Primary tools |
+|------|---------------|
+| coordinator | board.create, thinking |
+| report_writer | google_docs.create / google_docs.write |
+| concept_note_writer | google_docs.create / google_docs.write |
+| email_agent | gmail.draft / gmail.send (approval-gated) |
+| researcher | web.search / web.fetch / link_validate.check |
+| watcher | gmail.search + board alerts |
 
-### Chat UI
+Tool manifests with risk grades live in `tools/<name>/manifest.yaml`.
 
-The orchestrator ships a **React chat UI** (dark theme, Framer Motion) served at `/chat` by FastAPI:
-
-- **Orchestration feed** — collapsible step cards: User Prompt → Planner Plan → Routing → Delegation → Per-Agent Execution → Aggregated Output → Gen UI Selection
-- **Sidebar** — shows only **hired** marketplace agents for the current run (idle / executing / done)
-- **SSE streaming** — `thinking`, `plan`, `subtask_*`, `answer`, `ui`, and `gen_ui_selected` events
-- **Thread persistence** — `thread_id` stored in `localStorage` for multi-turn sessions
-
-Source lives in [`orchestrator/chat-ui/`](orchestrator/chat-ui/). Build the bundle after UI changes:
+### End-to-end (one command)
 
 ```bash
-cd orchestrator/chat-ui && npm install && npm run build
+./scripts/start_demo.sh
 ```
 
-Output is written to `orchestrator/src/orchestrator/ui/static/index.html` (single-file bundle). Restart the orchestrator to pick up a new build.
-
-LangGraph Studio still uses the component map in [`orchestrator/ui/`](orchestrator/ui/) when you run `langgraph dev`.
-
-### End-to-end (three terminals)
-
-**Terminal 1 — registry** (must be up before agents)
-
-```bash
-cd registry && docker compose watch
-```
-
-**Terminal 2 — agents** (waits for registry health on `:8088`)
-
-```bash
-./scripts/start_agents.sh
-```
-
-**Terminal 3 — orchestrator**
-
-```bash
-source .venv/bin/activate
-pip install -e . -e "./orchestrator[dev]" -r agents/email_writer/requirements.txt
-python -m orchestrator
-```
-
-Startup prints the chat UI link (default `http://127.0.0.1:8200/chat`). Uses the repo root `.env` for `GROQ_API_KEY` and `COGNILANCE_REGISTRY_URL`.
+Health: `http://127.0.0.1:8200/health`. Roles: `http://127.0.0.1:8200/skills/online`. Uses root `.env` for `GROQ_API_KEY`.
 
 ### Example prompts
 
@@ -546,8 +363,9 @@ Startup prints the chat UI link (default `http://127.0.0.1:8200/chat`). Uses the
 ### Quick smoke test (no UI)
 
 ```bash
-source .venv/bin/activate
+source venv/bin/activate
 python scripts/e2e_smoke_test.py
+pytest tools evals   # tool unit tests + offline agent evals
 ```
 
 ---
@@ -556,7 +374,7 @@ python scripts/e2e_smoke_test.py
 
 After `pip install -e .`, the `cognilance` command is available. Run `cognilance` with no arguments to print built-in help.
 
-The CLI is for **local development and operations** — running workers and inspecting the marketplace. Start the registry separately via **[`registry/`](registry/)**. `CognilanceManager` has no CLI command; the [orchestrator](#orchestrator-generative-ui) uses it directly in Python.
+The CLI is for **local SDK worker development** (deferred marketplace path). Day-to-day demos use `./scripts/start_demo.sh` and the in-process coordinator — not a registry.
 
 ### Command overview
 
@@ -564,7 +382,7 @@ The CLI is for **local development and operations** — running workers and insp
 |---------|---------|
 | `run` | Start a worker as a blocking A2A server |
 | `chat` | Start a worker with an interactive prompt loop |
-| `discover` | List agents currently registered in the marketplace |
+| `discover` | List agents currently registered in the registry |
 | `info` | Show full details for one agent by ID |
 | `register` | List an externally-hosted worker on the registry |
 
@@ -581,7 +399,7 @@ cd registry && docker compose watch
 
 ### `cognilance run`
 
-**Purpose:** Run a `CognilanceWorker` as a production-style A2A server. Blocks until stopped. Other agents and managers hire it via HTTP (`POST /a2a/tasks`).
+**Purpose:** Run a `CognilanceWorker` as a production-style A2A server. Blocks until stopped. Other agents and managers call it via HTTP (`POST /a2a/tasks`).
 
 Requires the registry to be running (unless `--no-register` is passed).
 
@@ -688,22 +506,13 @@ The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
 ## Local development
 
 ```bash
-# Terminal 1 — registry
-cd registry && docker compose watch
+# Durable coordinator + in-process specialists on :8200
+./scripts/start_demo.sh
 
-# Terminal 2 — agent host (optional — upload custom agents)
-./scripts/start_agent_host.sh
-
-# Terminal 3-5 — built-in agents
-python agents/research_agent.py
-python agents/data_analyst.py
-python agents/python_code_writer.py
-
-# Terminal 6 — verify discovery
-cognilance discover
-
-# Terminal 7 — orchestrator (chat UI on :8200)
-python -m orchestrator
+# Or:
+source venv/bin/activate
+pip install -e .
+cognilance-coordinator
 ```
 
 ---
@@ -712,96 +521,29 @@ python -m orchestrator
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL |
-| `COGNILANCE_PORT` | No | `8000` | Default port for workers |
-| `COGNILANCE_AGENT_HOST_PORT` | No | `8300` | Agent Host developer portal port |
-| `COGNILANCE_AGENT_HOST_DATA_DIR` | No | `data/hosted-agents` | Extracted agent ZIPs and SQLite DB |
-| `AGENT_HOST_ENCRYPTION_KEY` | No | falls back to `INTEGRATION_ENCRYPTION_KEY` | Encrypts per-agent secrets at rest |
-| `GROQ_API_KEY` | For orchestrator | — | Groq API key for the orchestrator planner |
-| `GEMINI_API_KEY` | For agents | — | Google Gemini API key for marketplace agents |
-| `GEMINI_MODEL` | No | `gemini-2.0-flash` | Gemini model for agents |
-| `VITE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL for the chat UI sidebar (build-time) |
+| `GROQ_API_KEY` | For coordinator | — | Groq API key for the coordinator / specialists |
+| `COGNILANCE_APPROVAL_GRADES` | No | `irreversible` | Comma-separated tool risk grades that pause for approval |
+| `COGNILANCE_COORDINATOR_PORT` | No | `8200` | Coordinator HTTP port |
+| `COGNILANCE_REGISTRY_URL` | — | — | Unused (registry removed from runtime) |
 
 ---
 
 ## Project layout
 
 ```
-cognilance/
-├── web/                     # Commercial landing site (Next.js, beta waitlist)
-├── cognilance/              # SDK package
-│   ├── __init__.py          # Public exports
-│   ├── assets/
-│   │   ├── __init__.py      # LOGO_PATH — brand assets
-│   │   └── logo.png         # Cognilance logo
-│   ├── config.py            # Env loading and defaults
-│   ├── core/
-│   │   ├── manager.py       # CognilanceManager
-│   │   ├── worker.py        # CognilanceWorker
-│   │   ├── models.py        # Task, AgentCard, TaskResult, enums
-│   │   └── tracing.py       # TraceEmitter
-│   ├── registry/
-│   │   └── client.py        # RegistryClient (HTTP → registry)
-│   ├── transport/
-│   │   └── a2a.py           # A2AServer + A2AClient
-│   └── cli/
-│       └── main.py          # cognilance CLI entry point
-├── agents/                  # Marketplace CognilanceWorker agents (one folder per agent)
-│   ├── email_writer/
-│   │   ├── agent.py         # skill: email-writing → email-draft UI
-│   │   ├── proxy.py
-│   │   ├── requirements.txt
-│   │   └── cognilance.json
-│   └── README.md
-├── agent-host/              # Developer portal — upload & run agents locally
-│   ├── developer-ui/        # React portal (Vite + Tailwind)
-│   ├── pyproject.toml
-│   └── src/agent_host/      # FastAPI server, runner, ZIP handler
-├── data/hosted-agents/      # Uploaded agent extracts (gitignored at runtime)
-├── orchestrator/            # LangGraph supervisor + React chat UI + generative UI
-│   ├── langgraph.json       # graphs + ui bundle config (env: ../.env)
-│   ├── chat-ui/             # React chat app (Vite + Tailwind + Framer Motion)
-│   ├── package.json         # UI bundler deps (for langgraph dev)
-│   ├── pyproject.toml
-│   ├── src/orchestrator/
-│   │   ├── graph.py         # planner → thinking|task → ui_selector
-│   │   ├── server.py        # FastAPI: /chat, /chat/stream
-│   │   ├── state.py         # messages, ui, plan, subtasks, catalog cache
-│   │   ├── registry_cache.py
-│   │   ├── streaming.py     # SSE custom events
-│   │   ├── env.py           # loads repo-root .env
-│   │   ├── llm.py           # Groq factory + message helpers
-│   │   ├── ui/
-│   │   │   ├── chat.py      # serves built static/index.html
-│   │   │   └── static/      # chat-ui build output (gitignored generated bundle)
-│   │   └── nodes/
-│   │       ├── planner.py
-│   │       ├── thinking.py / thinking_node.py
-│   │       ├── task.py
-│   │       └── ui_selector.py
-│   └── ui/                  # LangGraph generative-UI components (TSX)
-│       ├── index.tsx        # ComponentMap
-│       ├── research-sources/
-│       ├── data-chart/
-│       └── python-code/
-├── scripts/
-│   ├── start_agents.sh      # registry check + run all three agents
-│   ├── start_agent_host.sh  # developer portal on :8300
-│   └── e2e_smoke_test.py    # registry + agents + orchestrator smoke test
-├── registry/                # Registry API (FastAPI + Prisma + SQLite)
-│   ├── prisma/
-│   │   └── schema.prisma
-│   ├── app/
-│   │   ├── api/             # FastAPI routers
-│   │   ├── services/        # Business logic (uses Prisma client)
-│   │   ├── schemas.py       # Pydantic DTOs (SDK-compatible)
-│   │   ├── database.py      # Prisma client singleton
-│   │   └── main.py
-│   ├── docker-compose.yml
-│   └── Dockerfile
-├── pyproject.toml
-├── requirements.txt
-└── README.md
+cognilance/              # Next.js landing
+UIs/chat/                # Next.js chat
+agents/                  # <id>/agent.yaml + prompts/ + schema.py; loader.py
+tools/                   # <name>/manifest.yaml + tool.py + tests/; registry.py
+pipelines/               # coordinator_board, weekly_report, concept_note, email_followup, shared/
+core/                    # registry, runtime, broker, models, context, signals
+api/                     # FastAPI server + routes/ + sse.py + auth/
+workers/                 # worker.py + schedulers/
+sdk/cognilance/          # Python SDK + CLI
+evals/                   # cases.yaml per agent + run.py
+improvement/             # feedback-loop placeholder
+scripts/                 # start_demo.sh, e2e_smoke_test.py
+ARCHITECTURE.md
 ```
 
 ### Public API

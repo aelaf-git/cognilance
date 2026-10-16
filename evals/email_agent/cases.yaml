@@ -1,0 +1,8 @@
+- id: draft_by_default
+  instruction: "Email Sara to ask for the signed contract by Friday."
+  expect:
+    tool: gmail.draft
+- id: explicit_send
+  instruction: "Send the email to Sara now, send it."
+  expect:
+    tool: gmail.send

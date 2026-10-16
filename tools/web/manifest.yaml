@@ -1,0 +1,10 @@
+id: web
+name: Web
+description: Public web search and page fetch (no OAuth).
+actions:
+  search:
+    risk: read
+    description: Search the web; params {query, max_results?}.
+  fetch:
+    risk: read
+    description: Fetch and clean a page; params {url}.

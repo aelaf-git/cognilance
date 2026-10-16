@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.local.example
+coverage
+__tests__
+*.md
+.DS_Store
+npm-debug.log*
+public/sw.js
+public/workbox-*.js
+public/worker-*.js
