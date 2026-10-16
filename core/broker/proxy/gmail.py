@@ -7,8 +7,8 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from orchestrator.integrations.client import IntegrationClient
-from tools.tool_proxy.grants import validate_callback
+from core.broker.client import IntegrationClient
+from core.broker.grants import validate_callback
 
 router = APIRouter(prefix="/tools/gmail", tags=["tool-proxy"])
 

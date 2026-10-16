@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Expose the local orchestrator on the internet for free (Cloudflare quick tunnel).
+# Expose the local coordinator on the internet for free (Cloudflare quick tunnel).
 # Requires: demo already running (./scripts/start_demo.sh) and cloudflared installed.
 set -euo pipefail
 
-ORCHESTRATOR_PORT="${COGNILANCE_ORCHESTRATOR_PORT:-8200}"
-LOCAL_URL="http://127.0.0.1:${ORCHESTRATOR_PORT}"
+COORDINATOR_PORT="${COGNILANCE_COORDINATOR_PORT:-${COGNILANCE_ORCHESTRATOR_PORT:-8200}}"
+LOCAL_URL="http://127.0.0.1:${COORDINATOR_PORT}"
 
 if ! curl -sf "${LOCAL_URL}/health" >/dev/null; then
-  echo "ERROR: Orchestrator is not running at ${LOCAL_URL}" >&2
+  echo "ERROR: Coordinator is not running at ${LOCAL_URL}" >&2
   echo "Start the demo first: ./scripts/start_demo.sh" >&2
   exit 1
 fi

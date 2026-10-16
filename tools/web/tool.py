@@ -1,4 +1,4 @@
-"""Built-in web search and page fetching for the orchestrator."""
+"""Built-in web search and page fetching for the coordinator."""
 
 from __future__ import annotations
 
@@ -348,3 +348,21 @@ def search_provider_status() -> str:
     if os.getenv("BRAVE_SEARCH_API_KEY"):
         return "brave (API key set)"
     return "duckduckgo (no API key required)"
+
+
+async def run(action: str, *, instruction: str, params: dict[str, Any], ctx: Any) -> Any:
+    """Registry entrypoint (see tools/registry.py)."""
+    from tools.registry import ToolOutput
+
+    if action == "search":
+        query = str(params.get("query") or instruction).strip()
+        result = await web_search(query, max_results=int(params.get("max_results", 6)))
+        return ToolOutput(text=format_web_search_result(result), data=result)
+    if action == "fetch":
+        url = str(params.get("url") or "").strip()
+        if not url:
+            urls = extract_urls(instruction)
+            url = urls[0] if urls else ""
+        result = await web_fetch(url)
+        return ToolOutput(text=format_web_fetch_result(result), data=result)
+    raise RuntimeError(f"Unknown web action: {action}")

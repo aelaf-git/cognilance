@@ -1,4 +1,4 @@
-import { ActivityStep } from "@/lib/orchestrator-chat"
+import { ActivityStep } from "@/lib/coordinator-chat"
 import { Tables } from "@/supabase/types"
 
 export interface ChatMessage {

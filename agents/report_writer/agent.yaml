@@ -1,0 +1,17 @@
+id: report_writer
+name: Report Writer
+model: default
+description: "Produces summaries, recurring reports, and Google Doc drafts."
+tools:
+  - google_docs.create
+  - google_docs.write
+  - google_docs.read
+  - web.search
+  - thinking
+skills:
+  - summarize
+  - weekly_report
+  - proposal_outline
+prompts:
+  system: prompts/system.md
+schema: schema.py

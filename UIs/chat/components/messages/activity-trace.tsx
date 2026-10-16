@@ -1,6 +1,6 @@
 "use client"
 
-import { ActivityStep } from "@/lib/orchestrator-chat"
+import { ActivityStep } from "@/lib/coordinator-chat"
 import { cn } from "@/lib/utils"
 import { IconChevronRight, IconLoader2 } from "@tabler/icons-react"
 import { FC, useState } from "react"

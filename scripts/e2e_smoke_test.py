@@ -1,75 +1,45 @@
 #!/usr/bin/env python3
-"""End-to-end smoke test: registry discover + orchestrator graph routes."""
+"""End-to-end smoke: durable Run + board graph (no registry / A2A workers)."""
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import sys
-import time
 import uuid
 from pathlib import Path
 
-import httpx
 from langchain_core.messages import HumanMessage
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "agents" / "orchestrator"))
-sys.path.insert(0, str(ROOT / "tools"))
-sys.path.insert(0, str(ROOT / "pipeline"))
-sys.path.insert(0, str(ROOT / "SDK"))
-
-REGISTRY = "http://127.0.0.1:8088"
-
-# Worker agents under agents/*/agent.py (excludes orchestrator)
-AGENT_DIRS = (
-    "agents/email_writer",
-    "agents/web_scraper",
-    "agents/link_validator",
-    "agents/proposal_writer",
-    "agents/docs_creator",
-)
-AGENT_PORTS = (8101, 8102, 8103, 8104, 8105)
-
-
-def wait_http(url: str, *, timeout: float = 30.0) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            if httpx.get(url, timeout=1.0).status_code == 200:
-                return
-        except httpx.HTTPError:
-            pass
-        time.sleep(0.5)
-    raise RuntimeError(f"Timed out waiting for {url}")
-
-
-def start_agents() -> list[subprocess.Popen]:
-    procs: list[subprocess.Popen] = []
-    for directory in AGENT_DIRS:
-        agent_dir = ROOT / directory
-        procs.append(
-            subprocess.Popen(
-                [sys.executable, "-u", "agent.py"],
-                cwd=agent_dir,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-            )
-        )
-    for port in AGENT_PORTS:
-        wait_http(f"http://127.0.0.1:{port}/health")
-    return procs
+sys.path.insert(0, str(ROOT))
 
 
 async def run_graph(prompt: str, *, thread_id: str | None = None) -> dict:
-    from pipeline.graph import ensure_graph
+    from core.runtime.board.store import BoardStore
+    from core.runtime.runs.models import RunTrigger
+    from core.runtime.runs.store import RunStore
+    from pipelines.coordinator_board.graph import ensure_graph
 
-    graph = await ensure_graph()
-    config = {"configurable": {"thread_id": thread_id or str(uuid.uuid4())}}
-    return await graph.ainvoke(
-        {"messages": [HumanMessage(content=prompt)]},
+    rid = thread_id or str(uuid.uuid4())
+    runs = RunStore()
+    runs.init_db()
+    BoardStore().init_db()
+    runs.create_run(
+        instruction=prompt,
+        thread_id=rid,
+        trigger=RunTrigger.MESSAGE,
+        conversation_id=rid,
+        run_id=rid,
+    )
+
+    graph = await ensure_graph(with_checkpointer=True)
+    config = {"configurable": {"thread_id": rid}}
+    result = await graph.ainvoke(
+        {"messages": [HumanMessage(content=prompt)], "run_id": rid},
         config=config,
     )
+    result["_run_id"] = rid
+    return result
 
 
 def _ui_names(result: dict) -> list[str]:
@@ -81,50 +51,83 @@ def _ui_names(result: dict) -> list[str]:
 
 
 async def main() -> None:
-    print("1) Checking registry...")
-    wait_http(f"{REGISTRY}/health")
-    print("   registry ok")
+    from agents.loader import SPECIALISTS
+    from core.runtime.board.store import BoardStore
+    from core.runtime.runs.store import RunStore
+    from workers.schedulers.watcher_events import enqueue_watcher_inbox_alert
+    from core.broker.policy import RiskGrade, risk_for
 
-    print("2) Starting agents...")
-    procs = start_agents()
-    try:
-        discover = httpx.get(
-            f"{REGISTRY}/v1/agents/discover", params={"limit": 20}, timeout=5.0
-        )
-        discover.raise_for_status()
-        agents = discover.json().get("agents", [])
-        print(f"   {len(agents)} agent(s) online: {[a['name'] for a in agents]}")
+    print("0) Registry validation...")
+    from core.registry import validate_all
 
-        print("3) Orchestrator — simple route...")
-        simple = await run_graph("What is 2+2?", thread_id="smoke-simple")
-        text = simple["messages"][-1].content
-        print(f"   answer: {text[:120]}")
-        print(f"   route: {simple.get('route')}")
-        assert simple.get("route") == "simple", "expected simple route"
-        assert "text-card" not in _ui_names(simple), "text-card should not be emitted"
+    report = validate_all(strict=True, log=False)
+    print(f"   {report.summary()}")
 
-        print("4) Orchestrator — complex route (web research)...")
-        research = await run_graph(
-            "Research the history of transformers in machine learning",
-            thread_id="smoke-complex",
-        )
-        msg = research["messages"][-1]
-        ui = _ui_names(research)
-        results = research.get("subtask_results") or []
-        print(f"   text: {str(msg.content)[:120]}")
-        print(f"   route: {research.get('route')}")
-        print(f"   subtasks completed: {len(results)}")
-        print(f"   ui: {ui}")
-        assert research.get("route") == "complex", "expected complex route"
-        assert len(results) >= 1, "expected subtask results"
-        assert "text-card" not in ui, "text-card should not be emitted"
+    print("1) In-process roles...")
+    ids = sorted(r.id for r in SPECIALISTS)
+    assert ids == [
+        "concept_note_writer",
+        "email_agent",
+        "report_writer",
+        "researcher",
+        "watcher",
+    ], ids
+    print(f"   {ids}")
 
-        print("\nAll smoke checks passed.")
-    finally:
-        for proc in procs:
-            proc.terminate()
-        for proc in procs:
-            proc.wait(timeout=5)
+    print("2) Risk policy...")
+    assert risk_for("gmail.send") == RiskGrade.IRREVERSIBLE
+    assert risk_for("web.search") == RiskGrade.READ
+    assert risk_for("docs.create") == risk_for("google_docs.create")  # legacy alias
+    print("   ok")
+
+    print("2b) Preset pipelines...")
+    from pipelines import available_pipelines
+    from pipelines.weekly_report.graph import preset
+
+    assert {"coordinator_board", "weekly_report", "concept_note", "email_followup"} <= set(
+        available_pipelines()
+    )
+    assert [t["assignee_role"] for t in preset("x")] == ["researcher", "report_writer"]
+    print(f"   {available_pipelines()}")
+
+    print("3) Durable Run — coordinator board graph...")
+    result = await run_graph(
+        "What is 2+2? Answer with just the number.",
+        thread_id=f"smoke-{uuid.uuid4().hex[:8]}",
+    )
+    rid = result["_run_id"]
+    msg = result["messages"][-1]
+    results = result.get("subtask_results") or []
+    board_tasks = result.get("board_tasks") or []
+    db_tasks = BoardStore().list_for_run(rid)
+    run = RunStore().get_run(rid)
+    print(f"   text: {str(msg.content)[:140]}")
+    print(f"   subtask_results: {len(results)}")
+    print(f"   board tasks (state/db): {len(board_tasks)}/{len(db_tasks)}")
+    print(f"   run row: {run.status.value if run else 'missing'}")
+    print(f"   ui: {_ui_names(result)}")
+    assert run is not None, "expected durable Run row"
+    assert len(db_tasks) >= 1, "expected coordinator to persist board tasks"
+    assert len(results) >= 1 or str(result.get("final_text") or "").strip(), (
+        "expected specialist results or final_text"
+    )
+    assert "text-card" not in _ui_names(result), "text-card should not be emitted"
+
+    print("4) Watcher event enqueue...")
+    event_run = enqueue_watcher_inbox_alert(
+        user_id="smoke-user",
+        conversation_id=f"smoke-conv-{uuid.uuid4().hex[:6]}",
+        emails=[{"id": "m1", "from": "Ada <ada@example.com>", "subject": "Hello"}],
+        summary='Heads up — Ada just emailed you about "Hello".',
+    )
+    assert event_run, "expected watcher event run id"
+    event = RunStore().get_run(event_run)
+    assert event is not None and event.trigger.value == "event"
+    tasks = BoardStore().list_for_run(event_run)
+    assert any(t.assignee_role == "watcher" for t in tasks)
+    print(f"   event run {event_run} with {len(tasks)} board task(s)")
+
+    print("\nAll smoke checks passed.")
 
 
 if __name__ == "__main__":

@@ -10,9 +10,9 @@ from langchain_core.messages import AIMessage
 from langgraph.graph.ui import push_ui_message
 from pydantic import BaseModel, Field, field_validator
 
-from pipeline.llm import get_structured_llm
-from pipeline.state import State
-from pipeline.streaming import emit, emit_status, reveal_text
+from core.models.gateway import get_structured_llm
+from pipelines.shared.state import State
+from pipelines.shared.streaming import emit, emit_status, reveal_text
 
 ComponentName = Literal["email-draft", "research-sources", "data-chart", "python-code"]
 
@@ -153,12 +153,18 @@ def _heuristic_component(state: State, data: dict[str, Any]) -> ComponentName | 
         if result_data.get("code"):
             return "python-code"
 
+    role_ui = {
+        "email_agent": "email-draft",
+        "follow_up": "email-draft",
+        "researcher": "research-sources",
+        "report_writer": "research-sources",
+        "reporter": "research-sources",
+    }
     for result in state.get("subtask_results") or []:
-        skill = None
-        for subtask in state.get("subtasks") or []:
-            if subtask.get("id") == result.get("subtask_id"):
-                skill = subtask.get("skill")
-                break
+        assignee = str(result.get("assignee") or "")
+        if assignee in role_ui:
+            return role_ui[assignee]  # type: ignore[return-value]
+        skill = result.get("skill")
         if skill and skill in SKILL_DEFAULT_UI:
             return SKILL_DEFAULT_UI[skill]
     return None

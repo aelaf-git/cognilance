@@ -1,0 +1,14 @@
+id: google_docs
+name: Google Docs
+description: Create and edit Google Docs through the Drive integration.
+integration: google-drive
+actions:
+  create:
+    risk: draft
+    description: Create a new titled document (optionally with body).
+  write:
+    risk: reversible_write
+    description: Append or replace content in an existing document.
+  read:
+    risk: read
+    description: Read a document's text.

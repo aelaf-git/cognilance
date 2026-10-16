@@ -1,4 +1,4 @@
-"""Run orchestrator graph for a mission with event bus + persistence."""
+"""Run durable coordinator graph for a Run / mission with event bus + persistence."""
 
 from __future__ import annotations
 
@@ -8,12 +8,15 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
-from orchestrator.context import current_conversation_id, current_mission_id
-from pipeline.graph import ensure_graph
-from orchestrator.missions.finalize import finalize_session_status
-from orchestrator.missions.models import MissionStatus
-from orchestrator.missions.store import MissionStore
-from pipeline.runtime.event_bus import event_bus
+from core.runtime.board.store import BoardStore
+from core.context.request import current_conversation_id, current_mission_id
+from core.runtime.missions.finalize import finalize_session_status
+from core.runtime.missions.models import MissionStatus
+from core.runtime.missions.store import MissionStore
+from core.runtime.runs.models import RunStatus, RunTrigger
+from core.runtime.runs.store import RunStore
+from pipelines.coordinator_board.graph import ensure_graph
+from core.runtime.event_bus import event_bus
 
 
 def _ui_items(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -46,23 +49,40 @@ async def stream_mission_graph(
     *,
     history: list[BaseMessage] | None = None,
     on_event: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
-    use_checkpointer: bool = False,
+    use_checkpointer: bool = True,
+    run_id: str | None = None,
+    user_id: str | None = None,
+    trigger: RunTrigger = RunTrigger.MESSAGE,
 ) -> AsyncIterator[str]:
-    """Yield SSE lines while running the graph.
-
-    ConversationStore is the chat memory source of truth. By default chat runs
-    do not resume LangGraph checkpoints across turns (use_checkpointer=False):
-    history is passed as messages; thread_id stays = conversation_id.
-    """
+    """Yield SSE lines while running the durable coordinator graph."""
     final: dict[str, Any] | None = None
     prior = list(history or [])
-    # Always conversation_id as thread_id — never random orphan checkpoints.
     input_messages = [*prior, HumanMessage(content=instruction)]
     config = _thread_config(thread_id)
+
+    runs = RunStore()
+    runs.init_db()
+    BoardStore().init_db()
+
+    rid = run_id or current_mission_id.get() or thread_id
+    existing = runs.get_run(rid)
+    if existing is None:
+        runs.create_run(
+            instruction=instruction,
+            thread_id=thread_id,
+            trigger=trigger,
+            conversation_id=thread_id,
+            user_id=user_id,
+            mission_id=rid,
+            run_id=rid,
+        )
+    runs.update_status(rid, RunStatus.RUNNING)
+    runs.append_step(rid, kind="node_entered", text="graph_start", data={"trigger": trigger.value})
+
     try:
         graph = await ensure_graph(with_checkpointer=use_checkpointer)
         async for mode, chunk in graph.astream(
-            {"messages": input_messages},
+            {"messages": input_messages, "run_id": rid},
             config=config,
             stream_mode=["custom", "values"],
         ):
@@ -75,11 +95,31 @@ async def stream_mission_graph(
             elif mode == "values":
                 final = chunk
     except Exception as exc:
+        runs.update_status(rid, RunStatus.FAILED, error=str(exc))
         error_event = {"event": "error", "message": str(exc)}
         if on_event:
             await on_event(error_event)
         yield f"data: {json.dumps(error_event)}\n\n"
         return
+
+    if final and final.get("waiting_approval"):
+        runs.update_status(
+            rid,
+            RunStatus.WAITING_APPROVAL,
+            pending_approval=final.get("pending_approval"),
+        )
+    elif final:
+        runs.update_status(
+            rid,
+            RunStatus.COMPLETED,
+            result_text=(
+                final["messages"][-1].content
+                if final.get("messages")
+                and isinstance(final["messages"][-1].content, str)
+                else final.get("final_text")
+            ),
+            result_ui=_ui_items(final),
+        )
 
     if final and final.get("messages"):
         message = final["messages"][-1]
@@ -100,6 +140,7 @@ async def stream_mission_graph(
         payload = {
             "event": "final",
             "thread_id": thread_id,
+            "run_id": rid,
             "text": message.content
             if isinstance(message.content, str)
             else str(message.content),
@@ -108,13 +149,15 @@ async def stream_mission_graph(
             "route": final.get("route"),
             "complexity": final.get("complexity"),
             "subtask_results": final.get("subtask_results") or [],
+            "waiting_approval": bool(final.get("waiting_approval")),
+            "pending_approval": final.get("pending_approval"),
             **doc_fields,
         }
         if on_event:
             await on_event(payload)
         yield f"data: {json.dumps(payload)}\n\n"
 
-    done = {"event": "done", "thread_id": thread_id}
+    done = {"event": "done", "thread_id": thread_id, "run_id": rid}
     if on_event:
         await on_event(done)
     yield f"data: {json.dumps(done)}\n\n"
@@ -126,8 +169,9 @@ async def run_mission(
     *,
     history: list[BaseMessage] | None = None,
     on_event: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    trigger: RunTrigger = RunTrigger.MESSAGE,
 ) -> None:
-    """Execute a mission to completion (used by background worker)."""
+    """Execute a mission/run to completion (used by background worker)."""
     mission = store.get_mission(mission_id)
     if not mission:
         return
@@ -159,7 +203,10 @@ async def run_mission(
             mission.thread_id,
             history=history,
             on_event=persist,
-            use_checkpointer=False,
+            use_checkpointer=True,
+            run_id=mission_id,
+            user_id=mission.user_id,
+            trigger=trigger,
         ):
             pass
         finalize_session_status(

@@ -1,4 +1,4 @@
-"""Short-lived callback tokens for hired agents to call orchestrator tools."""
+"""Short-lived callback tokens for hired agents to call coordinator tools."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import dataclass
 from typing import Any
 
-from orchestrator.integrations.oauth import public_base_url
+from core.broker.oauth import public_base_url
 
 DEFAULT_TTL_SECONDS = 900  # 15 minutes
 

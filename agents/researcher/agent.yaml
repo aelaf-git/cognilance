@@ -1,0 +1,15 @@
+id: researcher
+name: Researcher
+model: default
+description: "Gathers and checks information from the public web with cited sources."
+tools:
+  - web.search
+  - web.fetch
+  - link_validate.check
+  - thinking
+skills:
+  - research
+  - verify_links
+prompts:
+  system: prompts/system.md
+schema: schema.py

@@ -1,8 +1,8 @@
 services:
-  orchestrator:
+  coordinator:
     build:
       context: .
-      dockerfile: Dockerfile.orchestrator
+      dockerfile: Dockerfile.coordinator
     ports:
       - "8200:8200"
     env_file:
@@ -10,38 +10,40 @@ services:
         required: false
     environment:
       COGNILANCE_DEMO: "1"
-      COGNILANCE_ORCHESTRATOR_HOST: "0.0.0.0"
-      COGNILANCE_ORCHESTRATOR_PORT: "8200"
-      COGNILANCE_REGISTRY_URL: ${COGNILANCE_REGISTRY_URL:-http://host.docker.internal:8088}
-      COGNILANCE_ORCHESTRATOR_DB: /data/orchestrator.db
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      COGNILANCE_COORDINATOR_HOST: "0.0.0.0"
+      COGNILANCE_COORDINATOR_PORT: "8200"
+      COGNILANCE_COORDINATOR_DB: /data/coordinator.db
+      COGNILANCE_APPROVAL_GRADES: ${COGNILANCE_APPROVAL_GRADES:-irreversible}
+      PYTHONPATH: /app
     volumes:
-      - orchestrator_data:/data
+      - coordinator_data:/data
     develop:
       watch:
         - action: sync
-          path: ./SDK
-          target: /app/SDK
+          path: ./sdk
+          target: /app/sdk
+        - action: sync
+          path: ./core
+          target: /app/core
         - action: sync
           path: ./tools
           target: /app/tools
         - action: sync
-          path: ./pipeline
-          target: /app/pipeline
+          path: ./pipelines
+          target: /app/pipelines
         - action: sync
-          path: ./agents/orchestrator
-          target: /app/agents/orchestrator
+          path: ./agents
+          target: /app/agents
+        - action: sync
+          path: ./api
+          target: /app/api
+        - action: sync
+          path: ./workers
+          target: /app/workers
         - action: rebuild
           path: ./pyproject.toml
         - action: rebuild
-          path: ./tools/pyproject.toml
-        - action: rebuild
-          path: ./pipeline/pyproject.toml
-        - action: rebuild
-          path: ./agents/orchestrator/pyproject.toml
-        - action: rebuild
-          path: ./Dockerfile.orchestrator
+          path: ./Dockerfile.coordinator
 
   chat:
     build:
@@ -54,9 +56,9 @@ services:
         required: false
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
-      COGNILANCE_ORCHESTRATOR_URL: http://orchestrator:8200
+      COGNILANCE_COORDINATOR_URL: http://coordinator:8200
     depends_on:
-      - orchestrator
+      - coordinator
     develop:
       watch:
         - action: sync
@@ -73,4 +75,4 @@ services:
           path: ./UIs/chat/Dockerfile
 
 volumes:
-  orchestrator_data:
+  coordinator_data:

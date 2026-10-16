@@ -3,50 +3,73 @@
 ## Layout
 
 ```
-cognilance/          # Next.js landing
-SDK/cognilance/      # Python SDK (import name: cognilance)
-agents/
-  email_writer/      # Worker processes
-  web_scraper/
-  link_validator/
-  proposal_writer/
-  docs_creator/
-  orchestrator/      # FastAPI server, OAuth, drafts, missions
-registry/            # FastAPI + SQLAlchemy async (SQLite)
-UIs/
-  chat/              # Next.js chat
-  gen-ui/            # Generative UI widgets (LangGraph Studio)
-tools/               # Tool router, SkillRunner, tool-proxy, web/time, presenters
-pipeline/            # LangGraph graph, nodes, planning, routing, runtime
-scripts/
+cognilance/            # Next.js landing (unchanged)
+UIs/chat/              # Next.js chat (unchanged)
+
+agents/                # one folder per agent: agent.yaml + prompts/ + schema.py
+  loader.py            #   agent.yaml -> RolePack (legacy ids reporter/follow_up still resolve)
+  coordinator/  report_writer/  concept_note_writer/  email_agent/  researcher/  watcher/
+tools/                 # one folder per tool: manifest.yaml (actions + risk) + tool.py + tests/
+  registry.py          #   manifests, permission check, run_tool dispatch
+  gmail/  google_docs/  web/  link_validate/  calendar/  time/  presenters/
+pipelines/             # LangGraph graphs; every folder exposes graph.py
+  shared/              #   state, streaming, ui_selector, BoardPipeline builder
+  coordinator_board/   #   general: coordinator plans board tasks, specialists execute
+  weekly_report/  concept_note/  email_followup/   # preset task boards
+core/
+  registry/            # startup validation of agents x tools x pipelines
+  runtime/             # runs, board, missions, runner, event_bus, checkpointer
+  broker/              # OAuth, tokens, grants, risk policy, tool proxy routers
+  models/              # LLM gateway (Groq) + thinking
+  context/             # env, db, request context, conversations, users, drafts, subscriptions
+  signals/             # step / feedback signals for the improvement loop
+api/                   # FastAPI: server.py assembles routes/*, deps.py, sse.py, auth/
+workers/               # worker.py (queued runs) + schedulers/ (ticker, recurring, watcher events)
+sdk/cognilance/        # Python SDK + CLI (import name: cognilance)
+evals/                 # per-agent cases.yaml + cognilance-evals runner
+improvement/           # placeholder for the feedback loop
+data/                  # SQLite (runs, board, checkpoints) — gitignored
 ```
+
+One `pyproject.toml` at the root installs all of the above (`pip install -e .`).
 
 ## Request path
 
 ```mermaid
 flowchart LR
-  Orch[agents/orchestrator] --> Pipe[pipeline]
-  Orch --> Tools[tools]
-  Pipe --> Runner[SkillRunner]
-  Runner --> Reg[registry SQLAlchemy]
-  Runner --> Workers[agents workers]
-  Tools --> Proxy[tool_proxy]
+  Trigger[message schedule event] --> Run[Durable Run]
+  Run --> Pipe[pipelines/* LangGraph]
+  Pipe --> Coord[coordinator]
+  Coord --> Board[shared task board]
+  Board --> Spec[specialists]
+  Spec --> Tools[tools/* + risk policy]
+  Tools --> Broker[core/broker grants]
+  Broker --> Ext[Gmail Docs Web]
 ```
 
-1. Clients call the orchestrator (`:8200`).
-2. Planner / DeterministicRouter choose tools: `skill:<slug>`, `app:*`, `web`, `time`, `recurring`, or `thinking`.
-3. **Policy:** If the catalog has a matching skill and the required integration is connected → `skill:<skill>`. Else if the integration is connected → `app:*`. Else → `thinking` + connect CTA.
-4. On `skill:<skill>`, `SkillRunner` resolves an online agent URL from the registry cache and dispatches via `CognilanceManager.run_task` (A2A HTTP).
-5. Grants/tool-proxy stay for Docs/Gmail callbacks when a skill agent needs them.
+1. Clients call the API (`:8200`); `api/routes/chat.py` opens a durable Run.
+2. A pipeline runs: `seed → coordinator_plan → specialists → coordinator_assemble → ui_selector`.
+   `coordinator_board` lets the coordinator LLM plan; preset pipelines seed `preset_tasks`.
+3. The coordinator writes **board tasks** assigned to specialist ids from `agents/*/agent.yaml`.
+4. Specialists claim tasks and may only call tools listed in their `agent.yaml`;
+   `tools/registry.run_tool` checks that and the manifest risk grade.
+5. Risk grades (`read` / `draft` / `reversible_write` / `irreversible`) gate approval via
+   `COGNILANCE_APPROVAL_GRADES`. Credentials never leave `core/broker`.
+6. The coordinator assembles structured results; the UI selector renders a component when props exist.
 
-## Registry
+## Manifests, not a registry
 
-Agent directory only: register, heartbeat, discover by skill. No marketplace hire / ZIP host. Persistence is SQLAlchemy 2.x async (`aiosqlite`); tables are created on startup.
+Nothing is discovered over HTTP. `core/registry.validate_all()` runs at API and worker
+startup and fails loudly when an agent references an unknown tool, a tool has no `tool.py`,
+or a pipeline lacks `ensure_graph()`.
+
+Tool ids are `<folder>.<action>` (`gmail.send`, `google_docs.create`, `link_validate.check`).
+Old ids (`docs.*`, `link.validate`) and old role ids (`reporter`, `follow_up`) are aliased.
 
 ## Demo
 
 ```bash
 ./scripts/start_demo.sh
-# Orchestrator: http://127.0.0.1:8200/health
-# Registry: http://127.0.0.1:8088
+# API:     http://127.0.0.1:8200/health
+# Agents:  http://127.0.0.1:8200/skills/online
 ```

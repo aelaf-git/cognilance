@@ -10,20 +10,15 @@
 
 **Website (marketing):** see [`cognilance/`](cognilance/) — `cd cognilance && docker compose watch` → [http://localhost:3000](http://localhost:3000).
 
-**Chat + orchestrator (Docker):** from the repo root, `docker compose watch` → chat [http://localhost:3001](http://localhost:3001), orchestrator [http://localhost:8200/health](http://localhost:8200/health).
+**Chat + coordinator (Docker):** from the repo root, `docker compose watch` → chat [http://localhost:3001](http://localhost:3001), coordinator [http://localhost:8200/health](http://localhost:8200/health).
 
 ---
 
 ## Cognilance SDK
 
-Python SDK for building, registering, discovering, and hiring AI agents over the [A2A protocol](https://google.github.io/A2A/).
-
-Two classes, two roles. Pick the one that matches what your code does.
-
-| Class | Role |
-|-------|------|
-| **`CognilanceManager`** | Discovers agents and runs tasks — never listed on the registry |
-| **`CognilanceWorker`** | Exposes an A2A endpoint and delivers work |
+**Deferred.** The runtime no longer dispatches via `CognilanceManager` / A2A hire.
+The [`sdk/`](sdk/) package remains for later marketplace work; day-to-day demos use
+in-process agents under [`agents/`](agents/) and graphs under [`pipelines/`](pipelines/).
 
 ---
 
@@ -39,7 +34,7 @@ Two classes, two roles. Pick the one that matches what your code does.
 - [A2A protocol](#a2a-protocol)
 - [Registry](#registry)
 - [Agents](#agents)
-- [Orchestrator (generative UI)](#orchestrator-generative-ui)
+- [Coordinator (generative UI)](#coordinator-generative-ui)
 - [CLI reference](#cli-reference)
 - [Local development](#local-development)
 - [Environment variables](#environment-variables)
@@ -60,7 +55,7 @@ docker compose watch
 
 Open [http://localhost:3000](http://localhost:3000). Optional waitlist webhook: copy [`cognilance/.env.example`](cognilance/.env.example) to `cognilance/.env.local` and set `NEXT_PUBLIC_WAITLIST_ENDPOINT`.
 
-### Chat + orchestrator
+### Chat + coordinator
 
 ```bash
 # From the repo root — watches Python/TS sources and reloads
@@ -68,7 +63,7 @@ docker compose watch
 ```
 
 - Chat UI: [http://localhost:3001](http://localhost:3001)
-- Orchestrator health: [http://localhost:8200/health](http://localhost:8200/health)
+- Coordinator health: [http://localhost:8200/health](http://localhost:8200/health)
 
 Uses root `.env` for `GROQ_API_KEY` (and friends). Landing stays on `:3000` via `cognilance/docker-compose.yml` so it does not clash with chat.
 
@@ -103,31 +98,29 @@ pip install -e .
 
 ### Configure
 
-Create a `.env` file in the project root (optional — defaults work for local dev):
+Create a `.env` in the project root with at least:
 
 ```bash
-COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
+GROQ_API_KEY=your_groq_key
 ```
 
-### Run a worker
+### Run the durable coordinator demo
 
 ```bash
-# Terminal 1 — registry (Docker, SQLite, auto-reload on code changes)
-cd registry && docker compose watch
-
-# Terminal 2 — an agent (registers + serves over A2A)
-python agents/research_agent.py
+./scripts/start_demo.sh
+# Health: http://127.0.0.1:8200/health
+# Roles:  http://127.0.0.1:8200/skills/online
 ```
 
-### Hire from the orchestrator
+### Run the API directly
 
 ```bash
-python -m orchestrator
+cognilance-coordinator          # API on :8200
+cognilance-coordinator-worker   # optional background worker
+cognilance-evals                # offline agent evals
 ```
 
-The orchestrator health check is `http://127.0.0.1:8200/health`.
-
-See [Agents](#agents) and [Orchestrator (generative UI)](#orchestrator-generative-ui) for the full flow.
+See [Agents](#agents) and [Coordinator (generative UI)](#coordinator-generative-ui) for the full flow.
 
 ---
 
@@ -303,193 +296,60 @@ curl -X POST http://localhost:8001/a2a/tasks \
 
 ## Registry
 
-The registry is a **separate service** from the Python SDK. Agents built with the SDK talk to it over HTTP via `RegistryClient`. It lives in [`registry/`](registry/).
-
-```
-┌─────────────────────┐              HTTP (open API)              ┌──────────────────────┐
-│  Cognilance SDK     │ ─────────────────────────────────────►│  Registry API        │
-│  (pip install)      │   register · discover · heartbeat     │  (FastAPI)           │
-│                     │   trace events                        │                      │
-└─────────────────────┘                                       └──────────┬───────────┘
-                                                                         │
-                                                                         ▼
-                                                              ┌──────────────────────┐
-                                                              │  SQLite              │
-                                                              └──────────────────────┘
-```
-
-### Features
-
-- **SDK-compatible HTTP API** — same contract as `RegistryClient` in the Python SDK
-- **SQLAlchemy models** — `app/models.py` defines all tables; type-safe async Python client
-- **SQLite** — zero setup, database file at `registry.db`
-- **Heartbeat + stale detection** — agents go offline after 90s without a heartbeat
-- **Trace collector** — `POST /v1/traces/events` with WebSocket broadcast
-- **Dashboard** — `GET /dashboard` (agent list)
-
-### Quick start (Docker)
-
-```bash
-cd registry
-docker compose watch
-```
-
-`docker compose watch` syncs `app/` into the container and restarts uvicorn on changes. For a one-off run without file watching:
-
-```bash
-docker compose up --build
-```
-
-| URL | Description |
-|-----|-------------|
-| http://localhost:8088/health | Health check |
-| http://localhost:8088/dashboard | Agent directory UI |
-| http://localhost:8088/v1/agents/discover | Public agent search |
-
-### Local development
-
-**Requirements:** Python 3.11+
-
-```bash
-cd registry
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-
-# Tables are created on startup (SQLAlchemy create_all)
-uvicorn app.main:app --reload --port 8080
-```
-
-The database is a single file: **`registry.db`** (gitignored). Point the SDK at `http://127.0.0.1:8080` when running uvicorn locally.
-
-### Database
-
-Tables are created automatically on registry startup via SQLAlchemy `create_all`. Models live in **`registry/app/models.py`**.
-
-### API reference
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check |
-| POST | `/v1/agents` | Register agent |
-| GET | `/v1/agents/discover` | Search public online agents |
-| GET | `/v1/agents/{id}` | Get agent by ID |
-| POST | `/v1/agents/{id}/heartbeat` | Keep agent online |
-| POST | `/v1/traces/events` | Ingest trace event |
-| GET | `/v1/traces` | List recent traces |
-| GET | `/v1/traces/{id}` | Trace detail |
-| WS | `/v1/traces/ws` | Live trace stream |
-| GET | `/dashboard` | Web UI |
-
-### Backend environment variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `file:./registry.db` | SQLite database path |
-| `HOST` | `0.0.0.0` | Bind address |
-| `PORT` | `8080` | Listen port |
-| `HEARTBEAT_TIMEOUT_SECONDS` | `90` | Mark agents offline after this gap |
-| `STALE_CHECK_INTERVAL_SECONDS` | `30` | Background stale-agent sweep interval |
-| `CORS_ORIGINS` | `*` | Allowed CORS origins |
-
-### Connecting the SDK
-
-```bash
-# Terminal 1 — registry
-cd registry && docker compose watch
-
-# Terminal 2 — agent
-export COGNILANCE_REGISTRY_URL=http://127.0.0.1:8088
-python agents/research_agent.py
-```
+**Removed.** Specialists are in-process roles; there is no discovery/hire path.
 
 ---
 
 ## Agents
 
-The [`agents/`](agents/) folder contains independent `CognilanceWorker` processes that register on the registry and are dispatched by the orchestrator via the registry.
-
-| Agent | Skill | Port | Output shape | UI component |
-|-------|-------|------|--------------|--------------|
-| `email_writer/agent.py` | `email-writing` | 8101 | `{ to, subject, body, status }` | `email-draft` |
-
-The Email Writer uses **Gemini** for composition and calls back into the orchestrator Gmail **proxy** for send/read (no OAuth in the agent). See [`agents/README.md`](agents/README.md).
-
-### Run the agent
-
-```bash
-pip install -r agents/email_writer/requirements.txt
-
-# GEMINI_API_KEY + registry in repo root .env
-python agents/email_writer/agent.py      # :8101
-```
-
-Start with registry check:
-
-```bash
-./scripts/start_agents.sh
-```
+Specialists are **in-process agents** under [`agents/`](agents/): `coordinator`, `report_writer`, `concept_note_writer`, `email_agent`, `researcher`, `watcher`. Each folder has `agent.yaml` (allowed tool ids), `prompts/`, and `schema.py`. They share a durable task board; tools run through the permission broker. See [`agents/README.md`](agents/README.md).
 
 ---
 
 ## Agent Host
 
-Removed. Use worker processes under `agents/*/agent.py` and `./scripts/start_demo.sh` / `./scripts/start_agents.sh`.
+Removed.
 
+## Coordinator (generative UI)
 
-## Orchestrator (generative UI)
-
-The [`orchestrator/`](orchestrator/) implements the **Cognilance Orchestrator execution algorithm** as a LangGraph pipeline with per-thread sessions (`thread_id` + `MemorySaver` checkpointer) and registry catalog caching (60s TTL per thread).
+The coordinator hosts durable **Runs** with a LangGraph board-centric pipeline and SQLite checkpointer.
 
 ### Algorithm
 
 ```
-planner → [simple] thinking → ui_selector → END
-        → [complex] task    → ui_selector → END
+START → seed → coordinator_plan → specialists → coordinator_assemble → ui_selector → END
 ```
 
-1. **User input** — prompt submitted via `POST /chat/stream` or `POST /chat`
-2. **Router-first planning** — `DeterministicRouter` handles known intents (email, Docs, proposals, web, …) with **zero** planner LLM calls; only open-ended requests use one LLM plan call
-3. **Routing** — **Simple** → Thinking Agent; **Complex** → multi-subtask plan
-4. **Task delegation** — Task Agent runs subtasks in dependency layers (`asyncio.gather` within each layer)
-5. **Execution** — specialists dispatched via `CognilanceManager.run_task` by skill slug; tool-proxy keeps OAuth on the orchestrator
-6. **Output rendering** — UI Selector picks a rich React component; SSE is pushed via an in-process event bus (reconnect still polls mission events)
+Pipelines live in [`pipelines/`](pipelines/): `coordinator_board` (LLM-planned) plus preset
+boards `weekly_report`, `concept_note`, `email_followup`.
+
+1. **User / schedule / event** — creates a durable Run
+2. **Coordinator** — decomposes into board tasks for specialists
+3. **Specialists** — claim tasks and call allowed tools (risk-graded; approval for irreversible)
+4. **Assemble** — structured results → Gen UI selector when props exist
 
 Details: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-### Internal agents
+### Roles
 
-| Agent | Node | Role |
-|-------|------|------|
-| Planner | `planner` | Complexity + catalog + plan + thinking stream |
-| Thinking | `thinking` | Simple path and subtask fallback |
-| Task | `task` | Parallel/sequential subtask execution |
-| UI Selector | `ui_selector` | Generative UI component selection |
+| Agent | Primary tools |
+|------|---------------|
+| coordinator | board.create, thinking |
+| report_writer | google_docs.create / google_docs.write |
+| concept_note_writer | google_docs.create / google_docs.write |
+| email_agent | gmail.draft / gmail.send (approval-gated) |
+| researcher | web.search / web.fetch / link_validate.check |
+| watcher | gmail.search + board alerts |
 
-LangGraph Studio uses the component map in [`UIs/gen-ui/`](UIs/gen-ui/) when you run `langgraph dev`.
+Tool manifests with risk grades live in `tools/<name>/manifest.yaml`.
 
-### End-to-end (three terminals)
-
-**Terminal 1 — registry** (must be up before agents)
-
-```bash
-cd registry && docker compose watch
-```
-
-**Terminal 2 — agents** (waits for registry health on `:8088`)
+### End-to-end (one command)
 
 ```bash
-./scripts/start_agents.sh
+./scripts/start_demo.sh
 ```
 
-**Terminal 3 — orchestrator**
-
-```bash
-source .venv/bin/activate
-pip install -e . -e "./orchestrator[dev]" -r agents/email_writer/requirements.txt
-python -m orchestrator
-```
-
-Startup prints the health URL (default `http://127.0.0.1:8200/health`). Uses the repo root `.env` for `GROQ_API_KEY` and `COGNILANCE_REGISTRY_URL`.
+Health: `http://127.0.0.1:8200/health`. Roles: `http://127.0.0.1:8200/skills/online`. Uses root `.env` for `GROQ_API_KEY`.
 
 ### Example prompts
 
@@ -503,8 +363,9 @@ Startup prints the health URL (default `http://127.0.0.1:8200/health`). Uses the
 ### Quick smoke test (no UI)
 
 ```bash
-source .venv/bin/activate
+source venv/bin/activate
 python scripts/e2e_smoke_test.py
+pytest tools evals   # tool unit tests + offline agent evals
 ```
 
 ---
@@ -513,7 +374,7 @@ python scripts/e2e_smoke_test.py
 
 After `pip install -e .`, the `cognilance` command is available. Run `cognilance` with no arguments to print built-in help.
 
-The CLI is for **local development and operations** — running workers and inspecting the registry. Start the registry separately via **[`registry/`](registry/)**. `CognilanceManager` has no CLI command; the [orchestrator](#orchestrator-generative-ui) uses it directly in Python.
+The CLI is for **local SDK worker development** (deferred marketplace path). Day-to-day demos use `./scripts/start_demo.sh` and the in-process coordinator — not a registry.
 
 ### Command overview
 
@@ -645,14 +506,13 @@ The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
 ## Local development
 
 ```bash
-# Full stack (registry + workers + orchestrator on :8200)
+# Durable coordinator + in-process specialists on :8200
 ./scripts/start_demo.sh
 
-# Or piecemeal:
-cd registry && docker compose up -d --build
-./scripts/start_agents.sh
-pip install -e . -e tools -e pipeline -e agents/orchestrator
-cognilance-orchestrator
+# Or:
+source venv/bin/activate
+pip install -e .
+cognilance-coordinator
 ```
 
 ---
@@ -661,42 +521,29 @@ cognilance-orchestrator
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `COGNILANCE_REGISTRY_URL` | No | `http://127.0.0.1:8088` | Registry URL |
-| `COGNILANCE_PORT` | No | `8000` | Default port for workers |
-| `COGNILANCE_AGENT_HOST_PORT` | No | `8300` | Agent Host developer portal port |
-| `COGNILANCE_AGENT_HOST_DATA_DIR` | No | `data/hosted-agents` | Extracted agent ZIPs and SQLite DB |
-| `AGENT_HOST_ENCRYPTION_KEY` | No | falls back to `INTEGRATION_ENCRYPTION_KEY` | Encrypts per-agent secrets at rest |
-| `GROQ_API_KEY` | For orchestrator | — | Groq API key for the orchestrator planner |
-| `GEMINI_API_KEY` | For agents | — | Google Gemini API key for worker agents |
-| `GEMINI_MODEL` | No | `gemini-2.0-flash` | Gemini model for agents |
+| `GROQ_API_KEY` | For coordinator | — | Groq API key for the coordinator / specialists |
+| `COGNILANCE_APPROVAL_GRADES` | No | `irreversible` | Comma-separated tool risk grades that pause for approval |
+| `COGNILANCE_COORDINATOR_PORT` | No | `8200` | Coordinator HTTP port |
+| `COGNILANCE_REGISTRY_URL` | — | — | Unused (registry removed from runtime) |
 
 ---
 
 ## Project layout
 
 ```
-cognilance/              # Next.js landing (Vercel root)
-SDK/cognilance/          # Python SDK (import name: cognilance)
-agents/
-  email_writer/          # Worker agents
-  web_scraper/
-  link_validator/
-  proposal_writer/
-  docs_creator/
-  orchestrator/          # FastAPI orchestrator
-UIs/
-  chat/                  # Next.js chat
-  gen-ui/                # LangGraph generative UI widgets
-tools/                   # Tool router, SkillRunner, tool-proxy, presenters
-pipeline/                # LangGraph graph, planning, routing, nodes
-registry/                # FastAPI + SQLAlchemy async (SQLite)
-scripts/
-  start_demo.sh
-  start_agents.sh
-  e2e_smoke_test.py
-pyproject.toml
+cognilance/              # Next.js landing
+UIs/chat/                # Next.js chat
+agents/                  # <id>/agent.yaml + prompts/ + schema.py; loader.py
+tools/                   # <name>/manifest.yaml + tool.py + tests/; registry.py
+pipelines/               # coordinator_board, weekly_report, concept_note, email_followup, shared/
+core/                    # registry, runtime, broker, models, context, signals
+api/                     # FastAPI server + routes/ + sse.py + auth/
+workers/                 # worker.py + schedulers/
+sdk/cognilance/          # Python SDK + CLI
+evals/                   # cases.yaml per agent + run.py
+improvement/             # feedback-loop placeholder
+scripts/                 # start_demo.sh, e2e_smoke_test.py
 ARCHITECTURE.md
-README.md
 ```
 
 ### Public API

@@ -9,7 +9,7 @@ import { buildFinalMessages } from "@/lib/build-prompt"
 import {
   clearOrchestratorConversation,
   streamOrchestratorReply
-} from "@/lib/orchestrator-chat"
+} from "@/lib/coordinator-chat"
 import { Tables } from "@/supabase/types"
 import { ChatMessage, ChatPayload, LLMID, ModelProvider } from "@/types"
 import { useRouter } from "next/navigation"

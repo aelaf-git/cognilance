@@ -1,8 +1,8 @@
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-const ORCHESTRATOR_URL =
-  process.env.COGNILANCE_ORCHESTRATOR_URL || "http://127.0.0.1:8200"
+const COORDINATOR_URL =
+  process.env.COGNILANCE_COORDINATOR_URL || "http://127.0.0.1:8200"
 
 function allowed(method: string, path: string) {
   return (
@@ -46,7 +46,7 @@ async function proxy(request: Request, path: string[]) {
 
   let upstream: Response
   try {
-    upstream = await fetch(`${ORCHESTRATOR_URL}/${joined}`, {
+    upstream = await fetch(`${COORDINATOR_URL}/${joined}`, {
       method: request.method,
       headers,
       body:
@@ -57,7 +57,7 @@ async function proxy(request: Request, path: string[]) {
     })
   } catch {
     return Response.json(
-      { error: "Cognilance orchestrator is not running." },
+      { error: "Cognilance coordinator is not running." },
       { status: 502 }
     )
   }

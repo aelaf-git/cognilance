@@ -1,0 +1,72 @@
+"""Anonymous per-browser user sessions for integration scoping."""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import logging
+import os
+import uuid
+
+from fastapi import Request, Response
+
+COOKIE_NAME = "coordinator_uid"
+_log = logging.getLogger(__name__)
+
+
+def _demo_mode() -> bool:
+    return os.getenv("COGNILANCE_DEMO", "").strip() in {"1", "true", "yes"}
+
+
+def _secret() -> bytes:
+    explicit = os.getenv("COORDINATOR_SESSION_SECRET") or os.getenv(
+        "ORCHESTRATOR_SESSION_SECRET"
+    )
+    if explicit:
+        return explicit.encode()
+    if _demo_mode():
+        _log.warning(
+            "COORDINATOR_SESSION_SECRET unset; using insecure demo default "
+            "(COGNILANCE_DEMO=1)"
+        )
+        return b"cognilance-dev-insecure-session"
+    raise RuntimeError(
+        "COORDINATOR_SESSION_SECRET is required (or set COGNILANCE_DEMO=1 for local demo)"
+    )
+
+
+def _sign(value: str) -> str:
+    digest = hmac.new(_secret(), value.encode(), hashlib.sha256).hexdigest()
+    return f"{value}.{digest}"
+
+
+def _verify(signed: str) -> str | None:
+    if "." not in signed:
+        return None
+    value, digest = signed.rsplit(".", 1)
+    expected = hmac.new(_secret(), value.encode(), hashlib.sha256).hexdigest()
+    if hmac.compare_digest(digest, expected):
+        return value
+    return None
+
+
+def get_user_id(request: Request) -> str | None:
+    cookie = request.cookies.get(COOKIE_NAME)
+    if not cookie:
+        return None
+    return _verify(cookie)
+
+
+def set_user_cookie(response: Response, user_id: str) -> None:
+    response.set_cookie(
+        COOKIE_NAME,
+        _sign(user_id),
+        httponly=True,
+        samesite="lax",
+        max_age=365 * 24 * 3600,
+        path="/",
+    )
+
+
+def resolve_user_id(request: Request) -> str:
+    return get_user_id(request) or str(uuid.uuid4())

@@ -9,7 +9,7 @@ from langchain_core.messages import BaseMessage
 from langchain_groq import ChatGroq
 from pydantic import BaseModel
 
-import orchestrator.env  # noqa: F401
+import core.context.env  # noqa: F401
 
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 

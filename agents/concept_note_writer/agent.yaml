@@ -1,0 +1,15 @@
+id: concept_note_writer
+name: Concept Note Writer
+model: default
+description: "Drafts concept notes: problem, objectives, approach, outcomes, budget outline."
+tools:
+  - google_docs.create
+  - google_docs.write
+  - web.search
+  - thinking
+skills:
+  - concept_note
+  - problem_statement
+prompts:
+  system: prompts/system.md
+schema: schema.py

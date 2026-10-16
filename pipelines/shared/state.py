@@ -1,4 +1,4 @@
-"""Orchestrator graph state."""
+"""Orchestrator graph state — durable run + shared task board."""
 
 from __future__ import annotations
 
@@ -21,16 +21,15 @@ class Plan(TypedDict, total=False):
     steps: list[PlanStep]
 
 
-class Subtask(TypedDict, total=False):
+class BoardTaskState(TypedDict, total=False):
     id: str
     title: str
     instruction: str
-    skill: str | None
-    tool: str | None
-    action: str | None
-    params: dict[str, Any] | None
-    assignee: str
+    assignee_role: str
+    status: str
     depends_on: list[str]
+    result_text: str
+    result_json: dict[str, Any]
 
 
 class SubtaskResult(TypedDict, total=False):
@@ -41,21 +40,32 @@ class SubtaskResult(TypedDict, total=False):
     status: str
 
 
+class PendingApproval(TypedDict, total=False):
+    tool: str
+    action: str | None
+    params: dict[str, Any]
+    risk: str
+    role: str
+    task_id: str | None
+
+
 class State(TypedDict, total=False):
-    """Shared state for the orchestrator graph."""
+    """Shared state for the durable coordinator graph."""
 
     messages: Annotated[list[BaseMessage], add_messages]
     ui: Annotated[Sequence[AnyUIMessage], ui_message_reducer]
+    run_id: str
+    pipeline: str
+    preset_tasks: list[BoardTaskState]
     complexity: str
     route: str
     thinking: str
     plan: Plan
-    catalog_agents: list[dict[str, Any]]
-    catalog_text: str
-    catalog_fetched_at: float | None
-    subtasks: list[Subtask]
+    board_tasks: list[BoardTaskState]
     subtask_results: list[SubtaskResult]
     final_text: str
     final_data: dict[str, Any]
     answer_streamed: bool
     direct_reply: bool
+    pending_approval: PendingApproval | None
+    waiting_approval: bool

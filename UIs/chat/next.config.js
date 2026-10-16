@@ -3,7 +3,10 @@ const withBundleAnalyzer = require("@next/bundle-analyzer")({
 })
 
 const withPWA = require("next-pwa")({
-  dest: "public"
+  dest: "public",
+  // GenerateSW in next dev / webpack watch corrupts the chunk graph and
+  // surfaces as ChunkLoadError timeouts on app/[locale]/layout.js.
+  disable: process.env.NODE_ENV === "development"
 })
 
 module.exports = withBundleAnalyzer(

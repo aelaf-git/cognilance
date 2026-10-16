@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from langchain_core.messages import BaseMessage
 
-from pipeline.llm import get_llm, to_chat_messages
-from pipeline.streaming import reveal_text
+from core.models.gateway import get_llm, to_chat_messages
+from pipelines.shared.streaming import reveal_text
 
 THINKING_SYSTEM = """You are Cognilance replying in chat.
 

@@ -1,0 +1,8 @@
+id: calendar
+name: Google Calendar
+description: Read upcoming events through the Calendar integration.
+integration: google-calendar
+actions:
+  list:
+    risk: read
+    description: List events for today / this week / a range.

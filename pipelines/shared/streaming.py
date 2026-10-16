@@ -1,4 +1,4 @@
-"""Helpers for streaming orchestrator events to the chat UI."""
+"""Helpers for streaming coordinator events to the chat UI."""
 
 from __future__ import annotations
 
