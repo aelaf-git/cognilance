@@ -1,0 +1,7 @@
+id: time
+name: Time
+description: Current date/time in the user's timezone.
+actions:
+  now:
+    risk: read
+    description: Return the current time context.

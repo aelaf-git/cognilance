@@ -1,0 +1,20 @@
+id: gmail
+name: Gmail
+description: Draft, send, and read email through the Gmail integration (OAuth stays in the broker).
+integration: gmail
+actions:
+  draft:
+    risk: draft
+    description: Compose an email draft for user review (no network write).
+  send:
+    risk: irreversible
+    description: Send the approved pending draft.
+  search:
+    risk: read
+    description: Search the inbox.
+  list:
+    risk: read
+    description: List recent emails.
+  read:
+    risk: read
+    description: Read one email by id.

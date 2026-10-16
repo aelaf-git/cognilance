@@ -1,0 +1,15 @@
+id: coordinator
+name: Coordinator
+model: default
+description: "Plans the shared task board for specialists and assembles their results."
+tools:
+  - board.create
+  - thinking
+skills:
+  - decompose
+  - assemble
+prompts:
+  system: prompts/system.md
+  plan: prompts/plan.md
+  assemble: prompts/assemble.md
+schema: schema.py

@@ -1,0 +1,13 @@
+- id: arithmetic_no_search
+  instruction: "What is 2+2? Answer with just the number."
+  expect:
+    tool: thinking
+    contains: ["4"]
+- id: web_question
+  instruction: "Research the latest news about open-source LLM releases this month."
+  expect:
+    tool: web.search
+- id: link_check
+  instruction: "Check whether https://example.com/docs is still a valid link."
+  expect:
+    tool: link_validate.check

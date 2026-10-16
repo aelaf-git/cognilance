@@ -1,0 +1,9 @@
+- id: plain_summary
+  instruction: "Summarise the key points of last week's standup notes in 5 bullets."
+  expect:
+    tool: thinking
+- id: google_doc_report
+  instruction: "Write the monthly progress report as a Google Doc titled 'October progress'."
+  expect:
+    tool: google_docs.create
+    contains: ["October"]

@@ -1,0 +1,13 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "coordinator_board": "./pipelines/coordinator_board/graph.py:graph",
+    "weekly_report": "./pipelines/weekly_report/graph.py:graph",
+    "concept_note": "./pipelines/concept_note/graph.py:graph",
+    "email_followup": "./pipelines/email_followup/graph.py:graph"
+  },
+  "ui": {
+    "coordinator_board": "./UIs/gen-ui/index.tsx"
+  },
+  "env": "./.env"
+}
