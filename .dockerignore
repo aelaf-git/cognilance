@@ -18,7 +18,7 @@ venv
 .env.*
 !.env.example
 UIs/chat
-cognilance
+web
 registry
 data
 *.db

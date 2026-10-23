@@ -1,4 +1,4 @@
-"""Cognilance SDK — The Marketplace of Minds."""
+"""Cognilance SDK: The Marketplace of Minds."""
 
 from cognilance.core.models import AgentCard, Task, TaskResult
 from cognilance.core.manager import CognilanceManager

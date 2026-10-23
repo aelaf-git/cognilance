@@ -1,4 +1,4 @@
-"""Shared task board models — specialists claim structured work, not free chat."""
+"""Shared task board models: specialists claim structured work, not free chat."""
 
 from __future__ import annotations
 

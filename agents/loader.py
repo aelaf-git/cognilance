@@ -2,9 +2,9 @@
 
 Each agent folder contains:
 
-* ``agent.yaml`` – id, name, model, allowed tool ids, skills, prompt path, schema path
-* ``prompts/``   – markdown prompt files referenced from the manifest
-* ``schema.py``  – pydantic result model (``Result``) for structured outputs
+* ``agent.yaml`` - id, name, model, allowed tool ids, skills, prompt path, schema path
+* ``prompts/``   - markdown prompt files referenced from the manifest
+* ``schema.py``  - pydantic result model (``Result``) for structured outputs
 
 ``RolePack`` keeps the same shape the pipeline used before manifests existed.
 """

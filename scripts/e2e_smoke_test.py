@@ -90,7 +90,7 @@ async def main() -> None:
     assert [t["assignee_role"] for t in preset("x")] == ["researcher", "report_writer"]
     print(f"   {available_pipelines()}")
 
-    print("3) Durable Run — coordinator board graph...")
+    print("3) Durable Run: coordinator board graph...")
     result = await run_graph(
         "What is 2+2? Answer with just the number.",
         thread_id=f"smoke-{uuid.uuid4().hex[:8]}",
@@ -118,7 +118,7 @@ async def main() -> None:
         user_id="smoke-user",
         conversation_id=f"smoke-conv-{uuid.uuid4().hex[:6]}",
         emails=[{"id": "m1", "from": "Ada <ada@example.com>", "subject": "Hello"}],
-        summary='Heads up — Ada just emailed you about "Hello".',
+        summary='Heads up: Ada just emailed you about "Hello".',
     )
     assert event_run, "expected watcher event run id"
     event = RunStore().get_run(event_run)

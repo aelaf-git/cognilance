@@ -58,7 +58,7 @@ async def validate_links(text_or_urls: str | list[str]) -> dict[str, Any]:
     for row in results:
         counts[row.get("verdict", "broken")] = counts.get(row.get("verdict", "broken"), 0) + 1
     summary = (
-        f"Checked {len(results)} links — "
+        f"Checked {len(results)} links: "
         f"{counts['ok']} ok, {counts['warning']} warning, {counts['broken']} broken."
     )
     return {"links": list(results), **counts, "summary": summary}

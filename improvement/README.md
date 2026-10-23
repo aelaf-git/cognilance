@@ -4,9 +4,9 @@ Placeholder for the feedback loop. Nothing here runs yet.
 
 Inputs already produced by the runtime:
 
-- `core/signals` — `record_step` / `record_feedback` write per-run signals
+- `core/signals`: `record_step` / `record_feedback` write per-run signals
   (tool picked, risk, approval outcomes, user thumbs up/down).
-- `evals/` — per-agent `cases.yaml` plus `cognilance-evals` runner.
+- `evals/`: per-agent `cases.yaml` plus `cognilance-evals` runner.
 
 Planned flow:
 

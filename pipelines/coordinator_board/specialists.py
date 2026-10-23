@@ -1,4 +1,4 @@
-"""Specialist nodes — claim board tasks and execute via role tools."""
+"""Specialist nodes: claim board tasks and execute via role tools."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _pick_tool(role_id: str, instruction: str, allowed: tuple[str, ...] = ()) ->
     if role_id == "researcher":
         if ("http://" in text or "https://" in text) and "valid" in text:
             return first("link_validate.check")
-        # Pure reasoning / arithmetic — don't force a web call
+        # Pure reasoning / arithmetic: don't force a web call
         if any(
             w in text
             for w in ("what is", "calculate", "compute", "how many", "brief answer")

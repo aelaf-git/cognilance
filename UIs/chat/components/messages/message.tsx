@@ -227,7 +227,7 @@ export const Message: FC<MessageProps> = ({
             >
               {message.role === "assistant" && !profile ? (
                 <img
-                  src={theme === "light" ? "/icon-light.png" : "/icon.png"}
+                  src="/cognilance-logo.png"
                   alt="Cognilance"
                   width={ICON_SIZE}
                   height={ICON_SIZE}

@@ -1,4 +1,4 @@
-"""TraceEmitter — fire-and-forget trace events to the registry collector."""
+"""TraceEmitter: fire-and-forget trace events to the registry collector."""
 
 from __future__ import annotations
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-import core.context.env  # noqa: F401 — load repo-root .env before nodes
+import core.context.env  # noqa: F401: load repo-root .env before nodes
 
 from langgraph.graph import END, START, StateGraph
 

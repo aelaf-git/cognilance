@@ -171,6 +171,6 @@ class DraftStore:
             lines.append(f"  To: {to_addr}")
         lines.append(f"  Body preview: {preview}")
         lines.append(
-            "  If the user approves or provides a recipient, use send_email — do NOT compose a new draft."
+            "  If the user approves or provides a recipient, use send_email: do NOT compose a new draft."
         )
         return "\n".join(lines)

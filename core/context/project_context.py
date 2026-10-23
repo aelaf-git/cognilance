@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 COGNILANCE_DESCRIPTION = """
-Cognilance is an AI coordinator that connects to the tools people already use —
-Gmail, Google Calendar, Google Drive, Slack, GitHub, and more — and completes real
+Cognilance is an AI coordinator that connects to the tools people already use , 
+Gmail, Google Calendar, Google Drive, Slack, GitHub, and more: and completes real
 tasks on their behalf. Users chat in natural language; Cognilance plans the work,
 uses connected integrations, and can run specialized skill agents for advanced
 workflows. It supports background listeners (e.g. notify when new email arrives),
-scheduled recurring tasks, web research, and rich document creation — all with
+scheduled recurring tasks, web research, and rich document creation: all with
 user review before sensitive actions like sending email.
 """.strip()
 

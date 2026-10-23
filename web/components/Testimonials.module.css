@@ -1,0 +1,153 @@
+.wrap {
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.wrap :global(.eyebrow) {
+  color: var(--ink);
+  opacity: 0.55;
+}
+
+.wrap h2 {
+  color: var(--ink);
+}
+
+.wrap :global(.lead) {
+  color: #525252;
+}
+
+.header {
+  max-width: 40rem;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.header h2 {
+  max-width: none;
+}
+
+.header .lead {
+  margin-inline: auto;
+}
+
+.marquee {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  max-height: 45rem;
+  max-width: 72rem;
+  margin: 2.75rem auto 0;
+  overflow: hidden;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 10%,
+    black 90%,
+    transparent
+  );
+}
+
+.col {
+  width: 100%;
+  max-width: 22rem;
+}
+
+.hideMobile {
+  display: none;
+}
+
+.track {
+  display: flex;
+  flex-direction: column;
+  animation: rise 16s linear infinite;
+}
+
+.slow {
+  animation-duration: 20s;
+}
+
+.fast {
+  animation-duration: 13s;
+}
+
+.track:hover {
+  animation-play-state: paused;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  padding-bottom: 1.15rem;
+}
+
+.card {
+  padding: 1.5rem 1.4rem;
+  border: 1px solid var(--border-ink);
+  border-radius: var(--radius-lg);
+  background: var(--paper-soft);
+}
+
+.card p {
+  margin: 0;
+  color: #404040;
+  line-height: 1.65;
+}
+
+.card footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  flex-shrink: 0;
+  filter: grayscale(1);
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card cite {
+  display: block;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.card footer span:last-child {
+  color: #737373;
+  font-size: 0.85rem;
+}
+
+@keyframes rise {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, -33.333%, 0);
+  }
+}
+
+@media (min-width: 768px) {
+  .hideMobile {
+    display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track,
+  .slow,
+  .fast {
+    animation: none;
+  }
+}

@@ -1,4 +1,4 @@
-"""Time tool — deterministic, no network."""
+"""Time tool: deterministic, no network."""
 
 from __future__ import annotations
 

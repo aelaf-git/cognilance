@@ -1,4 +1,4 @@
-"""CognilanceManager — discover agents and run tasks over A2A."""
+"""CognilanceManager: discover agents and run tasks over A2A."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class CognilanceManager:
     """
     Discover online agents and dispatch tasks by URL (local skill runners use this).
 
-    Drop this into any existing project — LangChain, CrewAI, FastAPI, a script.
+    Drop this into any existing project: LangChain, CrewAI, FastAPI, a script.
     No server or registry listing required. Use CognilanceWorker to expose an A2A endpoint.
 
         async with CognilanceManager.from_env() as manager:
@@ -109,7 +109,7 @@ class CognilanceManager:
         )
         await self._emit(
             "discover",
-            text=f"Searched registry (skills={skills or 'any'}) — {len(agents)} found",
+            text=f"Searched registry (skills={skills or 'any'}): {len(agents)} found",
             skills=skills or [],
             tags=tags or [],
             found=len(agents),
@@ -256,7 +256,7 @@ class CognilanceManager:
         """
         Start a local manager HTTP API and optional terminal loop.
 
-        Managers are not listed on the registry — this serves POST /chat on the given port.
+        Managers are not listed on the registry: this serves POST /chat on the given port.
         Pass an async handler: ``async def handle(manager, message) -> str``.
         For the product browser UI, use the Cognilance orchestrator chat.
         """
@@ -292,7 +292,7 @@ class CognilanceManager:
         print(f"\n{self._agent_name} API: {health_url} (POST /chat)")
         print("Use the Cognilance orchestrator chat for the product UI. Commands: agents, exit.\n")
         if open_ui:
-            print("(open_ui ignored — managers no longer serve a browser chat UI)\n")
+            print("(open_ui ignored: managers no longer serve a browser chat UI)\n")
 
         while True:
             try:

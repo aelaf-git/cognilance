@@ -47,7 +47,7 @@ function formatPlanThinking(
       const title = String(sub.title || "").trim()
       const instruction = String(sub.instruction || "").trim()
       if (title && instruction && title !== instruction) {
-        parts.push(`${title} — ${instruction}`)
+        parts.push(`${title}: ${instruction}`)
       } else if (title || instruction) {
         parts.push(title || instruction)
       }
@@ -204,7 +204,7 @@ export async function streamOrchestratorReply(
           "route",
           "Kept it direct",
           latestThinking
-            ? `${latestThinking} — answered directly without multi-step delegation.`
+            ? `${latestThinking}: answered directly without multi-step delegation.`
             : "Decided this request can be answered directly without extra steps."
         )
       } else {
@@ -212,7 +212,7 @@ export async function streamOrchestratorReply(
           "route",
           "Split the work",
           latestThinking
-            ? `${latestThinking} — routed through specialized steps.`
+            ? `${latestThinking}: routed through specialized steps.`
             : "Broke the request into smaller specialized pieces."
         )
       }
@@ -255,7 +255,7 @@ export async function streamOrchestratorReply(
       upsert(
         `step-${String(event.id || steps.length)}`,
         title ? `Started: ${title}` : "Started a step",
-        detailParts.join(" — ") || "Took on one piece of the work."
+        detailParts.join(". ") || "Took on one piece of the work."
       )
       return
     }

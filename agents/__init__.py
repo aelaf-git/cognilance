@@ -1,1 +1,1 @@
-"""Cognilance agents — one folder per role: agent.yaml, prompts/, schema.py."""
+"""Cognilance agents: one folder per role: agent.yaml, prompts/, schema.py."""

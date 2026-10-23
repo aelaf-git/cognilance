@@ -311,7 +311,7 @@ def format_web_search_result(result: dict[str, Any]) -> str:
     if not results:
         return f'No web results found for "{query}".'
 
-    lines = [f'Web search for "{query}" — {len(results)} result(s):\n']
+    lines = [f'Web search for "{query}": {len(results)} result(s):\n']
     for i, item in enumerate(results, 1):
         title = item.get("title") or "(no title)"
         url = item.get("url") or ""

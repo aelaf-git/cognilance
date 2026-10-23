@@ -7,14 +7,13 @@ interface BrandProps {
 }
 
 export const Brand: FC<BrandProps> = ({ theme = "dark" }) => {
-  const src = theme === "light" ? "/icon-light.png" : "/icon.png"
-
   return (
     <div className="flex flex-col items-center">
       <img
-        src={src}
+        src="/cognilance-logo.png"
         alt="Cognilance"
         className="mb-2 h-16 w-16 object-contain"
+        data-theme={theme}
       />
       <div className="text-4xl font-bold tracking-wide">Cognilance</div>
     </div>

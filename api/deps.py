@@ -43,7 +43,7 @@ def thread_config(thread_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": thread_id}}
 
 
-# In-flight chat/mission graph tasks — abort cancels these so work stops mid-run.
+# In-flight chat/mission graph tasks: abort cancels these so work stops mid-run.
 _running_mission_tasks: dict[str, asyncio.Task[Any]] = {}
 
 

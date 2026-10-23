@@ -1,0 +1,133 @@
+.wrap {
+  position: relative;
+  z-index: 1;
+  background: var(--void);
+  color: var(--ash);
+  padding-bottom: clamp(2.5rem, 5vw, 4rem);
+}
+
+.header {
+  max-width: 36rem;
+}
+
+.header :global(.eyebrow) {
+  margin-bottom: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.header h2 {
+  margin: 0;
+  color: var(--white);
+  max-width: 16ch;
+}
+
+.lead {
+  margin: 1rem 0 0;
+  color: var(--fog);
+}
+
+.marquee {
+  margin-top: 2.5rem;
+}
+
+.viewport {
+  overflow: hidden;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 6%,
+    #000 94%,
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 6%,
+    #000 94%,
+    transparent
+  );
+}
+
+.rail {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: marquee 48s linear infinite;
+}
+
+.track {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 3rem;
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 3rem 0.35rem 0;
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: color 0.25s ease;
+}
+
+.item:hover {
+  color: var(--white);
+}
+
+.icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: contain;
+  opacity: 0.75;
+  filter: grayscale(1) brightness(1.15);
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+.item:hover .icon {
+  opacity: 1;
+  filter: none;
+}
+
+/* Four identical tracks: shift by one track width (25%) for a seamless loop */
+@keyframes marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-25%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewport {
+    mask-image: none;
+    -webkit-mask-image: none;
+    overflow: visible;
+  }
+
+  .rail {
+    display: block;
+    width: 100%;
+    animation: none;
+  }
+
+  .track {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 1.25rem 2rem;
+    padding: 0;
+  }
+
+  .track:nth-child(n + 2) {
+    display: none;
+  }
+}

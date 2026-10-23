@@ -1,4 +1,4 @@
-"""Generative UI Selector — picks the best React component for the final output."""
+"""Generative UI Selector: picks the best React component for the final output."""
 
 from __future__ import annotations
 

@@ -3,7 +3,7 @@
 ## Layout
 
 ```
-cognilance/            # Next.js landing (unchanged)
+web/                   # Next.js landing
 UIs/chat/              # Next.js chat (unchanged)
 
 agents/                # one folder per agent: agent.yaml + prompts/ + schema.py
@@ -28,7 +28,7 @@ workers/               # worker.py (queued runs) + schedulers/ (ticker, recurrin
 sdk/cognilance/        # Python SDK + CLI (import name: cognilance)
 evals/                 # per-agent cases.yaml + cognilance-evals runner
 improvement/           # placeholder for the feedback loop
-data/                  # SQLite (runs, board, checkpoints) — gitignored
+data/                  # SQLite (runs, board, checkpoints): gitignored
 ```
 
 One `pyproject.toml` at the root installs all of the above (`pip install -e .`).

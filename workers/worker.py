@@ -1,4 +1,4 @@
-"""Background worker — processes queued coordinator runs."""
+"""Background worker: processes queued coordinator runs."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ async def worker_loop(*, poll_interval: float = 1.0) -> None:
     if recovered:
         logger.info("Recovered %s stale running mission(s)", recovered)
     await init_graph()
-    logger.info("Coordinator worker started — polling for queued missions")
+    logger.info("Coordinator worker started: polling for queued missions")
     while True:
         mission = store.claim_next_queued()
         if mission:
@@ -46,7 +46,7 @@ async def worker_loop(*, poll_interval: float = 1.0) -> None:
 
 def cli() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    print("Cognilance Coordinator Worker — processing queued missions", flush=True)
+    print("Cognilance Coordinator Worker: processing queued missions", flush=True)
     asyncio.run(worker_loop())
 
 

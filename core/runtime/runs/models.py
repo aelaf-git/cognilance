@@ -1,4 +1,4 @@
-"""Durable Run models — a run is a job, not a chat reply."""
+"""Durable Run models: a run is a job, not a chat reply."""
 
 from __future__ import annotations
 

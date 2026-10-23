@@ -39,7 +39,7 @@ class SubscriptionService:
         mission_id: str | None = None,
     ) -> dict[str, Any]:
         if not self._integrations.is_connected(user_id, "gmail"):
-            raise RuntimeError("gmail is not connected — connect it on the Integrations page")
+            raise RuntimeError("gmail is not connected: connect it on the Integrations page")
 
         existing = [
             s
@@ -344,7 +344,7 @@ class SubscriptionService:
             email = emails[0]
             subject = (email.get("subject") or "").strip() or "a message with no subject"
             sender = SubscriptionService._parse_sender(str(email.get("from") or ""))
-            return f'Heads up — {sender} just emailed you about "{subject}".'
+            return f'Heads up: {sender} just emailed you about "{subject}".'
         latest = emails[0]
         latest_sender = SubscriptionService._parse_sender(str(latest.get("from") or ""))
         latest_subject = (latest.get("subject") or "").strip() or "a message with no subject"
