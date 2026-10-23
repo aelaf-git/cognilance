@@ -99,8 +99,8 @@ registry/data/
 
 # --- Node.js / frontend ---
 node_modules/
-cognilance/.next/
-cognilance/out/
+web/.next/
+web/out/
 UIs/**/node_modules/
 .next/
 out/

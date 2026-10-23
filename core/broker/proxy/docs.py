@@ -1,4 +1,4 @@
-"""Google Docs tool proxy — skill agents call back with scoped tokens."""
+"""Google Docs tool proxy: skill agents call back with scoped tokens."""
 
 from __future__ import annotations
 

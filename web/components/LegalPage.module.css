@@ -1,0 +1,56 @@
+.main {
+  padding: calc(var(--header-height) + 2.5rem) 0 4rem;
+}
+
+.main h1 {
+  max-width: 16ch;
+}
+
+.body {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 42rem;
+  margin-top: 2.25rem;
+  color: var(--fog);
+}
+
+.body h2 {
+  margin-top: 1rem;
+  font-size: 1.25rem;
+  max-width: none;
+}
+
+.body h3 {
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--white);
+  max-width: none;
+}
+
+.body p {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.body ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.65rem;
+  line-height: 1.65;
+}
+
+.body li::marker {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.body a {
+  color: var(--white);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.body a:hover {
+  opacity: 0.75;
+}

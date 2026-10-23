@@ -18,7 +18,7 @@ from cognilance.registry.client import RegistryClient, RegistryError
 
 app = typer.Typer(
     name="cognilance",
-    help="The Marketplace of Minds — build, register, and hire AI agents.",
+    help="The Marketplace of Minds: build, register, and hire AI agents.",
     no_args_is_help=True,
 )
 console = Console()
@@ -152,7 +152,7 @@ def discover(
         for a in agents:
             skill_names = ", ".join(s.name for s in a.skills)
             table.add_row(
-                a.id or "—",
+                a.id or "-",
                 a.name,
                 skill_names,
                 a.url,
@@ -182,7 +182,7 @@ def info(
             await registry.close()
 
         console.print(f"[bold]{agent.name}[/bold] ({agent.id})")
-        console.print(f"Description: {agent.description or '—'}")
+        console.print(f"Description: {agent.description or '-'}")
         console.print(f"URL: {agent.url}")
         console.print(f"Visibility: {agent.visibility.value}")
         console.print(f"Online: {'yes' if agent.online else 'no'}")

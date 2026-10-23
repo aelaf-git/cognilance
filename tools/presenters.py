@@ -78,7 +78,7 @@ def format_document_result(result: dict[str, Any]) -> str:
     ):
         title = result.get("title") or "Proposal"
         if status == "draft":
-            lines = [f'Draft ready — "{title}".']
+            lines = [f'Draft ready: "{title}".']
         elif status == "preview":
             lines = [f'Preview of "{title}".']
         else:

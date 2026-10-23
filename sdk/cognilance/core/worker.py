@@ -1,4 +1,4 @@
-"""CognilanceWorker — marketplace agent that registers and serves A2A tasks."""
+"""CognilanceWorker: marketplace agent that registers and serves A2A tasks."""
 
 from __future__ import annotations
 
@@ -206,7 +206,7 @@ class _CognilanceRuntime(ABC):
         print(f"Health: {health_url}")
         print("Use the Cognilance orchestrator chat for the product UI. Commands: 'agents', 'exit'.\n")
         if open_ui:
-            print("(open_ui ignored — worker agents no longer serve a browser chat UI)\n")
+            print("(open_ui ignored: worker agents no longer serve a browser chat UI)\n")
 
         while True:
             try:
@@ -246,7 +246,7 @@ class _CognilanceRuntime(ABC):
             print()
             for a in agents:
                 skills = ", ".join(s.name for s in a.skills)
-                print(f"  • {a.name} ({skills}) — {a.url}")
+                print(f"  • {a.name} ({skills}): {a.url}")
             print()
         finally:
             await registry.close()
@@ -281,7 +281,7 @@ class _CognilanceRuntime(ABC):
 
 class CognilanceWorker(_CognilanceRuntime):
     """
-    Worker — registers on the marketplace and delivers work when hired.
+    Worker: registers on the marketplace and delivers work when hired.
     """
 
     _role = "worker"

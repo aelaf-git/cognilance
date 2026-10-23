@@ -1,4 +1,4 @@
-"""RegistryClient — talks to the Cognilance central server."""
+"""RegistryClient: talks to the Cognilance central server."""
 
 from __future__ import annotations
 

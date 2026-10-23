@@ -1,4 +1,4 @@
-"""Calendar tool — read-only listing via the broker."""
+"""Calendar tool: read-only listing via the broker."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Durable coordinator graph — board-centric specialists (no registry)."""
+"""Durable coordinator graph: board-centric specialists (no registry)."""
 
 from __future__ import annotations
 

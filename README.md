@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="cognilance/assets/logo.png" alt="Cognilance" width="320">
+  <img src="web/public/brand/logo.png" alt="Cognilance" width="320">
 </p>
 
 # Cognilance
 
-**The Marketplace of Minds** — trustworthy autonomous AI for production, not demos.
+**The Marketplace of Minds**: trustworthy autonomous AI for production, not demos.
 
-> **Currently in beta.** One AI agent hallucinates. A thousand, verified, don’t. Cognilance orchestrates specialized agents — routing each task to the right expert, verifying output, and persisting results.
+> **Currently in beta.** One AI agent hallucinates. A thousand, verified, don’t. Cognilance orchestrates specialized agents: routing each task to the right expert, verifying output, and persisting results.
 
-**Website (marketing):** see [`cognilance/`](cognilance/) — `cd cognilance && docker compose watch` → [http://localhost:3000](http://localhost:3000).
+**Website (marketing):** see [`web/`](web/): `cd web && docker compose watch` → [http://localhost:3000](http://localhost:3000).
 
 **Chat + coordinator (Docker):** from the repo root, `docker compose watch` → chat [http://localhost:3001](http://localhost:3001), coordinator [http://localhost:8200/health](http://localhost:8200/health).
 
@@ -48,24 +48,24 @@ in-process agents under [`agents/`](agents/) and graphs under [`pipelines/`](pip
 Commercial landing page for Cognilance (beta waitlist, product narrative, team).
 
 ```bash
-cd cognilance
+cd web
 docker compose watch
 # or: npm install && npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Optional waitlist webhook: copy [`cognilance/.env.example`](cognilance/.env.example) to `cognilance/.env.local` and set `NEXT_PUBLIC_WAITLIST_ENDPOINT`.
+Open [http://localhost:3000](http://localhost:3000). Optional waitlist webhook: copy [`web/.env.example`](web/.env.example) to `web/.env.local` and set `NEXT_PUBLIC_WAITLIST_ENDPOINT`.
 
 ### Chat + coordinator
 
 ```bash
-# From the repo root — watches Python/TS sources and reloads
+# From the repo root: watches Python/TS sources and reloads
 docker compose watch
 ```
 
 - Chat UI: [http://localhost:3001](http://localhost:3001)
 - Coordinator health: [http://localhost:8200/health](http://localhost:8200/health)
 
-Uses root `.env` for `GROQ_API_KEY` (and friends). Landing stays on `:3000` via `cognilance/docker-compose.yml` so it does not clash with chat.
+Uses root `.env` for `GROQ_API_KEY` (and friends). Landing stays on `:3000` via `web/docker-compose.yml` so it does not clash with chat.
 
 ---
 
@@ -82,7 +82,7 @@ Do I only do work when tasked?       → CognilanceWorker
 | A2A server | No | Yes |
 | Discovers agents | Yes | No |
 | Accepts A2A tasks | No | Yes |
-| Handler signature | — | `handle(task)` |
+| Handler signature | - | `handle(task)` |
 
 ---
 
@@ -200,7 +200,7 @@ async def main():
 
 ## CognilanceWorker
 
-Leaf worker — registers on the registry and delivers work when tasked. Does not dispatch to others.
+Leaf worker: registers on the registry and delivers work when tasked. Does not dispatch to others.
 
 ```python
 from cognilance import CognilanceWorker
@@ -323,10 +323,10 @@ START → seed → coordinator_plan → specialists → coordinator_assemble →
 Pipelines live in [`pipelines/`](pipelines/): `coordinator_board` (LLM-planned) plus preset
 boards `weekly_report`, `concept_note`, `email_followup`.
 
-1. **User / schedule / event** — creates a durable Run
-2. **Coordinator** — decomposes into board tasks for specialists
-3. **Specialists** — claim tasks and call allowed tools (risk-graded; approval for irreversible)
-4. **Assemble** — structured results → Gen UI selector when props exist
+1. **User / schedule / event**: creates a durable Run
+2. **Coordinator**: decomposes into board tasks for specialists
+3. **Specialists**: claim tasks and call allowed tools (risk-graded; approval for irreversible)
+4. **Assemble**: structured results → Gen UI selector when props exist
 
 Details: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
@@ -357,7 +357,7 @@ Health: `http://127.0.0.1:8200/health`. Roles: `http://127.0.0.1:8200/skills/onl
 |--------|----------------|--------------|
 | `What is 2+2?` | simple | plain text |
 | `Research the history of transformers in ML` | complex | `research-sources` |
-| `Chart Q1–Q4 sales: 100, 150, 120, 200` | complex | `data-chart` |
+| `Chart Q1-Q4 sales: 100, 150, 120, 200` | complex | `data-chart` |
 | `Write a Python function that checks if a string is a palindrome` | complex | `python-code` |
 
 ### Quick smoke test (no UI)
@@ -374,7 +374,7 @@ pytest tools evals   # tool unit tests + offline agent evals
 
 After `pip install -e .`, the `cognilance` command is available. Run `cognilance` with no arguments to print built-in help.
 
-The CLI is for **local SDK worker development** (deferred marketplace path). Day-to-day demos use `./scripts/start_demo.sh` and the in-process coordinator — not a registry.
+The CLI is for **local SDK worker development** (deferred marketplace path). Day-to-day demos use `./scripts/start_demo.sh` and the in-process coordinator: not a registry.
 
 ### Command overview
 
@@ -388,7 +388,7 @@ The CLI is for **local SDK worker development** (deferred marketplace path). Day
 
 ### Registry
 
-Start the registry separately — see [Registry](#registry) for Docker, SQLite, and API details.
+Start the registry separately: see [Registry](#registry) for Docker, SQLite, and API details.
 
 ```bash
 cd registry && docker compose watch
@@ -464,15 +464,15 @@ cognilance discover --tag dev --limit 20
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--skill`, `-s` | — | Filter by skill (repeatable) |
-| `--tag`, `-t` | — | Filter by tag (repeatable) |
+| `--skill`, `-s` | - | Filter by skill (repeatable) |
+| `--tag`, `-t` | - | Filter by tag (repeatable) |
 | `--limit`, `-n` | `10` | Maximum number of results |
 
 ---
 
 ### `cognilance info`
 
-**Purpose:** Look up a single agent by registry ID — name, description, URL, visibility, online status, and skills.
+**Purpose:** Look up a single agent by registry ID: name, description, URL, visibility, online status, and skills.
 
 ```bash
 cognilance info abc123-agent-id
@@ -521,17 +521,17 @@ cognilance-coordinator
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GROQ_API_KEY` | For coordinator | — | Groq API key for the coordinator / specialists |
+| `GROQ_API_KEY` | For coordinator | - | Groq API key for the coordinator / specialists |
 | `COGNILANCE_APPROVAL_GRADES` | No | `irreversible` | Comma-separated tool risk grades that pause for approval |
 | `COGNILANCE_COORDINATOR_PORT` | No | `8200` | Coordinator HTTP port |
-| `COGNILANCE_REGISTRY_URL` | — | — | Unused (registry removed from runtime) |
+| `COGNILANCE_REGISTRY_URL` | - | - | Unused (registry removed from runtime) |
 
 ---
 
 ## Project layout
 
 ```
-cognilance/              # Next.js landing
+web/                     # Next.js landing
 UIs/chat/                # Next.js chat
 agents/                  # <id>/agent.yaml + prompts/ + schema.py; loader.py
 tools/                   # <name>/manifest.yaml + tool.py + tests/; registry.py
@@ -562,4 +562,4 @@ from cognilance import (
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT: see [LICENSE](LICENSE).

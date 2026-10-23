@@ -1,4 +1,4 @@
-"""Google Docs tool — parameters are enriched by the model, writes go through the broker."""
+"""Google Docs tool: parameters are enriched by the model, writes go through the broker."""
 
 from __future__ import annotations
 

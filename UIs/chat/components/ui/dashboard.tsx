@@ -82,14 +82,9 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
             style={{ width: `${ICON_RAIL_WIDTH}px` }}
           >
             <img
-              src="/icon.png"
+              src="/cognilance-logo.png"
               alt=""
-              className="hidden size-8 object-contain dark:block"
-            />
-            <img
-              src="/icon-light.png"
-              alt=""
-              className="size-8 object-contain dark:hidden"
+              className="size-8 object-contain"
             />
           </button>
 

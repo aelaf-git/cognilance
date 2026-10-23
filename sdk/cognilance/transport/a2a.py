@@ -1,4 +1,4 @@
-"""A2A send/receive — the inter-agent layer."""
+"""A2A send/receive: the inter-agent layer."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class A2AServer:
         self._agent_card = agent_card
         self._task_handler = task_handler
         self._tasks: dict[str, Task] = {}
-        self.app = FastAPI(title=f"A2A — {agent_card.name}")
+        self.app = FastAPI(title=f"A2A: {agent_card.name}")
         self._setup_routes()
 
     def _setup_routes(self) -> None:

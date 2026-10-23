@@ -38,7 +38,7 @@ class EmailComposition(BaseModel):
     to: str | None = Field(default=None, description="Recipient email if known")
     subject: str = Field(description="Email subject line")
     body: str = Field(
-        description="Full email body with greeting, paragraphs, and sign-off — NOT the user's command"
+        description="Full email body with greeting, paragraphs, and sign-off: NOT the user's command"
     )
 
 
@@ -147,7 +147,7 @@ async def compose_email_content(
         system = (
             "You are a professional email writer for Cognilance.\n"
             "Write a complete email: greeting, substantive body paragraphs, and sign-off.\n"
-            "CRITICAL: `body` must be the actual email text — never repeat the user's command.\n"
+            "CRITICAL: `body` must be the actual email text: never repeat the user's command.\n"
             "If the user asks to introduce themselves, write a warm professional introduction.\n"
             "If the topic is Cognilance, explain what it is clearly using the project context.\n"
             "Keep tone professional but friendly. Sign off as Cognilance unless context suggests otherwise."
@@ -242,7 +242,7 @@ _BLOCK_BREAK_RE = re.compile(r"</(?:p|div|h[1-6]|li|tr)>|<br\s*/?>", re.IGNORECA
 
 
 def email_body_preview(body: str, *, max_chars: int = 220) -> str:
-    """Plain-text preview of an email body — HTML stripped, whitespace collapsed."""
+    """Plain-text preview of an email body: HTML stripped, whitespace collapsed."""
     text = _BLOCK_BREAK_RE.sub(" ", body)
     text = _TAG_RE.sub(" ", text)
     text = re.sub(r"\s+", " ", text).strip()
@@ -252,7 +252,7 @@ def email_body_preview(body: str, *, max_chars: int = 220) -> str:
 
 
 def format_email_draft(payload: dict[str, Any]) -> str:
-    """Short markdown summary — the email-draft card shows the full formatted email."""
+    """Short markdown summary: the email-draft card shows the full formatted email."""
     subject = str(payload.get("subject") or "(no subject)")
     to_addr = str(payload.get("to") or "").strip()
     preview = email_body_preview(str(payload.get("body") or ""))
@@ -275,7 +275,7 @@ def format_send_email_result(payload: dict[str, Any]) -> str:
     message_id = str(payload.get("gmail_message_id") or payload.get("id") or "").strip()
     if not message_id:
         return (
-            "The email was not sent — Gmail did not confirm delivery. "
+            "The email was not sent: Gmail did not confirm delivery. "
             "Please try again or reconnect Gmail via /integrations/gmail/connect."
         )
     subject = str(payload.get("subject") or "(no subject)")

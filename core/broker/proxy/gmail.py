@@ -1,4 +1,4 @@
-"""Gmail tool proxy — skill agents call back with scoped tokens."""
+"""Gmail tool proxy: skill agents call back with scoped tokens."""
 
 from __future__ import annotations
 

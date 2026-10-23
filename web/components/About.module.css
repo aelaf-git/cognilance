@@ -1,0 +1,94 @@
+.wrap {
+  position: relative;
+  z-index: 1;
+  margin-top: -1rem;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: var(--void);
+}
+
+.header {
+  max-width: 20rem;
+}
+
+.header :global(.eyebrow) {
+  margin-bottom: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.header h2 {
+  margin: 0;
+}
+
+.lead {
+  margin: 1.75rem 0 0;
+  max-width: 42rem;
+}
+
+.pillars {
+  list-style: none;
+  display: grid;
+  gap: 0;
+  margin: 3rem 0 0;
+  padding: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.pillars > :global(.reveal) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.pillar {
+  padding: 1.5rem 0;
+}
+
+.pillar h3 {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--white);
+}
+
+.pillar p {
+  margin: 0;
+  max-width: 32rem;
+  color: var(--fog);
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+@media (min-width: 900px) {
+  .lead {
+    margin-top: 2rem;
+  }
+
+  .pillars {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .pillars > :global(.reveal) {
+    border-bottom: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .pillars > :global(.reveal):last-child {
+    border-right: none;
+  }
+
+  .pillar {
+    padding: 1.75rem 1.5rem 1.75rem 0;
+  }
+
+  .pillars > :global(.reveal):not(:first-child) .pillar {
+    padding-left: 1.5rem;
+  }
+
+  .pillar p {
+    max-width: none;
+  }
+}

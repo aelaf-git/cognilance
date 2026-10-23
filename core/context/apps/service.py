@@ -65,10 +65,10 @@ class AppService:
         return {"app_id": app_id, "connected": False}
 
     def available_tools_text(self) -> str:
-        lines = ["- skill:<skill> — run a registered agent by skill slug"]
+        lines = ["- skill:<skill>: run a registered agent by skill slug"]
         for app in self.list_apps():
             if app["connected"]:
-                lines.append(f"- app:{app['id']} — {app['name']} (connected)")
+                lines.append(f"- app:{app['id']}: {app['name']} (connected)")
         return "\n".join(lines)
 
     def is_app_connected(self, app_id: str) -> bool:

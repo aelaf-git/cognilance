@@ -3,20 +3,20 @@
   "name": "Cognilance",
   "icons": [
     {
-      "src": "/icon-192x192.png",
-      "type": "image/ico",
+      "src": "/cognilance-logo.png",
+      "type": "image/png",
+      "sizes": "500x500"
+    },
+    {
+      "src": "/cognilance-logo.png",
+      "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "/icon-256x256.png",
-      "type": "image/png",
-      "sizes": "256x256"
-    },
-    {
-      "src": "/icon-512x512.png",
+      "src": "/cognilance-logo.png",
       "type": "image/png",
       "sizes": "512x512",
-      "purpose":"maskable"
+      "purpose": "maskable"
     }
   ],
   "start_url": "/local/chat",
