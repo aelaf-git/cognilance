@@ -16,20 +16,25 @@ const ibmPlex = IBM_Plex_Sans({
   weight: ["400", "500", "600", "700"],
 });
 
+/** Locked tab title for the marketing site. Do not change. */
+const SITE_TITLE = "Cognilance AI";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://cognilance.ai"),
-  title: "Cognilance AI",
+  metadataBase: new URL("https://cognilanceai.com"),
+  title: {
+    absolute: SITE_TITLE,
+    default: SITE_TITLE,
+  },
   description:
-    "Hire specialized AI agents you can see and control. Verified multi-agent orchestration built for production, not demos.",
+    "The AI Assistant for Teams. Shared agents, long-running work, and improvement with human approval. Join the waitlist.",
   icons: {
-    icon: [{ url: "/brand/icon.png", type: "image/png" }],
-    apple: [{ url: "/brand/icon.png", type: "image/png" }],
+    icon: [{ url: "/brand/Cognilance-Logo.png", type: "image/png" }],
+    apple: [{ url: "/brand/Cognilance-Logo.png", type: "image/png" }],
   },
   openGraph: {
-    title: "Cognilance AI",
-    description:
-      "Verified, persistent, unsupervised multi-agent orchestration.",
-    images: ["/brand/logo.png"],
+    title: SITE_TITLE,
+    description: "The AI Assistant for Teams. Join the waitlist.",
+    images: ["/brand/Cognilance-Logo.png"],
   },
 };
 
@@ -39,10 +44,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${spaceGrotesk.variable} ${ibmPlex.variable}`}>
-        {children}
-      </body>
+    <html
+      lang="en"
+      className={`${spaceGrotesk.variable} ${ibmPlex.variable}`}
+    >
+      <body>{children}</body>
     </html>
   );
 }

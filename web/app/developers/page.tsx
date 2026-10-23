@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import ClickSpark from "@/components/ClickSpark";
+import { Button } from "@/components/Button";
 import { Footer } from "@/components/Footer";
 import { SiteHeader } from "@/components/SiteHeader";
 import styles from "./developers.module.css";
 
 export const metadata: Metadata = {
-  title: "Developers | Cognilance AI",
+  title: {
+    absolute: "Cognilance AI",
+  },
   description: "Developer docs and tools for Cognilance. Under construction.",
 };
 
 export default function DevelopersPage() {
   return (
     <ClickSpark
-      sparkColor="#ff492c"
+      sparkColor="#ffffff"
       sparkSize={10}
       sparkRadius={15}
       sparkCount={8}
@@ -22,38 +24,17 @@ export default function DevelopersPage() {
       <SiteHeader />
       <main className={styles.main}>
         <section className={styles.hero}>
-          <div className={`container ${styles.inner}`}>
-            <p className={styles.badge}>
-              <svg
-                className={styles.badgeIcon}
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden="true"
-              >
-                <path
-                  d="M12 2.5 3.5 20.5h17L12 2.5Z"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M8.2 14h7.6M6.6 17.5h10.8"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Under construction
-            </p>
-            <h1 className={styles.title}>Developers</h1>
-            <p className={styles.lead}>
-              Docs, SDK guides, and agent publishing tools are on the way. Check
-              back soon.
+          <div className="container">
+            <p className="eyebrow">Developers & SDK</p>
+            <h1>Build with the SDK</h1>
+            <p className="lead">
+              Docs, SDK guides, and agent publishing tools are on the way. This
+              page is a placeholder until that surface ships.
             </p>
             <div className={styles.actions}>
-              <Link href="/" className="btn btnGhost">
+              <Button href="/" variant="ghost">
                 Back to home
-              </Link>
+              </Button>
             </div>
           </div>
         </section>

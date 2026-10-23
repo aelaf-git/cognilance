@@ -1,136 +1,96 @@
-import Image from "next/image";
 import Link from "next/link";
+import { Button } from "./Button";
+import {
+  FOOTER_COLUMNS,
+  LEGAL_LINKS,
+  WAITLIST,
+} from "@/lib/site";
 import styles from "./Footer.module.css";
 
-const WAITLIST =
-  "https://docs.google.com/forms/d/e/1FAIpQLScV72qv_wHi7nWeNXm76kjI9lYYKV740lULDBs6nWH0xuALnQ/viewform?usp=publish-editor";
+function FooterLink({
+  href,
+  label,
+  external,
+}: {
+  href: string;
+  label: string;
+  external?: boolean;
+}) {
+  if (external || href.startsWith("http") || href.startsWith("mailto:")) {
+    return (
+      <a
+        href={href}
+        {...(href.startsWith("http")
+          ? { target: "_blank", rel: "noreferrer" }
+          : {})}
+      >
+        {label}
+      </a>
+    );
+  }
 
-const OFFICE_MAPS = "https://maps.app.goo.gl/3CwxEVPkf9WyFR7L8";
-const EMAIL = "cognilance@gmail.com";
-const PHONE = "+251 964 336 078";
-const PHONE_TEL = "+251964336078";
+  if (href.startsWith("/") && !href.includes("#")) {
+    return <Link href={href}>{label}</Link>;
+  }
 
-const columns = [
-  {
-    title: "Product",
-    links: [
-      { href: "/#product", label: "Overview" },
-      { href: "/#how", label: "How it works" },
-      { href: "/#use-cases", label: "Use cases" },
-      { href: "/#pricing", label: "Pricing" },
-    ],
-  },
-  {
-    title: "Company",
-    links: [
-      { href: "/#founders", label: "Founders" },
-      { href: "/#social-proof", label: "Backers" },
-    ],
-  },
-  {
-    title: "Resources",
-    links: [
-      { href: "/developers", label: "Developers" },
-    ],
-  },
-  {
-    title: "Get started",
-    links: [
-      { href: WAITLIST, label: "Join the waitlist", external: true },
-      { href: "/#pricing", label: "Pricing" },
-      { href: "/developers", label: "Build agents" },
-    ],
-  },
-];
+  return <a href={href}>{label}</a>;
+}
 
 export function Footer() {
   return (
-    <footer className={styles.footer}>
+    <footer id="waitlist" className={styles.footer}>
       <div className={styles.shell}>
-        <div className={styles.top}>
-          <div className={styles.brandCol}>
-            <Link href="/" className={styles.brand}>
-              <Image
-                src="/brand/icon.png"
-                alt=""
-                width={72}
-                height={72}
-                className={styles.icon}
-              />
-              <span className={styles.brandName}>Cognilance</span>
-            </Link>
-            <p className={styles.blurb}>
-              Automate without babysitting. Hire specialist agents and ship
-              work that finishes itself.
+        <div className={styles.ctaCard}>
+          <div className={styles.ctaCopy}>
+            <h2>Join the waitlist</h2>
+            <p>
+              Opening access in waves for people and teams ready to work with
+              shared agents.
             </p>
-            <div className={styles.contact}>
-              <p className={styles.contactTitle}>Contact</p>
-              <a
-                href={OFFICE_MAPS}
-                className={styles.contactLine}
-                target="_blank"
-                rel="noreferrer"
-              >
-                AI Startup Center, 3rd floor
-              </a>
-              <a href={`mailto:${EMAIL}`} className={styles.contactLine}>
-                {EMAIL}
-              </a>
-              <a href={`tel:${PHONE_TEL}`} className={styles.contactLine}>
-                {PHONE}
-              </a>
-            </div>
-            <a
-              href={WAITLIST}
-              className={`btn btnPrimary ${styles.cta}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Join the waitlist
-            </a>
           </div>
+          <div className={styles.ctaActions}>
+            <Button href={WAITLIST} hoverText="Join the waitlist →">
+              Join the waitlist →
+            </Button>
+            <Button href="/#how" variant="ghost">
+              See how it works
+            </Button>
+          </div>
+        </div>
 
-          <nav className={styles.columns} aria-label="Footer">
-            {columns.map((column) => (
-              <div key={column.title} className={styles.column}>
-                <p className={styles.columnTitle}>{column.title}</p>
-                <ul className={styles.linkList}>
-                  {column.links.map((link) => (
-                    <li key={link.label}>
-                      {"external" in link && link.external ? (
-                        <a href={link.href} target="_blank" rel="noreferrer">
-                          {link.label}
-                        </a>
-                      ) : link.href.includes("#") ? (
-                        <a href={link.href}>{link.label}</a>
-                      ) : (
-                        <Link href={link.href}>{link.label}</Link>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+        <div className={styles.columns}>
+          {FOOTER_COLUMNS.map((col) => (
+            <div key={col.title} className={styles.column}>
+              <h3>{col.title}</h3>
+              <ul>
+                {col.links.map((link) => (
+                  <li key={link.href + link.label}>
+                    <FooterLink
+                      href={link.href}
+                      label={link.label}
+                      external={
+                        "external" in link ? Boolean(link.external) : false
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className={styles.bottom}>
+          <div className={styles.brandLegal}>
+            <p>© {new Date().getFullYear()} Cognilance. All rights reserved.</p>
+            <p>The AI Assistant for Teams.</p>
+          </div>
+          <nav aria-label="Legal documents" className={styles.legalNav}>
+            {LEGAL_LINKS.map((link) => (
+              <Link key={link.href} href={link.href}>
+                {link.label}
+              </Link>
             ))}
           </nav>
-        </div>
-
-        <div className={styles.divider} />
-
-        <div className={styles.legal}>
-          <p className={styles.copy}>
-            © {new Date().getFullYear()} Cognilance. All rights reserved.
-          </p>
-        </div>
-
-        <div className={styles.wordmarkWrap}>
-          <Image
-            src="/brand/logo.png"
-            alt="Cognilance"
-            width={1276}
-            height={168}
-            className={styles.wordmark}
-            priority={false}
-          />
         </div>
       </div>
     </footer>

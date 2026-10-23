@@ -810,7 +810,7 @@ class IntegrationExecutor:
             )
             message_id = str(data.get("id") or "").strip()
             if not message_id:
-                raise RuntimeError("Gmail API did not return a message id — email may not have been sent.")
+                raise RuntimeError("Gmail API did not return a message id: email may not have been sent.")
             return {
                 "id": message_id,
                 "gmail_message_id": message_id,

@@ -22,9 +22,9 @@ const ibmPlex = IBM_Plex_Sans({
   weight: ["400", "500", "600", "700"]
 })
 
+/** Locked tab title for the chatbot. Do not change. */
 const APP_NAME = "Cognilance"
 const APP_DEFAULT_TITLE = "Cognilance"
-const APP_TITLE_TEMPLATE = "%s - Cognilance"
 const APP_DESCRIPTION = "Cognilance chat"
 
 interface RootLayoutProps {
@@ -37,13 +37,13 @@ interface RootLayoutProps {
 export const metadata: Metadata = {
   applicationName: APP_NAME,
   title: {
-    default: APP_DEFAULT_TITLE,
-    template: APP_TITLE_TEMPLATE
+    absolute: APP_DEFAULT_TITLE,
+    default: APP_DEFAULT_TITLE
   },
   description: APP_DESCRIPTION,
   icons: {
-    icon: "/icon.png",
-    apple: "/icon.png"
+    icon: "/cognilance-logo.png",
+    apple: "/cognilance-logo.png"
   },
   manifest: "/manifest.json",
   appleWebApp: {
@@ -58,18 +58,12 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: APP_NAME,
-    title: {
-      default: APP_DEFAULT_TITLE,
-      template: APP_TITLE_TEMPLATE
-    },
+    title: APP_DEFAULT_TITLE,
     description: APP_DESCRIPTION
   },
   twitter: {
     card: "summary",
-    title: {
-      default: APP_DEFAULT_TITLE,
-      template: APP_TITLE_TEMPLATE
-    },
+    title: APP_DEFAULT_TITLE,
     description: APP_DESCRIPTION
   }
 }

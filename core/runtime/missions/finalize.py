@@ -19,7 +19,7 @@ def finalize_session_status(
     final_ui: list | None,
     sub_store: SubscriptionStore | None = None,
 ) -> None:
-    # User abort wins — never overwrite a cancelled session with completed/failed.
+    # User abort wins: never overwrite a cancelled session with completed/failed.
     current = store.get_mission(mission.id) or mission
     if current.status == MissionStatus.CANCELLED:
         return

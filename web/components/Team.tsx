@@ -1,5 +1,7 @@
 import Image from "next/image";
 import { Reveal } from "./Reveal";
+import { WAITLIST } from "@/lib/site";
+import { Button } from "./Button";
 import styles from "./Team.module.css";
 
 const people = [
@@ -25,33 +27,64 @@ const people = [
   },
 ];
 
+const checks = [
+  "Shared with the whole team",
+  "Humans stay in control",
+  "Improves with your approval",
+];
+
 export function Team() {
   return (
-    <section className="section sectionAlt" id="founders">
+    <section className="section" id="founders">
       <div className="container">
-        <Reveal>
-          <p className="eyebrow">Founders</p>
-          <h2>Built by engineers who&apos;ve lived the problem</h2>
-        </Reveal>
-        <ul className={styles.list}>
-          {people.map((person, i) => (
-            <Reveal key={person.name} delayMs={i * 80}>
-              <li className={styles.person}>
-                <Image
-                  src={person.image}
-                  alt={person.name}
-                  width={96}
-                  height={96}
-                  className={styles.photo}
-                />
-                <div className={styles.meta}>
-                  <span className={styles.name}>{person.name}</span>
-                  <span className={styles.role}>{person.role}</span>
+        <div className={styles.split}>
+          <Reveal>
+            <figure className={styles.photo}>
+              <Image
+                src="/generated/team-band.jpg"
+                alt="Engineers collaborating around a table"
+                width={1280}
+                height={900}
+              />
+            </figure>
+          </Reveal>
+          <Reveal delayMs={90}>
+            <div className={styles.copy}>
+              <h2>Built by engineers who&apos;ve lived team chaos</h2>
+              <p className="lead">
+                A small team shipping a shared colleague for groups, not another
+                private chatbot.
+              </p>
+              <div className={styles.avatars} aria-label="Founders">
+                {people.map((person, i) => (
+                  <Image
+                    key={person.name}
+                    src={person.image}
+                    alt={person.name}
+                    width={48}
+                    height={48}
+                    style={{ zIndex: people.length - i }}
+                  />
+                ))}
+                <div className={styles.count}>
+                  <strong>4</strong>
+                  <span>founders on the team</span>
                 </div>
-              </li>
-            </Reveal>
-          ))}
-        </ul>
+              </div>
+              <ul className={styles.checks}>
+                {checks.map((check) => (
+                  <li key={check}>
+                    <span aria-hidden="true">→</span>
+                    {check}
+                  </li>
+                ))}
+              </ul>
+              <Button href={WAITLIST} className={styles.cta}>
+                Join the waitlist
+              </Button>
+            </div>
+          </Reveal>
+        </div>
       </div>
     </section>
   );

@@ -39,7 +39,7 @@ class GoogleDocActionParams(BaseModel):
     name: str | None = Field(default=None, description="Document title for create_document")
     content: str | None = Field(
         default=None,
-        description="Body text to write — NOT the user's command, only the actual document text",
+        description="Body text to write: NOT the user's command, only the actual document text",
     )
     document_id: str | None = Field(
         default=None,
@@ -51,7 +51,7 @@ class GoogleDocActionParams(BaseModel):
 
 class DocumentContent(BaseModel):
     content: str = Field(
-        description="Full document body text — substantive prose, not the user's command"
+        description="Full document body text: substantive prose, not the user's command"
     )
     name: str | None = Field(default=None, description="Document title if not already set")
 
@@ -224,7 +224,7 @@ async def compose_document_content(
         system = (
             "You are a professional document writer for Cognilance.\n"
             "Write clear, substantive document content with headings and paragraphs as appropriate.\n"
-            "CRITICAL: output only the document body — never repeat the user's command verbatim."
+            "CRITICAL: output only the document body: never repeat the user's command verbatim."
             f"{project_ctx}"
         )
         user_parts = [f"User request:\n{instruction}"]
@@ -361,12 +361,12 @@ async def prepare_google_doc_params(
         llm = get_structured_llm(GoogleDocActionParams, temperature=0)
         system = (
             "Extract structured parameters for a Google Docs API call.\n"
-            "CRITICAL: `content` must be the actual text for the document — "
+            "CRITICAL: `content` must be the actual text for the document: "
             "never repeat the user's command verbatim.\n"
             "For create_document: write the requested body (e.g. a goals summary).\n"
             "For write_document: extract only the text to add (often in quotes).\n"
             "If the user asks for bold/large/font styling, set style fields; do not use HTML.\n"
-            "Copy document_id exactly from a docs.google.com URL — never invent one."
+            "Copy document_id exactly from a docs.google.com URL: never invent one."
         )
         user_parts = [f"Action: {action}", f"User request:\n{instruction}"]
         if context:

@@ -52,5 +52,5 @@ def is_acknowledgment(query: str) -> bool:
 
 def acknowledgment_reply(*, listener_active: bool = False) -> str:
     if listener_active:
-        return "You're all set — I'll let you know when a new email comes in."
+        return "You're all set: I'll let you know when a new email comes in."
     return "Got it!"

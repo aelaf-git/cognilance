@@ -1,182 +1,149 @@
 .footer {
   position: relative;
-  overflow: hidden;
-  padding: clamp(3.25rem, 7vw, 5rem) 0 0;
-  background: #1a1626;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--white);
+  background: var(--void);
 }
 
 .shell {
-  width: min(100% - 1.5rem, 72rem);
+  width: min(100%, var(--max));
   margin-inline: auto;
-}
-
-.top {
+  padding: clamp(3rem, 6vw, 5rem) var(--container-px) 2rem;
   display: grid;
-  gap: 2.75rem;
+  gap: clamp(2.5rem, 5vw, 4rem);
 }
 
-.brandCol {
-  max-width: 18rem;
+.ctaCard {
+  display: grid;
+  gap: 1.75rem;
+  padding: clamp(1.75rem, 4vw, 2.75rem);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, #f5f5f5 0%, #ffffff 55%, #ececec 100%);
+  color: var(--ink);
 }
 
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.7rem;
+.ctaCopy h2 {
+  max-width: none;
+  color: var(--ink);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  line-height: 1.05;
 }
 
-.icon {
-  width: 4rem;
-  height: 4rem;
-  object-fit: contain;
+.ctaCopy p {
+  margin: 0.75rem 0 0;
+  max-width: 36rem;
+  color: #525252;
+  font-size: var(--text-lead);
 }
 
-.brandName {
-  font-family: var(--font-display);
-  font-size: 1.35rem;
+.ctaActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ctaActions :global(.btnPrimary) {
+  background: var(--ink);
+  color: var(--white);
+  border-color: var(--ink);
+}
+
+.ctaActions :global(.btnGhost) {
+  background: var(--paper);
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+
+.ctaActions :global(.btnGhost:hover) {
+  background: #f0f0f0;
+}
+
+.columns {
+  display: grid;
+  gap: 2rem 1.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.column h3 {
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--white);
 }
 
-.blurb {
-  margin: 1.1rem 0 0;
-  color: rgba(232, 230, 230, 0.78);
-  font-size: 0.95rem;
-  line-height: 1.55;
-}
-
-.contact {
-  margin-top: 1.35rem;
-  display: grid;
-  gap: 0.4rem;
-}
-
-.contactTitle {
-  margin: 0 0 0.15rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--white);
-}
-
-.contactLine {
-  color: rgba(232, 230, 230, 0.72);
-  font-size: 0.92rem;
-  line-height: 1.45;
-  transition: color 160ms ease;
-}
-
-.contactLine:hover {
-  color: var(--white);
-}
-
-.cta {
-  margin-top: 1.25rem;
-}
-
-.columns {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.75rem 1.5rem;
-}
-
-.columnTitle {
-  margin: 0 0 0.9rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--white);
-}
-
-.linkList {
+.column ul {
   margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 0.55rem;
+  gap: 0.75rem;
 }
 
-.linkList a {
-  color: rgba(232, 230, 230, 0.72);
-  font-size: 0.92rem;
-  transition: color 160ms ease;
+.column a {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.72);
+  transition: color 0.2s ease;
 }
 
-.linkList a:hover {
+.column a:hover {
   color: var(--white);
 }
 
-.divider {
-  margin-top: clamp(2.5rem, 5vw, 3.5rem);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.legal {
-  padding: 1.15rem 0 0.35rem;
-}
-
-.copy {
-  margin: 0;
-  color: rgba(201, 197, 197, 0.7);
-  font-size: 0.82rem;
-}
-
-.wordmarkWrap {
-  position: relative;
+.bottom {
   display: flex;
-  justify-content: center;
-  margin-top: 0.75rem;
-  overflow: hidden;
-  user-select: none;
-  pointer-events: none;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
 }
 
-.wordmark {
-  width: min(100%, 72rem);
-  height: auto;
-  transform: translateY(18%);
-  filter:
-    drop-shadow(0 0 28px rgba(255, 73, 44, 0.22))
-    drop-shadow(0 16px 48px rgba(0, 0, 0, 0.35));
-  animation: wordmarkRise 1.1s ease-out both;
+.brandLegal {
+  display: grid;
+  gap: 0.35rem;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.85rem;
 }
 
-@keyframes wordmarkRise {
-  from {
-    opacity: 0.35;
-    transform: translateY(32%);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(18%);
-  }
+.brandLegal p {
+  margin: 0;
+}
+
+.legalNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.legalNav a {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.72);
+  transition: color 0.2s ease;
+}
+
+.legalNav a:hover {
+  color: var(--white);
 }
 
 @media (min-width: 640px) {
-  .shell {
-    width: min(100% - 2.5rem, 72rem);
+  .ctaCard {
+    grid-template-columns: minmax(0, 1.2fr) auto;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  .ctaActions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .columns {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 960px) {
-  .top {
-    grid-template-columns: minmax(14rem, 0.9fr) minmax(0, 2.4fr);
-    gap: clamp(2rem, 5vw, 4.5rem);
-    align-items: start;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .icon {
-    width: 4.75rem;
-    height: 4.75rem;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wordmark {
-    animation: none;
+  .bottom {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-end;
   }
 }

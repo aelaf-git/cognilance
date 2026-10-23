@@ -39,15 +39,15 @@ class IntegrationClient:
             time_context_for_planner(user_id=user_id),
             draft_block,
             "Always available:",
-            "- thinking — reason and answer directly (no external APIs)",
-            "- time — current date/time in the user's timezone (action: now)",
-            "- web — search the web and fetch/scrape pages (no OAuth required)",
+            "- thinking: reason and answer directly (no external APIs)",
+            "- time: current date/time in the user's timezone (action: now)",
+            "- web: search the web and fetch/scrape pages (no OAuth required)",
             "  Actions: search {query, max_results?}; fetch_url {url}",
             f"  Search provider: {search_provider_status()}",
-            "- recurring — run a task on a schedule in the background (no OAuth required)",
+            "- recurring: run a task on a schedule in the background (no OAuth required)",
             "  Actions: subscribe {instruction, poll_interval_seconds?}; unsubscribe",
             "  Examples: every day / hourly / weekly tasks; say 'stop recurring' to cancel",
-            "- roles — in-process specialists: researcher, reporter, follow_up, watcher",
+            "- roles: in-process specialists: researcher, reporter, follow_up, watcher",
             "  (coordinator plans a shared task board; specialists claim structured tasks)",
             "",
             "OAuth integrations (only usable when CONNECTED):",
@@ -55,7 +55,7 @@ class IntegrationClient:
         for spec in list_integrations():
             integration_id = spec["id"]
             if spec.get("coming_soon"):
-                lines.append(f"- app:{integration_id} — {spec['name']} [COMING SOON]")
+                lines.append(f"- app:{integration_id}: {spec['name']} [COMING SOON]")
                 lines.append(f"  {spec['description']}")
                 lines.append(
                     f"  → Do NOT use app:{integration_id}. "
@@ -66,7 +66,7 @@ class IntegrationClient:
             is_on = integration_id in connected
             status = "CONNECTED" if is_on else "NOT CONNECTED"
             actions = ", ".join(spec["actions"])
-            lines.append(f"- app:{integration_id} — {spec['name']} [{status}]")
+            lines.append(f"- app:{integration_id}: {spec['name']} [{status}]")
             lines.append(f"  {spec['description']}")
             lines.append(f"  Actions: {actions}")
             if is_on:
@@ -84,8 +84,8 @@ class IntegrationClient:
                         "Use app:gmail for inbox list/search/monitor and subscribe_inbox."
                     )
                     lines.append(
-                        "  compose_email — draft for user review (always before send); "
-                        "send_email {to} — send the approved pending draft only"
+                        "  compose_email: draft for user review (always before send); "
+                        "send_email {to}: send the approved pending draft only"
                     )
                     lines.append(
                         "  Gmail monitor: subscribe_inbox (notify on new mail); "
@@ -99,10 +99,10 @@ class IntegrationClient:
             lines.append("")
         lines.append(
             "Decision rules: The coordinator assigns board tasks to in-process roles "
-            "(researcher, reporter, follow_up, watcher) — do not hire external agents. "
+            "(researcher, reporter, follow_up, watcher): do not hire external agents. "
             "Use web search/fetch for current events and URLs. "
             "For email: follow_up drafts first; only send after approval. "
-            "Never send_email on the first request — even if a recipient is given. "
+            "Never send_email on the first request: even if a recipient is given. "
             "For Docs and proposals: reporter owns drafts via docs.create / docs.write. "
             "Only route to app:* tools that are CONNECTED. "
             "If the user needs a disconnected integration, use thinking and explain how to connect."
@@ -111,16 +111,16 @@ class IntegrationClient:
 
     def available_tools_text(self, user_id: str) -> str:
         """Connected tools only (legacy summary)."""
-        lines = ["- thinking — answer directly with reasoning"]
+        lines = ["- thinking: answer directly with reasoning"]
         lines.append(
-            "- roles — researcher, reporter, follow_up, watcher (in-process specialists)"
+            "- roles: researcher, reporter, follow_up, watcher (in-process specialists)"
         )
         connected = self._tokens.list_connected(user_id)
         for spec in list_integrations():
             if spec.get("coming_soon") or spec["id"] not in connected:
                 continue
             actions = ", ".join(spec["actions"])
-            lines.append(f"- app:{spec['id']} — {spec['name']} (actions: {actions})")
+            lines.append(f"- app:{spec['id']}: {spec['name']} (actions: {actions})")
         return "\n".join(lines)
 
     async def run(

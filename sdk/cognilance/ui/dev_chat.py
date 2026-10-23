@@ -1,4 +1,4 @@
-"""Built-in chat UI — served at GET /chat on every Cognilance worker."""
+"""Built-in chat UI: served at GET /chat on every Cognilance worker."""
 
 from __future__ import annotations
 
@@ -242,7 +242,7 @@ def agent_chat_html(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{_esc(name)} — Cognilance</title>
+<title>{_esc(name)}: Cognilance</title>
 <link rel="icon" href="/icon.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -335,14 +335,14 @@ def manager_chat_html(
     name: str,
     description: str = "",
 ) -> str:
-    """Chat UI for a CognilanceManager — posts to POST /chat (no registry listing)."""
+    """Chat UI for a CognilanceManager: posts to POST /chat (no registry listing)."""
     desc = _esc(description or "Discover and hire agents from the marketplace.")
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{_esc(name)} — Cognilance</title>
+<title>{_esc(name)}: Cognilance</title>
 <link rel="icon" href="/icon.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -414,7 +414,7 @@ async function sendMsg(e) {{
   return false;
 }}
 
-addMsg("system", "Connected to " + MANAGER + " — type agents to list marketplace workers");
+addMsg("system", "Connected to " + MANAGER + ": type agents to list marketplace workers");
 document.getElementById("input").addEventListener("keydown", (e) => {{
   if (e.key === "Enter" && !e.shiftKey) {{ e.preventDefault(); document.getElementById("composer").requestSubmit(); }}
 }});

@@ -170,7 +170,7 @@ export default function ClickSpark({
   return (
     <div className={styles.wrap} onClick={handleClick}>
       <canvas ref={canvasRef} className={styles.canvas} aria-hidden="true" />
-      {children}
+      <div className={styles.content}>{children}</div>
     </div>
   );
 }

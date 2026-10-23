@@ -26,7 +26,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Cognilance Coordinator",
-        description="Cognilance — durable runs, coordinator + specialists, OAuth tools",
+        description="Cognilance: durable runs, coordinator + specialists, OAuth tools",
         version="0.5.0",
     )
     for router in (gmail_router, docs_router, *ALL_ROUTERS):

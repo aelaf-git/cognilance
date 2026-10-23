@@ -1,4 +1,4 @@
-"""Thinking Agent — direct reasoning for simple tasks and subtask fallback."""
+"""Thinking Agent: direct reasoning for simple tasks and subtask fallback."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pipelines.shared.streaming import reveal_text
 THINKING_SYSTEM = """You are Cognilance replying in chat.
 
 Rules:
-- Output ONLY the final message the user should read — no reasoning, planning, or inner monologue.
+- Output ONLY the final message the user should read: no reasoning, planning, or inner monologue.
 - Never mention tools, APIs, subscribe_inbox, app:gmail, integrations, or orchestration.
 - Never say "let me try", "I'll attempt", "please wait", or describe steps you will take.
 - One to three short sentences. Warm and natural.
@@ -25,7 +25,7 @@ def build_thinking_system(*, capabilities: str = "") -> str:
         f"{THINKING_SYSTEM}\n\n"
         f"Connected capabilities (do not name these in chat):\n{capabilities}\n\n"
         "If a required capability is not connected, tell the user to open Integrations "
-        "and connect it — without naming internal tool slugs."
+        "and connect it: without naming internal tool slugs."
     )
 
 

@@ -1,4 +1,4 @@
-"""Gmail tool — draft locally, send/read via the broker's integration client."""
+"""Gmail tool: draft locally, send/read via the broker's integration client."""
 
 from __future__ import annotations
 

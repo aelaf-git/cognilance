@@ -1,4 +1,4 @@
-"""Session scheduling — one-shot vs recurring."""
+"""Session scheduling: one-shot vs recurring."""
 
 from __future__ import annotations
 

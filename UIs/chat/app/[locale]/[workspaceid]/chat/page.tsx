@@ -24,14 +24,9 @@ export default function ChatPage() {
           <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center pb-32 pt-16 text-center sm:pb-40">
             <div className="mb-5 flex size-28 items-center justify-center sm:size-32">
               <img
-                src="/icon.png"
+                src="/cognilance-logo.png"
                 alt="Cognilance"
-                className="hidden size-24 object-contain dark:block sm:size-28"
-              />
-              <img
-                src="/icon-light.png"
-                alt="Cognilance"
-                className="size-24 object-contain dark:hidden sm:size-28"
+                className="size-24 object-contain sm:size-28"
               />
             </div>
 

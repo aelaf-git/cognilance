@@ -1,4 +1,4 @@
-"""Lightweight chat server for CognilanceManager — no A2A or registry listing."""
+"""Lightweight chat server for CognilanceManager: no A2A or registry listing."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ ManagerHandlerFn = Callable[[Any, str], Awaitable[str]]
 
 
 class ManagerChatServer:
-    """HTTP API for a manager script (no browser UI — use the Cognilance orchestrator chat)."""
+    """HTTP API for a manager script (no browser UI: use the Cognilance orchestrator chat)."""
 
     def __init__(
         self,
@@ -26,7 +26,7 @@ class ManagerChatServer:
         self._manager = manager
         self._handler = handler
         self._description = description
-        self.app = FastAPI(title=f"Manager — {manager.agent_name}")
+        self.app = FastAPI(title=f"Manager: {manager.agent_name}")
         self._setup_routes()
 
     def _setup_routes(self) -> None:

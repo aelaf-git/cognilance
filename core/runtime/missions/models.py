@@ -51,7 +51,7 @@ class Mission:
         }
 
     def to_session_dict(self) -> dict[str, Any]:
-        """API alias — sessions are persisted as missions internally."""
+        """API alias: sessions are persisted as missions internally."""
         data = self.to_dict()
         data["session_id"] = data["id"]
         return data

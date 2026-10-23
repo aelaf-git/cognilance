@@ -1,4 +1,4 @@
-"""Orchestrator graph state — durable run + shared task board."""
+"""Orchestrator graph state: durable run + shared task board."""
 
 from __future__ import annotations
 

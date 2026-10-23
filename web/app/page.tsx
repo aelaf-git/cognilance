@@ -1,34 +1,30 @@
 import ClickSpark from "@/components/ClickSpark";
-import { BusinessModel } from "@/components/BusinessModel";
+import { Contact } from "@/components/Contact";
+import { Faq } from "@/components/Faq";
 import { Footer } from "@/components/Footer";
 import { Hero } from "@/components/Hero";
-import { HowItWorks } from "@/components/HowItWorks";
-import { Pricing } from "@/components/Pricing";
-import { Problem } from "@/components/Problem";
+import { About } from "@/components/About";
+import { Integrations } from "@/components/Integrations";
+import { Services } from "@/components/Services";
 import { SiteHeader } from "@/components/SiteHeader";
-import { SocialProof } from "@/components/SocialProof";
-import { Solution } from "@/components/Solution";
-import { Team } from "@/components/Team";
 
 export default function HomePage() {
   return (
     <ClickSpark
-      sparkColor="#ff492c"
+      sparkColor="#ffffff"
       sparkSize={10}
       sparkRadius={15}
       sparkCount={8}
       duration={400}
     >
-      <SiteHeader />
+      <SiteHeader overlay />
       <main>
         <Hero />
-        <SocialProof />
-        <Problem />
-        <Solution />
-        <HowItWorks />
-        <BusinessModel />
-        <Pricing />
-        <Team />
+        <About />
+        <Integrations />
+        <Services />
+        <Faq />
+        <Contact />
       </main>
       <Footer />
     </ClickSpark>

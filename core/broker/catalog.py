@@ -1,4 +1,4 @@
-"""Integration catalog — OAuth metadata and supported actions."""
+"""Integration catalog: OAuth metadata and supported actions."""
 
 from __future__ import annotations
 

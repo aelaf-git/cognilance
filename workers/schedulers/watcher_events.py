@@ -1,4 +1,4 @@
-"""Minimal Watcher event path — raise a durable Run from monitor hooks."""
+"""Minimal Watcher event path: raise a durable Run from monitor hooks."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def enqueue_watcher_inbox_alert(
 ) -> str | None:
     """Create an event-triggered Run + watcher board task for new matching mail.
 
-    Does not execute the graph here — the next chat/schedule cycle or an explicit
+    Does not execute the graph here: the next chat/schedule cycle or an explicit
     resume can pick it up; for smoke demos the Run + board row is enough evidence.
     """
     if not emails:
