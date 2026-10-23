@@ -75,8 +75,8 @@ export async function POST(request: Request) {
     );
   }
 
-  let emailDelivered = false;
   const apiKey = process.env.RESEND_API_KEY?.trim();
+  let emailDelivered = false;
 
   if (apiKey) {
     const from =
@@ -103,11 +103,18 @@ export async function POST(request: Request) {
 
       if (error) {
         console.error("Resend contact error:", error);
-      } else {
-        emailDelivered = true;
+        return NextResponse.json(
+          { error: "Could not send your message. Please try again." },
+          { status: 502 }
+        );
       }
+      emailDelivered = true;
     } catch (err) {
       console.error("Resend contact exception:", err);
+      return NextResponse.json(
+        { error: "Could not send your message. Please try again." },
+        { status: 502 }
+      );
     }
   }
 

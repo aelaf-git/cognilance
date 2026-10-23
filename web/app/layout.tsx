@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -48,7 +49,10 @@ export default function RootLayout({
       lang="en"
       className={`${spaceGrotesk.variable} ${ibmPlex.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
