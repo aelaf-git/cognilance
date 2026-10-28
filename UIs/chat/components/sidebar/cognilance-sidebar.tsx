@@ -229,10 +229,10 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
           return (
             <div
               key={item.id}
-              className="mb-1 rounded-xl bg-[hsl(var(--chat-surface-raised)/0.55)] p-3 transition-colors hover:bg-[hsl(var(--chat-surface-raised))]"
+              className="mb-2 rounded-[12px] border border-border bg-[hsl(var(--chat-surface))] p-3 transition-colors hover:bg-accent"
             >
               <div className="flex items-start gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[hsl(var(--chat-surface))] shadow-sm">
+                <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-border bg-[hsl(var(--chat-canvas))]">
                   <img
                     src={`/api/cognilance/integrations/logos/${encodeURIComponent(logoKey)}`}
                     alt=""
@@ -251,21 +251,23 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium">{item.name}</div>
+                  <div className="font-[family-name:var(--font-display)] text-sm font-semibold tracking-tight">
+                    {item.name}
+                  </div>
                   {item.description && (
-                    <div className="text-muted-foreground mt-1 text-xs">
+                    <div className="text-muted-foreground mt-1 text-xs leading-5">
                       {item.description}
                     </div>
                   )}
                   <div className="mt-2">
                     {item.coming_soon ? (
-                      <span className="text-muted-foreground text-xs">
+                      <span className="font-[family-name:var(--font-display)] text-[0.65rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                         Coming soon
                       </span>
                     ) : item.connected ? (
                       <button
                         type="button"
-                        className="text-xs text-primary"
+                        className="text-xs font-medium text-foreground underline underline-offset-2 hover:opacity-70"
                         onClick={async () => {
                           await cognilanceJson(
                             `integrations/${item.id}/disconnect`,
@@ -284,7 +286,7 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
                       </button>
                     ) : (
                       <a
-                        className="text-xs text-primary"
+                        className="text-xs font-medium text-foreground underline underline-offset-2 hover:opacity-70"
                         href={`/api/cognilance/integrations/${item.id}/connect`}
                       >
                         Connect
@@ -352,14 +354,22 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
                 return (
                   <div
                     key={session.id}
-                    className="mb-1 flex items-start justify-between gap-2 rounded-xl bg-[hsl(var(--chat-surface-raised)/0.55)] p-3 transition-colors hover:bg-[hsl(var(--chat-surface-raised))]"
+                    className="mb-2 flex items-start justify-between gap-2 rounded-[12px] border border-border bg-[hsl(var(--chat-surface))] p-3 transition-colors hover:bg-accent"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="line-clamp-2 text-sm">
                         {session.instruction || "Background session"}
                       </div>
-                      <div className="text-muted-foreground mt-1 text-xs">
-                        {statusLabel(session)}
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        <span
+                          className={cn(
+                            (session.display_status || session.status) ===
+                              "failed" && "text-destructive",
+                            isSessionRunning(session) && "text-foreground"
+                          )}
+                        >
+                          {statusLabel(session)}
+                        </span>
                         {session.listener_integration
                           ? ` · ${session.listener_integration}`
                           : ""}
@@ -368,8 +378,10 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
                     <button
                       type="button"
                       className={cn(
-                        "shrink-0 text-xs",
-                        running ? "text-destructive" : "text-primary"
+                        "shrink-0 rounded-[6px] px-2 py-1 text-xs font-medium underline-offset-2 hover:underline",
+                        running
+                          ? "text-destructive"
+                          : "text-foreground"
                       )}
                       onClick={() =>
                         void (running
@@ -398,7 +410,7 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
       action={
         <button
           type="button"
-          className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="flex size-8 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => void startConversation()}
           aria-label="New conversation"
         >
@@ -413,9 +425,9 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
         <div
           key={item.id}
           className={cn(
-            "group flex w-full items-start gap-1 rounded-xl px-3 py-2.5 transition-colors hover:bg-[hsl(var(--chat-surface-raised)/0.7)]",
+            "group flex w-full items-start gap-1 rounded-[6px] border border-transparent px-3 py-2.5 transition-colors hover:bg-accent",
             snapshot.id === item.id &&
-              "bg-[hsl(var(--chat-surface-raised))] shadow-sm"
+              "border-l-2 border-l-foreground border-y-transparent border-r-transparent bg-accent font-medium"
           )}
         >
           <button
@@ -429,7 +441,7 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
           </button>
           <button
             type="button"
-            className="text-muted-foreground hover:text-destructive mt-0.5 shrink-0 rounded p-1 opacity-70 hover:opacity-100"
+            className="text-muted-foreground hover:text-destructive mt-0.5 shrink-0 rounded-[6px] p-1 opacity-70 hover:bg-background/50 hover:opacity-100"
             aria-label={`Delete ${item.title || "conversation"}`}
             onClick={event => {
               event.stopPropagation()
@@ -451,16 +463,20 @@ const Panel: FC<{
   action?: React.ReactNode
   children: React.ReactNode
 }> = ({ title, loading, error, action, children }) => (
-  <div className="flex h-full min-h-0 flex-col">
-    <div className="mb-2 flex h-10 items-center justify-between">
-      <div className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight">
+  <div className="flex h-full min-h-0 flex-col px-1">
+    <div className="mb-3 flex h-10 items-center justify-between border-b border-border pb-2">
+      <div className="font-[family-name:var(--font-display)] text-base font-semibold tracking-tight">
         {title}
       </div>
       {action}
     </div>
     {error && <p className="text-destructive mb-2 text-xs">{error}</p>}
     <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-      {loading ? <p className="text-muted-foreground text-sm">Loading…</p> : children}
+      {loading ? (
+        <p className="text-muted-foreground text-sm">Loading</p>
+      ) : (
+        children
+      )}
     </div>
   </div>
 )

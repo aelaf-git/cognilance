@@ -39,20 +39,20 @@ export const ActivityTrace: FC<ActivityTraceProps> = ({ steps }) => {
       >
         <IconChevronRight
           className={cn(
-            "text-primary transition-transform",
-            thoughtOpen && "rotate-90"
+            "text-muted-foreground transition-transform",
+            thoughtOpen && "rotate-90 text-foreground"
           )}
           size={13}
         />
         {isThinking && (
-          <IconLoader2 className="animate-spin text-primary" size={13} />
+          <IconLoader2 className="animate-spin text-foreground" size={13} />
         )}
         <span>{rootStep.label}</span>
       </button>
 
       {thoughtOpen && (
-        <div className="ml-1.5 mt-1 space-y-1 border-l border-primary/20 pl-4">
-          <div className="py-0.5 text-xs leading-5 text-muted-foreground/80 whitespace-pre-wrap">
+        <div className="ml-1.5 mt-1 space-y-1 border-l border-border pl-4">
+          <div className="py-0.5 text-xs leading-5 text-muted-foreground whitespace-pre-wrap">
             {rootStep.detail}
           </div>
 
@@ -72,14 +72,14 @@ export const ActivityTrace: FC<ActivityTraceProps> = ({ steps }) => {
                     <span
                       className={cn(
                         "size-1.5 shrink-0 rounded-full bg-muted-foreground/35",
-                        isOpen && "bg-primary"
+                        isOpen && "bg-foreground"
                       )}
                     />
                     <span>{step.label}</span>
                   </button>
 
                   {isOpen && (
-                    <div className="ml-3 border-l border-primary/20 py-0.5 pl-3 text-xs leading-5 text-muted-foreground/80 whitespace-pre-wrap">
+                    <div className="ml-3 border-l border-border py-0.5 pl-3 text-xs leading-5 text-muted-foreground whitespace-pre-wrap">
                       {step.detail}
                     </div>
                   )}

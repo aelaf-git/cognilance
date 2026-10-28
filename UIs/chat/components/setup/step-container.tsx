@@ -42,24 +42,26 @@ export const StepContainer: FC<StepContainerProps> = ({
 
   return (
     <Card
-      className="max-h-[calc(100vh-60px)] w-[600px] overflow-auto"
+      className="max-h-[calc(100vh-60px)] w-[min(600px,calc(100vw-2rem))] overflow-auto rounded-[16px] border-border bg-card shadow-none"
       onKeyDown={handleKeyDown}
     >
       <CardHeader>
-        <CardTitle className="flex justify-between">
+        <CardTitle className="font-[family-name:var(--font-display)] flex justify-between text-xl tracking-tight">
           <div>{stepTitle}</div>
 
-          <div className="text-sm">
+          <div className="text-sm font-normal text-muted-foreground">
             {stepNum} / {SETUP_STEP_COUNT}
           </div>
         </CardTitle>
 
-        <CardDescription>{stepDescription}</CardDescription>
+        <CardDescription className="text-muted-foreground">
+          {stepDescription}
+        </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">{children}</CardContent>
 
-      <CardFooter className="flex justify-between">
+      <CardFooter className="flex justify-between border-t border-border pt-6">
         <div>
           {showBackButton && (
             <Button

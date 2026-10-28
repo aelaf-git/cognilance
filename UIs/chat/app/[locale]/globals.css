@@ -7,16 +7,16 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #ccc;
-  border-radius: 10px;
+  background-color: #737373;
+  border-radius: 6px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #aaa;
+  background-color: #a3a3a3;
 }
 
 ::-webkit-scrollbar-track:hover {
-  background-color: #f2f2f2;
+  background-color: transparent;
 }
 
 ::-webkit-scrollbar-corner {
@@ -29,86 +29,89 @@
 }
 
 @layer base {
+  /* Light = web paper sections */
   :root {
     --font-display: var(--font-space), ui-sans-serif, system-ui, sans-serif;
     --font-body: var(--font-plex), ui-sans-serif, system-ui, sans-serif;
-    --chat-canvas: 40 24% 96%;
+
+    --chat-canvas: 0 0% 96%;
     --chat-surface: 0 0% 100%;
-    --chat-surface-raised: 30 25% 98%;
-    --chat-border: 266 14% 84%;
-    --chat-user: 12 100% 96%;
-    --chat-user-border: 10 88% 86%;
-    --chat-glow: 12 100% 59%;
+    --chat-surface-raised: 0 0% 98%;
+    --chat-border: 0 0% 88%;
+    --chat-user: 0 0% 94%;
+    --chat-user-border: 0 0% 82%;
+    --chat-glow: 0 0% 0%;
 
-    --background: 40 20% 97%;
-    --foreground: 266 30% 12%;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
 
-    --muted: 40 16% 93%;
-    --muted-foreground: 266 8% 42%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 32%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 266 30% 12%;
+    --popover-foreground: 0 0% 0%;
 
     --card: 0 0% 100%;
-    --card-foreground: 266 30% 12%;
+    --card-foreground: 0 0% 0%;
 
-    --border: 266 12% 86%;
-    --input: 266 12% 86%;
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
 
-    --primary: 8 100% 59%;
+    --primary: 0 0% 0%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 40 16% 93%;
-    --secondary-foreground: 266 30% 12%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 0%;
 
-    --accent: 29 98% 57%;
-    --accent-foreground: 266 30% 12%;
+    --accent: 0 0% 94%;
+    --accent-foreground: 0 0% 0%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 72% 45%;
     --destructive-foreground: 0 0% 98%;
 
-    --ring: 8 100% 59%;
+    --ring: 0 0% 0%;
 
-    --radius: 0.5rem;
+    --radius: 0.375rem;
   }
 
+  /* Dark = web void chrome */
   .dark {
-    --chat-canvas: 266 43% 5%;
-    --chat-surface: 263 27% 9%;
-    --chat-surface-raised: 261 24% 12%;
-    --chat-border: 263 16% 20%;
-    --chat-user: 8 45% 15%;
-    --chat-user-border: 8 48% 25%;
-    --chat-glow: 12 100% 59%;
+    --chat-canvas: 0 0% 0%;
+    --chat-surface: 0 0% 7%;
+    --chat-surface-raised: 0 0% 9%;
+    --chat-border: 0 0% 18%;
+    --chat-user: 0 0% 12%;
+    --chat-user-border: 0 0% 22%;
+    --chat-glow: 0 0% 100%;
 
-    --background: 266 45% 6%;
-    --foreground: 0 0% 98%;
+    --background: 0 0% 0%;
+    --foreground: 0 0% 91%;
 
-    --muted: 260 22% 11%;
-    --muted-foreground: 0 0% 78%;
+    --muted: 0 0% 9%;
+    --muted-foreground: 0 0% 64%;
 
-    --popover: 260 22% 11%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 91%;
 
-    --card: 260 22% 11%;
-    --card-foreground: 0 0% 98%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 91%;
 
-    --border: 260 10% 18%;
-    --input: 260 10% 18%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
 
-    --primary: 8 100% 59%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
 
-    --secondary: 260 22% 11%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 0 0% 9%;
+    --secondary-foreground: 0 0% 91%;
 
-    --accent: 29 98% 57%;
+    --accent: 0 0% 12%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 85.7% 97.3%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 98%;
 
-    --ring: 8 100% 59%;
+    --ring: 0 0% 100%;
   }
 }
 
@@ -121,35 +124,35 @@
     font-family: var(--font-body);
     text-rendering: optimizeLegibility;
   }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+  }
 }
 
 .brand-wordmark {
   font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .chat-canvas {
-  background:
-    radial-gradient(
-      800px circle at 50% -20%,
-      hsl(var(--chat-glow) / 0.07),
-      transparent 52%
-    ),
-    hsl(var(--chat-canvas));
+  background: hsl(var(--chat-canvas));
 }
 
 .chat-composer-shadow {
   box-shadow:
-    0 18px 48px hsl(266 40% 4% / 0.16),
-    0 2px 10px hsl(266 30% 8% / 0.08);
+    0 12px 40px hsl(0 0% 0% / 0.08),
+    0 2px 8px hsl(0 0% 0% / 0.04);
 }
 
 .dark .chat-composer-shadow {
   box-shadow:
-    0 24px 64px hsl(266 60% 2% / 0.42),
-    0 2px 12px hsl(266 60% 2% / 0.28),
-    inset 0 1px 0 hsl(0 0% 100% / 0.03);
+    0 18px 48px hsl(0 0% 0% / 0.55),
+    0 2px 10px hsl(0 0% 0% / 0.35),
+    inset 0 1px 0 hsl(0 0% 100% / 0.04);
 }
 
 .sidebar-shell,
@@ -161,15 +164,18 @@
 
 .sidebar-shell {
   background: hsl(var(--chat-canvas));
-  box-shadow: 12px 0 36px hsl(266 50% 3% / 0.08);
+  border-right: 1px solid hsl(var(--chat-border));
+  box-shadow: none;
 }
 
 .sidebar-brand-bar {
-  background: hsl(var(--chat-surface) / 0.5);
+  background: hsl(var(--chat-surface));
+  border-bottom: 1px solid hsl(var(--chat-border));
 }
 
 .sidebar-icon-rail {
-  background: hsl(var(--chat-surface) / 0.42);
+  background: hsl(var(--chat-surface));
+  border-right: 1px solid hsl(var(--chat-border));
 }
 
 .sidebar-panel {
@@ -211,7 +217,8 @@
     max-width: min(290px, calc(100vw - 60px));
     height: calc(100% - 56px);
     background: hsl(var(--chat-canvas));
-    box-shadow: 20px 0 50px hsl(266 50% 3% / 0.35);
+    border-right: 1px solid hsl(var(--chat-border));
+    box-shadow: 12px 0 40px hsl(0 0% 0% / 0.35);
   }
 }
 

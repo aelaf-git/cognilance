@@ -212,7 +212,7 @@ export const Message: FC<MessageProps> = ({
           {message.role === "system" ? (
             <div className="flex items-center space-x-4">
               <IconPencil
-                className="border-primary bg-primary text-secondary rounded border-DEFAULT p-1"
+                className="rounded-[6px] border border-border bg-primary p-1 text-primary-foreground"
                 size={ICON_SIZE}
               />
 
@@ -268,7 +268,7 @@ export const Message: FC<MessageProps> = ({
                 />
               ) : (
                 <IconMoodSmile
-                  className="bg-primary text-secondary border-primary rounded border-DEFAULT p-1"
+                  className="rounded-[6px] border border-border bg-primary p-1 text-primary-foreground"
                   size={ICON_SIZE}
                 />
               )}
@@ -295,7 +295,7 @@ export const Message: FC<MessageProps> = ({
             className={cn(
               "min-w-0 text-[15px] leading-7",
               message.role === "user" &&
-                "max-w-[88%] rounded-2xl rounded-tr-md border border-[hsl(var(--chat-user-border))] bg-[hsl(var(--chat-user))] px-4 py-3 sm:max-w-[78%]"
+                "max-w-[88%] rounded-[12px] rounded-tr-[6px] border border-[hsl(var(--chat-user-border))] bg-[hsl(var(--chat-user))] px-4 py-3 sm:max-w-[78%]"
             )}
           >
             {!firstTokenReceived &&

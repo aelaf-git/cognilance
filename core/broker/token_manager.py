@@ -42,10 +42,18 @@ class TokenManager:
         spec = get_integration(record.integration)
         if not spec:
             raise RuntimeError(f"Unknown integration: {record.integration}")
-        if spec["provider"] == "google":
+        provider = spec["provider"]
+        refreshers = {
+            "google": self._oauth.refresh_google_token,
+            "x": self._oauth.refresh_x_token,
+            "reddit": self._oauth.refresh_reddit_token,
+            "linkedin": self._oauth.refresh_linkedin_token,
+        }
+        refresher = refreshers.get(provider)
+        if refresher is not None:
             if not record.refresh_token:
                 raise RuntimeError(f"Expired token for {record.integration}; reconnect required")
-            tokens = await self._oauth.refresh_google_token(record.refresh_token)
+            tokens = await refresher(record.refresh_token)
             self._store.save_tokens(
                 user_id=record.user_id,
                 integration=record.integration,

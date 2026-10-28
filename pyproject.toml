@@ -27,7 +27,7 @@ dependencies = [
     "langgraph-checkpoint-sqlite>=2.0.0",
     "aiosqlite>=0.20.0",
     "langchain-core>=0.3.0",
-    "langchain-groq>=0.2.0",
+    "langchain-google-genai>=4.0.0",
     # api / broker
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",

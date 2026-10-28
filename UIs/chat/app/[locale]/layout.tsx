@@ -42,8 +42,8 @@ export const metadata: Metadata = {
   },
   description: APP_DESCRIPTION,
   icons: {
-    icon: "/cognilance-logo.png",
-    apple: "/cognilance-logo.png"
+    icon: "/brand/Cognilance-Logo.png",
+    apple: "/brand/Cognilance-Logo.png"
   },
   manifest: "/manifest.json",
   appleWebApp: {
@@ -69,7 +69,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#0e0816"
+  themeColor: "#000000"
 }
 
 const i18nNamespaces = ["translation"]

@@ -42,7 +42,7 @@ export const MessageActions: FC<MessageActionsProps> = ({
   }, [showCheckmark])
 
   const actionClass =
-    "chat-motion flex size-7 items-center justify-center rounded-md transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+    "chat-motion flex size-7 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
   return isEditing ? null : (
     <div className="flex items-center gap-0.5 text-muted-foreground">

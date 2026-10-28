@@ -1,0 +1,14 @@
+id: reddit_agent
+name: Reddit Agent
+model: default
+description: "Drafts Reddit self-posts; submitting is irreversible and gated."
+tools:
+  - reddit.draft
+  - reddit.post
+  - reddit.me
+  - thinking
+skills:
+  - reddit_post
+prompts:
+  system: prompts/system.md
+schema: schema.py
