@@ -1,0 +1,14 @@
+id: linkedin
+name: LinkedIn
+description: Draft and publish text posts to LinkedIn through the broker OAuth integration.
+integration: linkedin
+actions:
+  draft:
+    risk: draft
+    description: Compose a LinkedIn post draft for user review (no network write).
+  post:
+    risk: irreversible
+    description: Publish the approved pending LinkedIn draft.
+  me:
+    risk: read
+    description: Fetch the connected LinkedIn profile.

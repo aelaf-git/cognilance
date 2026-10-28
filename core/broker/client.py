@@ -47,7 +47,8 @@ class IntegrationClient:
             "- recurring: run a task on a schedule in the background (no OAuth required)",
             "  Actions: subscribe {instruction, poll_interval_seconds?}; unsubscribe",
             "  Examples: every day / hourly / weekly tasks; say 'stop recurring' to cancel",
-            "- roles: in-process specialists: researcher, reporter, follow_up, watcher",
+            "- roles: in-process specialists: researcher, reporter, follow_up, watcher, "
+            "x_agent, reddit_agent, linkedin_agent",
             "  (coordinator plans a shared task board; specialists claim structured tasks)",
             "",
             "OAuth integrations (only usable when CONNECTED):",
@@ -91,6 +92,30 @@ class IntegrationClient:
                         "  Gmail monitor: subscribe_inbox (notify on new mail); "
                         "unsubscribe_inbox (stop listening)"
                     )
+                if integration_id == "x":
+                    lines.append(
+                        "  X: The x_agent role owns draft/publish via x.draft / x.post "
+                        "(post is irreversible and may require approval)."
+                    )
+                    lines.append(
+                        "  Draft text first; only x.post after the user approves."
+                    )
+                if integration_id == "reddit":
+                    lines.append(
+                        "  Reddit: The reddit_agent role owns draft/publish via reddit.draft / "
+                        "reddit.post (post is irreversible and may require approval)."
+                    )
+                    lines.append(
+                        "  Draft needs subreddit, title, and body; only reddit.post after approval."
+                    )
+                if integration_id == "linkedin":
+                    lines.append(
+                        "  LinkedIn: The linkedin_agent role owns draft/publish via linkedin.draft / "
+                        "linkedin.post (post is irreversible and may require approval)."
+                    )
+                    lines.append(
+                        "  Draft text first; only linkedin.post after the user approves."
+                    )
             else:
                 lines.append(
                     f"  → Do NOT use app:{integration_id}. "
@@ -99,10 +124,13 @@ class IntegrationClient:
             lines.append("")
         lines.append(
             "Decision rules: The coordinator assigns board tasks to in-process roles "
-            "(researcher, reporter, follow_up, watcher): do not hire external agents. "
+            "(researcher, reporter, follow_up, watcher, x_agent, reddit_agent, linkedin_agent): "
+            "do not hire external agents. "
             "Use web search/fetch for current events and URLs. "
             "For email: follow_up drafts first; only send after approval. "
             "Never send_email on the first request: even if a recipient is given. "
+            "For X / Reddit / LinkedIn: assign x_agent / reddit_agent / linkedin_agent; "
+            "draft first, publish only after approval. "
             "For Docs and proposals: reporter owns drafts via docs.create / docs.write. "
             "Only route to app:* tools that are CONNECTED. "
             "If the user needs a disconnected integration, use thinking and explain how to connect."

@@ -56,21 +56,21 @@ export const CommandK: FC<CommandKProps> = ({}) => {
               <div>i need a new assistant</div>
               <div>start a chat with my 2024 resolutions file</div>
 
-              <div className="border-input relative flex min-h-[50px] w-full items-center justify-center rounded-xl border-2">
+              <div className="border-border relative flex min-h-[50px] w-full items-center justify-center rounded-[12px] border bg-[hsl(var(--chat-surface))]">
                 <TextareaAutosize
-                  className="ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring text-md flex w-full resize-none rounded-md border-none bg-transparent px-3 py-2 pr-14 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  className="ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring text-md flex w-full resize-none rounded-[6px] border-none bg-transparent px-3 py-2 pr-14 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                   placeholder="create a prompt for writing sql code"
                   value={value}
                   onValueChange={setValue}
                 />
                 {loading ? (
                   <IconLoader2
-                    className="absolute bottom-[8px] right-3 animate-spin cursor-pointer rounded p-1 hover:opacity-50"
+                    className="absolute bottom-[8px] right-3 animate-spin cursor-pointer rounded-[6px] p-1 text-muted-foreground hover:opacity-50"
                     size={30}
                   />
                 ) : (
                   <IconSend
-                    className="bg-primary text-secondary absolute bottom-[8px] right-3 cursor-pointer rounded p-1 hover:opacity-50"
+                    className="absolute bottom-[8px] right-3 cursor-pointer rounded-[6px] bg-primary p-1 text-primary-foreground hover:opacity-80"
                     onClick={handleCommandK}
                     size={30}
                   />

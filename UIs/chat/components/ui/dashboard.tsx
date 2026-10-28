@@ -82,14 +82,14 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
             style={{ width: `${ICON_RAIL_WIDTH}px` }}
           >
             <img
-              src="/cognilance-logo.png"
+              src="/brand/Cognilance-Logo.png"
               alt=""
               className="size-8 object-contain"
             />
           </button>
 
           {showSidebar && (
-            <span className="sidebar-brand-wordmark brand-wordmark min-w-0 truncate pr-3 text-lg">
+            <span className="sidebar-brand-wordmark brand-wordmark min-w-0 truncate pr-3 text-base text-foreground">
               Cognilance
             </span>
           )}

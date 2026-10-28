@@ -16,7 +16,12 @@ COPY api ./api
 COPY workers ./workers
 COPY evals ./evals
 
-RUN pip install --no-cache-dir -e .
+# Longer timeouts/retries: large wheels (e.g. cryptography) often time out on slow links.
+RUN pip install --upgrade pip \
+  && pip install --no-cache-dir \
+    --default-timeout=120 \
+    --retries=5 \
+    -e .
 
 ENV COGNILANCE_DEMO=1 \
     COGNILANCE_COORDINATOR_HOST=0.0.0.0 \

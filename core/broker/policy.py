@@ -69,6 +69,12 @@ def risk_for(tool: str, action: str | None = None) -> RiskGrade:
         return RiskGrade.IRREVERSIBLE
     if key.startswith("app:gmail") and action in {"compose_email", "draft"}:
         return RiskGrade.DRAFT
+    if key.startswith("app:x") and action == "create_post":
+        return RiskGrade.IRREVERSIBLE
+    if key.startswith("app:reddit") and action == "submit_post":
+        return RiskGrade.IRREVERSIBLE
+    if key.startswith("app:linkedin") and action == "create_post":
+        return RiskGrade.IRREVERSIBLE
     if key.startswith("app:"):
         return RiskGrade.REVERSIBLE_WRITE if action and "create" in action else RiskGrade.READ
     return RiskGrade.READ
