@@ -163,7 +163,7 @@ export default function SetupPage() {
           <StepContainer
             stepDescription="Let's create your profile."
             stepNum={currentStep}
-            stepTitle="Welcome to Chatbot UI"
+            stepTitle="Welcome to Cognilance"
             onShouldProceed={handleShouldProceed}
             showNextButton={!!(username && usernameAvailable)}
             showBackButton={false}
@@ -249,7 +249,12 @@ export default function SetupPage() {
   }
 
   return (
-    <div className="flex h-full items-center justify-center">
+    <div className="chat-canvas flex h-full flex-col items-center justify-center gap-8 px-4 py-8">
+      <img
+        src="/brand/Cognilance-Logo.png"
+        alt=""
+        className="size-12 object-contain"
+      />
       {renderStep(currentStep)}
     </div>
   )

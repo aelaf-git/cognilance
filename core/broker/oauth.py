@@ -39,8 +39,14 @@ class OAuthService:
         if spec.get("coming_soon"):
             raise ValueError(f"{spec['name']} is coming soon")
         state = secrets.token_urlsafe(32)
-        self._store.save_oauth_state(state, user_id, integration_id)
         provider = spec["provider"]
+        payload: str | None = None
+        if provider == "x":
+            code_verifier = secrets.token_urlsafe(64)
+            payload = code_verifier
+            self._store.save_oauth_state(state, user_id, integration_id, payload)
+            return self._x_auth_url(spec["scopes"], state, code_verifier)
+        self._store.save_oauth_state(state, user_id, integration_id, payload)
         if provider == "google":
             return self._google_auth_url(integration_id, spec["scopes"], state)
         if provider == "github":
@@ -49,13 +55,17 @@ class OAuthService:
             return self._slack_auth_url(spec["scopes"], state)
         if provider == "notion":
             return self._notion_auth_url(state)
+        if provider == "reddit":
+            return self._reddit_auth_url(spec["scopes"], state)
+        if provider == "linkedin":
+            return self._linkedin_auth_url(spec["scopes"], state)
         raise ValueError(f"Unsupported provider: {provider}")
 
     async def handle_callback(self, code: str, state: str) -> tuple[str, str]:
         resolved = self._store.pop_oauth_state(state)
         if not resolved:
             raise ValueError("Invalid or expired OAuth state")
-        user_id, integration_id = resolved
+        user_id, integration_id, payload = resolved
         spec = get_integration(integration_id)
         if not spec:
             raise ValueError(f"Unknown integration: {integration_id}")
@@ -68,6 +78,14 @@ class OAuthService:
             tokens = await self._exchange_slack(code)
         elif provider == "notion":
             tokens = await self._exchange_notion(code)
+        elif provider == "x":
+            if not payload:
+                raise ValueError("Missing PKCE verifier for X OAuth")
+            tokens = await self._exchange_x(code, payload)
+        elif provider == "reddit":
+            tokens = await self._exchange_reddit(code)
+        elif provider == "linkedin":
+            tokens = await self._exchange_linkedin(code)
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -272,4 +290,220 @@ class OAuthService:
             "access_token": data["access_token"],
             "refresh_token": None,
             "expires_at": datetime.now(timezone.utc) + timedelta(days=365),
+        }
+
+    def _x_client(self) -> tuple[str, str]:
+        client_id = os.getenv("X_CLIENT_ID", "")
+        client_secret = os.getenv("X_CLIENT_SECRET", "")
+        if not client_id or not client_secret:
+            raise RuntimeError("X_CLIENT_ID and X_CLIENT_SECRET must be set")
+        return client_id, client_secret
+
+    def _x_auth_url(self, scopes: list[str], state: str, code_verifier: str) -> str:
+        import hashlib
+
+        client_id, _ = self._x_client()
+        challenge = (
+            base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
+            .decode()
+            .rstrip("=")
+        )
+        params = {
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": callback_url(),
+            "scope": " ".join(scopes),
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        }
+        return f"https://twitter.com/i/oauth2/authorize?{urlencode(params)}"
+
+    async def _exchange_x(self, code: str, code_verifier: str) -> dict[str, Any]:
+        client_id, client_secret = self._x_client()
+        credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.twitter.com/2/oauth2/token",
+                headers={
+                    "Authorization": f"Basic {credentials}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data={
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "client_id": client_id,
+                    "redirect_uri": callback_url(),
+                    "code_verifier": code_verifier,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+        expires_at = None
+        if data.get("expires_in"):
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(data["expires_in"]))
+        return {
+            "access_token": data["access_token"],
+            "refresh_token": data.get("refresh_token"),
+            "expires_at": expires_at,
+        }
+
+    async def refresh_x_token(self, refresh_token: str) -> dict[str, Any]:
+        client_id, client_secret = self._x_client()
+        credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.twitter.com/2/oauth2/token",
+                headers={
+                    "Authorization": f"Basic {credentials}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data={
+                    "refresh_token": refresh_token,
+                    "grant_type": "refresh_token",
+                    "client_id": client_id,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+        expires_at = None
+        if data.get("expires_in"):
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(data["expires_in"]))
+        return {
+            "access_token": data["access_token"],
+            "refresh_token": data.get("refresh_token") or refresh_token,
+            "expires_at": expires_at,
+        }
+
+    def _reddit_client(self) -> tuple[str, str]:
+        client_id = os.getenv("REDDIT_CLIENT_ID", "")
+        client_secret = os.getenv("REDDIT_CLIENT_SECRET", "")
+        if not client_id or not client_secret:
+            raise RuntimeError("REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET must be set")
+        return client_id, client_secret
+
+    def _reddit_auth_url(self, scopes: list[str], state: str) -> str:
+        client_id, _ = self._reddit_client()
+        params = {
+            "client_id": client_id,
+            "response_type": "code",
+            "state": state,
+            "redirect_uri": callback_url(),
+            "duration": "permanent",
+            "scope": " ".join(scopes),
+        }
+        return f"https://www.reddit.com/api/v1/authorize?{urlencode(params)}"
+
+    async def _exchange_reddit(self, code: str) -> dict[str, Any]:
+        client_id, client_secret = self._reddit_client()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://www.reddit.com/api/v1/access_token",
+                auth=(client_id, client_secret),
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": callback_url(),
+                },
+                headers={"User-Agent": os.getenv("REDDIT_USER_AGENT", "cognilance:v1.0")},
+            )
+            response.raise_for_status()
+            data = response.json()
+        expires_at = None
+        if data.get("expires_in"):
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(data["expires_in"]))
+        return {
+            "access_token": data["access_token"],
+            "refresh_token": data.get("refresh_token"),
+            "expires_at": expires_at,
+        }
+
+    async def refresh_reddit_token(self, refresh_token: str) -> dict[str, Any]:
+        client_id, client_secret = self._reddit_client()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://www.reddit.com/api/v1/access_token",
+                auth=(client_id, client_secret),
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                },
+                headers={"User-Agent": os.getenv("REDDIT_USER_AGENT", "cognilance:v1.0")},
+            )
+            response.raise_for_status()
+            data = response.json()
+        expires_at = None
+        if data.get("expires_in"):
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(data["expires_in"]))
+        return {
+            "access_token": data["access_token"],
+            "refresh_token": data.get("refresh_token") or refresh_token,
+            "expires_at": expires_at,
+        }
+
+    def _linkedin_client(self) -> tuple[str, str]:
+        client_id = os.getenv("LINKEDIN_CLIENT_ID", "")
+        client_secret = os.getenv("LINKEDIN_CLIENT_SECRET", "")
+        if not client_id or not client_secret:
+            raise RuntimeError("LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET must be set")
+        return client_id, client_secret
+
+    def _linkedin_auth_url(self, scopes: list[str], state: str) -> str:
+        client_id, _ = self._linkedin_client()
+        params = {
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": callback_url(),
+            "state": state,
+            "scope": " ".join(scopes),
+        }
+        return f"https://www.linkedin.com/oauth/v2/authorization?{urlencode(params)}"
+
+    async def _exchange_linkedin(self, code: str) -> dict[str, Any]:
+        client_id, client_secret = self._linkedin_client()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://www.linkedin.com/oauth/v2/accessToken",
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": callback_url(),
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            response.raise_for_status()
+            data = response.json()
+        expires_at = None
+        if data.get("expires_in"):
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(data["expires_in"]))
+        return {
+            "access_token": data["access_token"],
+            "refresh_token": data.get("refresh_token"),
+            "expires_at": expires_at,
+        }
+
+    async def refresh_linkedin_token(self, refresh_token: str) -> dict[str, Any]:
+        client_id, client_secret = self._linkedin_client()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://www.linkedin.com/oauth/v2/accessToken",
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            response.raise_for_status()
+            data = response.json()
+        expires_at = None
+        if data.get("expires_in"):
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(data["expires_in"]))
+        return {
+            "access_token": data["access_token"],
+            "refresh_token": data.get("refresh_token") or refresh_token,
+            "expires_at": expires_at,
         }

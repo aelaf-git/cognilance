@@ -1,4 +1,4 @@
-"""Shared helpers: Groq LLM factory and message utilities."""
+"""Shared helpers: Gemini LLM factory and message utilities."""
 
 from __future__ import annotations
 
@@ -6,38 +6,38 @@ import os
 from typing import Any
 
 from langchain_core.messages import BaseMessage
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel
 
 import core.context.env  # noqa: F401
 
-DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 
 
-def groq_model_name() -> str:
-    return os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL)
+def gemini_model_name() -> str:
+    return os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
 
 
-def structured_output_method(model: str | None = None) -> str:
-    """gpt-oss on Groq often emits plain text instead of a required tool call."""
-    name = (model or groq_model_name()).lower()
-    if "gpt-oss" in name:
-        return "json_schema"
-    return "function_calling"
+def gemini_api_key() -> str:
+    key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+    if not key:
+        raise RuntimeError("Set GEMINI_API_KEY (or GOOGLE_API_KEY) to use Gemini.")
+    return key
 
 
-def get_llm(temperature: float = 0.2) -> ChatGroq:
-    return ChatGroq(
-        model=groq_model_name(),
-        api_key=os.environ["GROQ_API_KEY"],
+def get_llm(temperature: float = 0.2) -> ChatGoogleGenerativeAI:
+    return ChatGoogleGenerativeAI(
+        model=gemini_model_name(),
+        api_key=gemini_api_key(),
         temperature=temperature,
     )
 
 
 def get_structured_llm(schema: type[BaseModel], temperature: float = 0.2) -> Any:
+    """Gemini native JSON schema is more reliable than tool-call extraction."""
     return get_llm(temperature=temperature).with_structured_output(
         schema,
-        method=structured_output_method(),
+        method="json_schema",
     )
 
 

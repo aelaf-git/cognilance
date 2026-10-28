@@ -1,0 +1,15 @@
+id: x_agent
+name: X Agent
+model: default
+description: "Drafts text posts for X; publishing is irreversible and gated."
+tools:
+  - x.draft
+  - x.post
+  - x.me
+  - thinking
+skills:
+  - x_post
+  - twitter
+prompts:
+  system: prompts/system.md
+schema: schema.py

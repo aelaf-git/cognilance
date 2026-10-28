@@ -1,0 +1,14 @@
+id: linkedin_agent
+name: LinkedIn Agent
+model: default
+description: "Drafts LinkedIn profile posts; publishing is irreversible and gated."
+tools:
+  - linkedin.draft
+  - linkedin.post
+  - linkedin.me
+  - thinking
+skills:
+  - linkedin_post
+prompts:
+  system: prompts/system.md
+schema: schema.py

@@ -42,6 +42,27 @@ def _pick_tool(role_id: str, instruction: str, allowed: tuple[str, ...] = ()) ->
         if any(w in text for w in ("send it", "ship it", "send the email", "send now")):
             return first("gmail.send", "gmail.draft")
         return first("gmail.draft")
+    if role_id == "x_agent":
+        if any(
+            w in text
+            for w in ("post it", "publish", "tweet it", "send it", "post now", "publish it")
+        ):
+            return first("x.post", "x.draft")
+        return first("x.draft")
+    if role_id == "reddit_agent":
+        if any(
+            w in text
+            for w in ("post it", "publish", "submit it", "send it", "post now", "publish it")
+        ):
+            return first("reddit.post", "reddit.draft")
+        return first("reddit.draft")
+    if role_id == "linkedin_agent":
+        if any(
+            w in text
+            for w in ("post it", "publish", "send it", "post now", "publish it")
+        ):
+            return first("linkedin.post", "linkedin.draft")
+        return first("linkedin.draft")
     if role_id in {"report_writer", "concept_note_writer"}:
         if "doc" in text or "proposal" in text or "google" in text or "concept note" in text:
             return first("google_docs.create")

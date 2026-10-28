@@ -65,7 +65,7 @@ docker compose watch
 - Chat UI: [http://localhost:3001](http://localhost:3001)
 - Coordinator health: [http://localhost:8200/health](http://localhost:8200/health)
 
-Uses root `.env` for `GROQ_API_KEY` (and friends). Landing stays on `:3000` via `web/docker-compose.yml` so it does not clash with chat.
+Uses root `.env` for `GEMINI_API_KEY` (and friends). Landing stays on `:3000` via `web/docker-compose.yml` so it does not clash with chat.
 
 ---
 
@@ -101,7 +101,7 @@ pip install -e .
 Create a `.env` in the project root with at least:
 
 ```bash
-GROQ_API_KEY=your_groq_key
+GEMINI_API_KEY=your_gemini_key
 ```
 
 ### Run the durable coordinator demo
@@ -349,7 +349,7 @@ Tool manifests with risk grades live in `tools/<name>/manifest.yaml`.
 ./scripts/start_demo.sh
 ```
 
-Health: `http://127.0.0.1:8200/health`. Roles: `http://127.0.0.1:8200/skills/online`. Uses root `.env` for `GROQ_API_KEY`.
+Health: `http://127.0.0.1:8200/health`. Roles: `http://127.0.0.1:8200/skills/online`. Uses root `.env` for `GEMINI_API_KEY`.
 
 ### Example prompts
 
@@ -521,10 +521,19 @@ cognilance-coordinator
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GROQ_API_KEY` | For coordinator | - | Groq API key for the coordinator / specialists |
+| `GEMINI_API_KEY` | For coordinator | - | Gemini API key for the coordinator / specialists (`GOOGLE_API_KEY` also works) |
+| `GEMINI_MODEL` | No | `gemini-3.8-flash` | Gemini model id |
 | `COGNILANCE_APPROVAL_GRADES` | No | `irreversible` | Comma-separated tool risk grades that pause for approval |
 | `COGNILANCE_COORDINATOR_PORT` | No | `8200` | Coordinator HTTP port |
+| `COORDINATOR_PUBLIC_URL` | For OAuth | `http://127.0.0.1:8200` | Public base URL for OAuth callbacks |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | For Google apps | - | Gmail, Drive, Calendar OAuth |
+| `X_CLIENT_ID` / `X_CLIENT_SECRET` | For X posting | - | X (Twitter) OAuth 2.0 + PKCE |
+| `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` | For Reddit posting | - | Reddit OAuth |
+| `REDDIT_USER_AGENT` | Recommended for Reddit | `cognilance:v1.0` | Reddit API user-agent |
+| `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | For LinkedIn posting | - | LinkedIn OAuth |
 | `COGNILANCE_REGISTRY_URL` | - | - | Unused (registry removed from runtime) |
+
+Social posting specialists (`x_agent`, `reddit_agent`, `linkedin_agent`) draft first and publish only after approval (`*.post` is irreversible). Connect each network from the chat Integrations tab after setting the OAuth env vars above. Callback URL: `{COORDINATOR_PUBLIC_URL}/integrations/oauth/callback`.
 
 ---
 

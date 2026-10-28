@@ -22,21 +22,21 @@ export default function ChatPage() {
       {chatMessages.length === 0 ? (
         <div className="chat-canvas relative flex h-full min-h-0 flex-col items-center overflow-y-auto px-4">
           <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center pb-32 pt-16 text-center sm:pb-40">
-            <div className="mb-5 flex size-28 items-center justify-center sm:size-32">
+            <div className="mb-6 flex size-20 items-center justify-center sm:size-24">
               <img
-                src="/cognilance-logo.png"
+                src="/brand/Cognilance-Logo.png"
                 alt="Cognilance"
-                className="size-24 object-contain sm:size-28"
+                className="size-16 object-contain sm:size-20"
               />
             </div>
 
-            <div className="mb-1.5 text-sm text-muted-foreground">
+            <p className="mb-2 font-[family-name:var(--font-display)] text-[0.75rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               Cognilance
-            </div>
-            <h1 className="font-[family-name:var(--font-display)] text-xl font-medium tracking-tight text-foreground sm:text-2xl">
+            </p>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
               What can we accomplish?
             </h1>
-            <p className="mt-2 max-w-sm text-xs leading-5 text-muted-foreground sm:text-sm sm:leading-6">
+            <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
               Think through a problem, coordinate specialized agents, or turn an
               idea into finished work.
             </p>

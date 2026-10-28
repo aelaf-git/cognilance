@@ -18,6 +18,9 @@ INTEGRATION_LOGO_FILES: dict[str, str] = {
     "notion": "notion.png",
     "slack": "slack.webp",
     "github": "github.webp",
+    "x": "x.svg",
+    "reddit": "reddit.svg",
+    "linkedin": "linkedin.svg",
 }
 
 _MEDIA_TYPES: dict[str, str] = {

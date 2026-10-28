@@ -112,6 +112,38 @@ INTEGRATIONS: dict[str, IntegrationSpec] = {
         "logo": "github",
         "coming_soon": True,
     },
+    "x": {
+        "id": "x",
+        "name": "X",
+        "description": "Draft and publish text posts to X (Twitter).",
+        "provider": "x",
+        "scopes": [
+            "tweet.read",
+            "tweet.write",
+            "users.read",
+            "offline.access",
+        ],
+        "actions": ["create_post", "get_me"],
+        "logo": "x",
+    },
+    "reddit": {
+        "id": "reddit",
+        "name": "Reddit",
+        "description": "Draft and submit text posts to a subreddit.",
+        "provider": "reddit",
+        "scopes": ["identity", "submit", "read"],
+        "actions": ["submit_post", "get_me"],
+        "logo": "reddit",
+    },
+    "linkedin": {
+        "id": "linkedin",
+        "name": "LinkedIn",
+        "description": "Draft and publish text posts to your LinkedIn profile.",
+        "provider": "linkedin",
+        "scopes": ["openid", "profile", "w_member_social"],
+        "actions": ["create_post", "get_me"],
+        "logo": "linkedin",
+    },
 }
 
 

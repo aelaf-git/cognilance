@@ -15,12 +15,12 @@ fi
 
 if [[ ! -f .env ]]; then
   echo "Missing .env — create one with at least:" >&2
-  echo "  GROQ_API_KEY=your_groq_key" >&2
+  echo "  GEMINI_API_KEY=your_gemini_key" >&2
   exit 1
 fi
 
-if ! grep -q '^GROQ_API_KEY=.\+' .env 2>/dev/null; then
-  echo "ERROR: Set GROQ_API_KEY in .env (free at https://console.groq.com)" >&2
+if ! grep -qE '^(GEMINI_API_KEY|GOOGLE_API_KEY)=.+' .env 2>/dev/null; then
+  echo "ERROR: Set GEMINI_API_KEY in .env (free at https://aistudio.google.com/apikey)" >&2
   exit 1
 fi
 

@@ -1,0 +1,14 @@
+id: x
+name: X
+description: Draft and publish text posts to X through the broker OAuth integration.
+integration: x
+actions:
+  draft:
+    risk: draft
+    description: Compose an X post draft for user review (no network write).
+  post:
+    risk: irreversible
+    description: Publish the approved pending X draft.
+  me:
+    risk: read
+    description: Fetch the connected X account profile.

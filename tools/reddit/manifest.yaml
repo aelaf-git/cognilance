@@ -1,0 +1,14 @@
+id: reddit
+name: Reddit
+description: Draft and submit text posts to Reddit through the broker OAuth integration.
+integration: reddit
+actions:
+  draft:
+    risk: draft
+    description: Compose a Reddit self-post draft for user review (no network write).
+  post:
+    risk: irreversible
+    description: Submit the approved pending Reddit draft.
+  me:
+    risk: read
+    description: Fetch the connected Reddit account profile.

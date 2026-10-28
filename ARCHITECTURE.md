@@ -20,7 +20,7 @@ core/
   registry/            # startup validation of agents x tools x pipelines
   runtime/             # runs, board, missions, runner, event_bus, checkpointer
   broker/              # OAuth, tokens, grants, risk policy, tool proxy routers
-  models/              # LLM gateway (Groq) + thinking
+  models/              # LLM gateway (Gemini) + thinking
   context/             # env, db, request context, conversations, users, drafts, subscriptions
   signals/             # step / feedback signals for the improvement loop
 api/                   # FastAPI: server.py assembles routes/*, deps.py, sse.py, auth/

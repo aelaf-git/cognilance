@@ -53,12 +53,19 @@ class IntegrationStore:
                     state TEXT PRIMARY KEY,
                     user_id TEXT NOT NULL,
                     integration TEXT NOT NULL,
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    payload TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_integrations_user
                     ON integrations(user_id);
                 """
             )
+            cols = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(oauth_states)").fetchall()
+            }
+            if "payload" not in cols:
+                conn.execute("ALTER TABLE oauth_states ADD COLUMN payload TEXT")
 
     def save_tokens(
         self,
@@ -140,24 +147,30 @@ class IntegrationStore:
                 (user_id, integration),
             )
 
-    def save_oauth_state(self, state: str, user_id: str, integration: str) -> None:
+    def save_oauth_state(
+        self,
+        state: str,
+        user_id: str,
+        integration: str,
+        payload: str | None = None,
+    ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
                 """
-                INSERT INTO oauth_states (state, user_id, integration, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO oauth_states (state, user_id, integration, created_at, payload)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (state, user_id, integration, now),
+                (state, user_id, integration, now, payload),
             )
 
-    def pop_oauth_state(self, state: str) -> tuple[str, str] | None:
+    def pop_oauth_state(self, state: str) -> tuple[str, str, str | None] | None:
         with self._conn() as conn:
             row = conn.execute(
-                "SELECT user_id, integration FROM oauth_states WHERE state = ?",
+                "SELECT user_id, integration, payload FROM oauth_states WHERE state = ?",
                 (state,),
             ).fetchone()
             if not row:
                 return None
             conn.execute("DELETE FROM oauth_states WHERE state = ?", (state,))
-        return row["user_id"], row["integration"]
+        return row["user_id"], row["integration"], row["payload"]

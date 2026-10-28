@@ -1059,3 +1059,185 @@ class IntegrationExecutor:
                 decoded = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
                 data = {**data, "decoded_content": decoded}
             return data
+
+    async def _action_x(
+        self, token: str, action: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            if action == "get_me":
+                response = await client.get(
+                    "https://api.x.com/2/users/me",
+                    headers=headers,
+                    params={"user.fields": "username,name"},
+                )
+                if response.status_code >= 400:
+                    raise RuntimeError(f"X API error {response.status_code}: {response.text}")
+                data = response.json()
+                user = data.get("data") or {}
+                return {
+                    "id": user.get("id"),
+                    "username": user.get("username"),
+                    "name": user.get("name"),
+                    "raw": data,
+                }
+            if action == "create_post":
+                text = str(params.get("text", "")).strip()
+                if not text:
+                    raise RuntimeError("text is required")
+                if params.get("media") or params.get("media_ids"):
+                    raise RuntimeError("Media posts are not supported in v1")
+                response = await client.post(
+                    "https://api.x.com/2/tweets",
+                    headers=headers,
+                    json={"text": text},
+                )
+                if response.status_code >= 400:
+                    raise RuntimeError(f"X API error {response.status_code}: {response.text}")
+                data = response.json()
+                post = data.get("data") or {}
+                post_id = post.get("id")
+                return {
+                    "post_id": post_id,
+                    "text": post.get("text", text),
+                    "url": f"https://x.com/i/web/status/{post_id}" if post_id else None,
+                    "raw": data,
+                }
+            raise RuntimeError(f"Unhandled action: {action}")
+
+    async def _action_reddit(
+        self, token: str, action: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        import os
+
+        user_agent = os.getenv("REDDIT_USER_AGENT", "cognilance:v1.0")
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "User-Agent": user_agent,
+        }
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            if action == "get_me":
+                response = await client.get(
+                    "https://oauth.reddit.com/api/v1/me",
+                    headers=headers,
+                )
+                if response.status_code >= 400:
+                    raise RuntimeError(f"Reddit API error {response.status_code}: {response.text}")
+                data = response.json()
+                return {
+                    "id": data.get("id"),
+                    "name": data.get("name"),
+                    "raw": data,
+                }
+            if action == "submit_post":
+                subreddit = str(params.get("subreddit", "")).strip().lstrip("r/")
+                title = str(params.get("title", "")).strip()
+                text = str(params.get("text", params.get("body", ""))).strip()
+                if not subreddit or not title or not text:
+                    raise RuntimeError("subreddit, title, and text are required")
+                if params.get("url") or params.get("link"):
+                    raise RuntimeError("Link posts are not supported in v1")
+                response = await client.post(
+                    "https://oauth.reddit.com/api/submit",
+                    headers={**headers, "Content-Type": "application/x-www-form-urlencoded"},
+                    data={
+                        "sr": subreddit,
+                        "kind": "self",
+                        "title": title,
+                        "text": text,
+                        "api_type": "json",
+                    },
+                )
+                if response.status_code >= 400:
+                    raise RuntimeError(f"Reddit API error {response.status_code}: {response.text}")
+                data = response.json()
+                jquery = (data.get("json") or {}).get("data") or {}
+                post_id = jquery.get("id") or jquery.get("name")
+                url = jquery.get("url")
+                errors = (data.get("json") or {}).get("errors") or []
+                if errors:
+                    raise RuntimeError(f"Reddit submit failed: {errors}")
+                return {
+                    "post_id": post_id,
+                    "url": url,
+                    "subreddit": subreddit,
+                    "title": title,
+                    "raw": data,
+                }
+            raise RuntimeError(f"Unhandled action: {action}")
+
+    async def _action_linkedin(
+        self, token: str, action: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "X-Restli-Protocol-Version": "2.0.0",
+        }
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            if action == "get_me":
+                response = await client.get(
+                    "https://api.linkedin.com/v2/userinfo",
+                    headers=headers,
+                )
+                if response.status_code >= 400:
+                    raise RuntimeError(
+                        f"LinkedIn API error {response.status_code}: {response.text}"
+                    )
+                data = response.json()
+                person_id = data.get("sub")
+                return {
+                    "id": person_id,
+                    "name": data.get("name"),
+                    "author_urn": f"urn:li:person:{person_id}" if person_id else None,
+                    "raw": data,
+                }
+            if action == "create_post":
+                text = str(params.get("text", "")).strip()
+                if not text:
+                    raise RuntimeError("text is required")
+                author_hint = str(params.get("author_urn") or "").strip()
+                if params.get("organization") or author_hint.startswith(
+                    "urn:li:organization:"
+                ):
+                    raise RuntimeError("Company page posts are not supported in v1")
+                author = author_hint
+                if not author:
+                    me = await self._action_linkedin(token, "get_me", {})
+                    author = str(me.get("author_urn") or "").strip()
+                if not author:
+                    raise RuntimeError("Could not resolve LinkedIn author URN")
+                body = {
+                    "author": author,
+                    "lifecycleState": "PUBLISHED",
+                    "specificContent": {
+                        "com.linkedin.ugc.ShareContent": {
+                            "shareCommentary": {"text": text},
+                            "shareMediaCategory": "NONE",
+                        }
+                    },
+                    "visibility": {
+                        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+                    },
+                }
+                response = await client.post(
+                    "https://api.linkedin.com/v2/ugcPosts",
+                    headers=headers,
+                    json=body,
+                )
+                if response.status_code >= 400:
+                    raise RuntimeError(
+                        f"LinkedIn API error {response.status_code}: {response.text}"
+                    )
+                data = response.json() if response.content else {}
+                post_id = data.get("id") or response.headers.get("x-restli-id")
+                return {
+                    "post_id": post_id,
+                    "text": text,
+                    "author_urn": author,
+                    "raw": data,
+                }
+            raise RuntimeError(f"Unhandled action: {action}")
