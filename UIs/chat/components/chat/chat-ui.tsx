@@ -179,7 +179,7 @@ export const ChatUI: FC<ChatUIProps> = ({}) => {
   }
 
   return (
-    <div className="chat-canvas relative flex h-full min-h-0 flex-col items-center overflow-hidden">
+    <div className="chat-canvas chat-rise relative flex h-full min-h-0 flex-col items-center overflow-hidden">
       <div className="absolute right-4 top-3 z-20 flex h-10 items-center space-x-2">
         <ChatSecondaryButtons />
       </div>
@@ -192,11 +192,11 @@ export const ChatUI: FC<ChatUIProps> = ({}) => {
 
         <ChatMessages />
 
-        <div ref={messagesEndRef} className="h-28 sm:h-36" />
+        <div ref={messagesEndRef} className="h-28 sm:h-32" />
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-[hsl(var(--chat-canvas))] via-[hsl(var(--chat-canvas)/0.96)] to-transparent px-3 pb-3 pt-12 sm:px-6 sm:pb-6">
-        <div className="pointer-events-auto mx-auto w-full max-w-3xl">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-[hsl(var(--chat-canvas))] via-[hsl(var(--chat-canvas)/0.96)] to-transparent px-3 pb-4 pt-8 sm:px-6 sm:pb-5">
+        <div className="chat-rise-delay pointer-events-auto mx-auto w-full max-w-3xl">
           <ChatInput />
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { ChatbotUIContext } from "@/context/context"
 import useHotkey from "@/lib/hooks/use-hotkey"
 import { cn } from "@/lib/utils"
-import { IconPlayerStopFilled, IconSend } from "@tabler/icons-react"
+import { IconArrowUp, IconPlayerStopFilled } from "@tabler/icons-react"
 import { FC, useContext, useEffect, useState } from "react"
 import { TextareaAutosize } from "../ui/textarea-autosize"
 import { useChatHandler } from "./chat-hooks/use-chat-handler"
@@ -118,11 +118,14 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
     }
   }
 
+  const canSend = Boolean(userInput.trim())
+
   return (
-    <div className="chat-composer-shadow chat-motion relative flex min-h-[64px] w-full items-end rounded-[12px] border border-[hsl(var(--chat-border))] bg-[hsl(var(--chat-surface))] p-2 transition-[border-color,box-shadow] focus-within:border-foreground/40 focus-within:ring-4 focus-within:ring-foreground/5">
+    <div className="flex w-full flex-col gap-2">
+      <div className="chat-motion flex min-h-[64px] w-full items-end gap-2 rounded-[12px] border border-[hsl(var(--chat-border))] bg-[hsl(var(--chat-surface))] px-2 py-2 pl-1 shadow-none transition-[border-color] focus-within:border-foreground/40">
         <TextareaAutosize
           textareaRef={chatInputRef}
-          className="placeholder:text-muted-foreground/70 flex w-full resize-none border-none bg-transparent px-3 py-2.5 pr-14 text-[15px] leading-6 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="placeholder:text-muted-foreground/70 flex w-full resize-none border-none bg-transparent px-3 py-2.5 text-[15px] leading-6 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           placeholder="Message Cognilance"
           onValueChange={handleInputChange}
           value={userInput}
@@ -133,40 +136,42 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
           onCompositionEnd={() => setIsTyping(false)}
         />
 
-        <div className="absolute bottom-2.5 right-2.5 flex items-center">
+        <div className="mb-0.5 flex shrink-0 items-center pr-0.5">
           {isGenerating ? (
             <button
               type="button"
               aria-label="Stop generating"
-              className="flex size-9 items-center justify-center rounded-[6px] border border-border bg-accent text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="chat-press flex size-9 items-center justify-center rounded-full border border-border bg-accent text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={handleStopMessage}
             >
-              <IconPlayerStopFilled className="animate-pulse" size={17} />
+              <IconPlayerStopFilled className="animate-pulse" size={16} />
             </button>
           ) : (
             <button
               type="button"
               aria-label="Send message"
               className={cn(
-                "flex size-9 items-center justify-center rounded-[6px] bg-primary text-primary-foreground transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                !userInput.trim() &&
-                  "cursor-not-allowed opacity-40 hover:opacity-40"
+                "chat-press flex size-9 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                canSend
+                  ? "bg-foreground text-background hover:opacity-90"
+                  : "cursor-not-allowed border border-border bg-transparent text-muted-foreground"
               )}
               onClick={() => {
-                if (!userInput.trim()) return
+                if (!canSend) return
 
                 handleSendMessage(userInput, chatMessages, false)
               }}
-              disabled={!userInput.trim()}
+              disabled={!canSend}
             >
-              <IconSend size={17} />
+              <IconArrowUp size={18} stroke={2} />
             </button>
           )}
         </div>
+      </div>
 
-        <div className="pointer-events-none absolute -bottom-5 right-1 hidden text-[10px] text-muted-foreground/60 sm:block">
-          Enter to send. Shift + Enter for a new line.
-        </div>
+      <p className="text-center text-[11px] leading-4 text-muted-foreground/80">
+        Cognilance is an AI and can make mistakes.
+      </p>
     </div>
   )
 }

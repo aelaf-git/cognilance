@@ -17,7 +17,7 @@ INTEGRATION_LOGO_FILES: dict[str, str] = {
     "calendar": "calendar.webp",
     "notion": "notion.png",
     "slack": "slack.webp",
-    "github": "github.webp",
+    "github": "github.svg",
     "x": "x.svg",
     "reddit": "reddit.svg",
     "linkedin": "linkedin.svg",

@@ -8,7 +8,7 @@ import { ThemeSwitcher } from "../utility/theme-switcher"
 import { TabsList } from "../ui/tabs"
 import { SidebarSwitchItem } from "./sidebar-switch-item"
 
-export const SIDEBAR_ICON_SIZE = 28
+export const SIDEBAR_ICON_SIZE = 20
 
 interface SidebarSwitcherProps {
   onContentTypeChange: (contentType: string) => void
@@ -19,23 +19,23 @@ export const SidebarSwitcher: FC<SidebarSwitcherProps> = ({
 }) => {
   return (
     <div className="flex h-full flex-col justify-between bg-transparent">
-      <TabsList className="flex h-auto w-full flex-col gap-1 bg-transparent py-2">
+      <TabsList className="flex h-auto w-full flex-col items-center gap-1.5 bg-transparent py-2.5">
         <SidebarSwitchItem
-          icon={<IconMessage size={SIDEBAR_ICON_SIZE} />}
+          icon={<IconMessage size={SIDEBAR_ICON_SIZE} stroke={1.75} />}
           contentType="chats"
           label="Conversations"
           onContentTypeChange={onContentTypeChange}
         />
 
         <SidebarSwitchItem
-          icon={<IconPlayerPlay size={SIDEBAR_ICON_SIZE} />}
+          icon={<IconPlayerPlay size={SIDEBAR_ICON_SIZE} stroke={1.75} />}
           contentType="sessions"
           label="Sessions"
           onContentTypeChange={onContentTypeChange}
         />
 
         <SidebarSwitchItem
-          icon={<IconPlugConnected size={SIDEBAR_ICON_SIZE} />}
+          icon={<IconPlugConnected size={SIDEBAR_ICON_SIZE} stroke={1.75} />}
           contentType="integrations"
           label="Integrations"
           onContentTypeChange={onContentTypeChange}
