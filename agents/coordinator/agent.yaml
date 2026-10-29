@@ -8,8 +8,10 @@ tools:
 skills:
   - decompose
   - assemble
+  - verify
 prompts:
   system: prompts/system.md
   plan: prompts/plan.md
   assemble: prompts/assemble.md
+  verify: prompts/verify.md
 schema: schema.py

@@ -150,6 +150,7 @@ async def run_tool(
     params: dict[str, Any] | None = None,
     integrations: Any | None = None,
     skip_approval_check: bool = False,
+    conversation: list[Any] | None = None,
 ) -> dict[str, Any]:
     """Run one tool on behalf of a role. Returns ``{text,data,assignee,risk,status}``."""
     from agents.loader import RolePack, get_role
@@ -180,6 +181,7 @@ async def run_tool(
         text, data = await run_thinking(
             instruction or params.get("query", ""),
             stream=False,
+            conversation=conversation,
             capabilities=client.capabilities_context(user_id),
         )
         output = ToolOutput(text=text, data=data)

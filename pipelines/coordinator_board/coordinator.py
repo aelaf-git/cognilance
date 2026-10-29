@@ -2,28 +2,51 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
+
+from langchain_core.messages import BaseMessage
 
 from agents.coordinator.schema import CoordinatorPlan, PlannedTask
 from agents.loader import SPECIALISTS, coordinator, normalize_role_id, specialist_ids
 from core.context.request import current_mission_id
-from core.models.gateway import get_structured_llm, last_user_text
+from core.models.gateway import get_llm, get_structured_llm, last_user_text, to_chat_messages
 from core.runtime.board.store import BoardStore
 from core.runtime.runs.store import RunStore
+from pipelines.coordinator_board.verify import format_clarification_message
 from pipelines.shared.state import BoardTaskState, State
 from pipelines.shared.streaming import emit, emit_status, reveal_text
+
+MAX_PLAN_THREAD_MESSAGES = 8
 
 
 def _run_id(state: State) -> str:
     return str(state.get("run_id") or current_mission_id.get() or "").strip()
 
 
-def _plan_prompt(query: str) -> str:
+def _thread_snippet(messages: list[BaseMessage] | None, *, limit: int = MAX_PLAN_THREAD_MESSAGES) -> str:
+    rows = to_chat_messages(messages or [])[-limit:]
+    if not rows:
+        return ""
+    return "\n".join(f"{r['role']}: {r['content']}" for r in rows)
+
+
+def _plan_prompt(query: str, *, thread: str = "") -> str:
     pack = coordinator()
     roles_blurb = "\n".join(f"- {r.id}: {r.description or r.instructions}" for r in SPECIALISTS)
     header = pack.prompts.get("plan") or pack.instructions
-    return f"{header.strip()}\n\nSpecialists:\n{roles_blurb}\n\nUser request:\n{query}\n"
+    parts = [
+        header.strip(),
+        "",
+        "Specialists:",
+        roles_blurb,
+        "",
+        f"User request:\n{query}",
+    ]
+    if thread.strip():
+        parts.extend(["", f"Recent conversation (for follow-ups; tasks must still be self-contained):\n{thread}"])
+    return "\n".join(parts) + "\n"
 
 
 def _validate_assignees(plan: CoordinatorPlan) -> CoordinatorPlan:
@@ -60,33 +83,38 @@ def _plan_from_preset(state: State) -> CoordinatorPlan | None:
 
 async def coordinator_plan(state: State) -> dict[str, Any]:
     emit_status("Coordinator planning…")
-    query = last_user_text(state.get("messages") or [])
+    messages = state.get("messages") or []
+    query = last_user_text(messages)
+    thread = _thread_snippet(messages)
 
     plan = _plan_from_preset(state)
     if plan is None:
         llm = get_structured_llm(CoordinatorPlan, temperature=0.1)
         try:
-            plan = await llm.ainvoke(_plan_prompt(query))
+            plan = await llm.ainvoke(_plan_prompt(query, thread=thread))
         except Exception as exc:
             emit("plan", text=f"Planner fallback: {exc}")
             plan = CoordinatorPlan(
-                reasoning="fallback single research task",
+                reasoning="fallback conversational reply",
                 tasks=[],
-                suggested_ui="research-sources",
+                suggested_ui="text",
             )
     plan = _validate_assignees(plan)
 
     if not plan.tasks:
         plan = CoordinatorPlan(
-            reasoning=plan.reasoning or "fallback single research task",
+            reasoning=plan.reasoning or "fallback conversational reply",
             tasks=[
                 PlannedTask(
-                    title="Research and answer",
-                    instruction=query,
+                    title="Reply",
+                    instruction=(
+                        "Reply to the user conversationally. Do not search the web. "
+                        f"Their message: {query}"
+                    ),
                     assignee_role="researcher",
                 )
             ],
-            suggested_ui=plan.suggested_ui or "research-sources",
+            suggested_ui=plan.suggested_ui or "text",
         )
 
     if plan.reasoning:
@@ -167,6 +195,26 @@ async def coordinator_assemble(state: State) -> dict[str, Any]:
             "answer_streamed": False,
         }
 
+    if state.get("needs_clarification"):
+        clarification = dict(state.get("clarification") or {})
+        msg = format_clarification_message(clarification)
+        run_id = _run_id(state)
+        if not state.get("answer_streamed"):
+            reveal_text(msg, event="answer")
+            emit("answer_done", text=msg)
+        if run_id:
+            RunStore().append_step(
+                run_id,
+                kind="assemble",
+                text=msg[:500],
+                data={"needs_clarification": True, "clarification": clarification},
+            )
+        return {
+            "final_text": msg,
+            "final_data": {"needs_clarification": True, "clarification": clarification},
+            "answer_streamed": True,
+        }
+
     run_id = _run_id(state)
     results: list[dict[str, Any]] = list(state.get("subtask_results") or [])
     if run_id:
@@ -196,7 +244,7 @@ async def coordinator_assemble(state: State) -> dict[str, Any]:
         unique.append(row)
 
     parts = [str(r.get("text") or "").strip() for r in unique if r.get("text")]
-    final_text = "\n\n".join(parts) if parts else "No specialist results."
+    joined = "\n\n".join(parts) if parts else "No specialist results."
     merged: dict[str, Any] = {}
     for r in unique:
         for k, v in (r.get("data") or {}).items():
@@ -204,6 +252,41 @@ async def coordinator_assemble(state: State) -> dict[str, Any]:
                 merged[k] = v
             elif isinstance(merged[k], list) and isinstance(v, list):
                 merged[k] = merged[k] + v
+
+    final_text = joined
+    if parts:
+        try:
+            pack = coordinator()
+            assemble_rules = (pack.prompts.get("assemble") or pack.instructions or "").strip()
+            query = last_user_text(state.get("messages") or [])
+            result_blocks: list[str] = []
+            for r in unique:
+                text = str(r.get("text") or "").strip()
+                if not text:
+                    continue
+                block = f"[{r.get('assignee') or 'specialist'}]\n{text}"
+                data = r.get("data") or {}
+                if data:
+                    try:
+                        block += f"\n(data: {json.dumps(data, default=str)[:1500]})"
+                    except Exception:
+                        pass
+                result_blocks.append(block)
+            prompt = (
+                f"{assemble_rules}\n\n"
+                f"User request:\n{query}\n\n"
+                f"Specialist results:\n" + "\n\n".join(result_blocks)
+            )
+            response = await get_llm(temperature=0.2).ainvoke(
+                [{"role": "user", "content": prompt}]
+            )
+            content = response.content
+            synthesized = content if isinstance(content, str) else str(content)
+            if synthesized.strip():
+                final_text = synthesized.strip()
+        except Exception as exc:
+            emit("assemble", text=f"Assemble LLM fallback: {exc}")
+            final_text = joined
 
     if not state.get("answer_streamed"):
         reveal_text(final_text, event="answer")

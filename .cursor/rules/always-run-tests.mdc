@@ -1,0 +1,35 @@
+---
+description: Always run relevant tests after code changes and fix failures before finishing
+alwaysApply: true
+---
+
+# Always run tests
+
+After any code change that can affect behavior (implementation, prompts wired into runtime, schemas, pipelines, tools, API), run the relevant tests before considering the task done.
+
+## How to run
+
+Prefer the project venv:
+
+```bash
+./venv/bin/python -m pytest <paths> -q --tb=short
+```
+
+Scope tightly to what you touched, then widen if needed:
+
+- Pipelines: `pipelines/<area>/tests/` (e.g. `pipelines/coordinator_board/tests/`)
+- Tools: `tools/<name>/tests/` or `pytest tools`
+- Evals: `evals/` / `cognilance-evals` when agent cases or offline checks change
+- Broader smoke when unsure: `pytest pipelines tools evals -q --tb=short`
+
+## If tests fail
+
+1. Read the failure output (`--tb=short`); identify the root cause—do not dismiss or skip.
+2. Fix the code or the test (prefer fixing production code when the test is correct).
+3. Re-run the same failing suite until it passes.
+4. Do not mark the task complete, commit, or hand off while relevant tests are red.
+5. If a failure is environmental (missing API key, network) and unrelated to the change, note it clearly and still ensure logic tests you can run locally are green.
+
+## When tests are missing
+
+For new behavior, add or extend unit tests in the nearest `tests/` package. Do not ship unverified paths when a small test can cover them.
