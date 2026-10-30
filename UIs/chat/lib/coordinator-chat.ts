@@ -3,6 +3,7 @@ import {
   setCognilanceConversation,
   touchCognilance
 } from "@/lib/cognilance-store"
+import { DocxDocument, parseDocumentEvent } from "@/lib/docx-document"
 
 const ANSWER_EVENTS = new Set(["direct_reply", "answer_done", "final"])
 
@@ -81,6 +82,7 @@ export async function streamOrchestratorReply(
   signal: AbortSignal,
   onText: (text: string) => void,
   onActivity?: (steps: ActivityStep[]) => void,
+  onDocument?: (document: DocxDocument) => void,
   regenerate = false
 ): Promise<void> {
   const conversationId = getConversationId()
@@ -310,6 +312,10 @@ export async function streamOrchestratorReply(
           throw new Error(
             String(event.message || "Cognilance couldn't answer that.")
           )
+        }
+        if (name === "document") {
+          const snapshot = parseDocumentEvent(event)
+          if (snapshot) onDocument?.(snapshot)
         }
         applyEvent(event)
         if (

@@ -1,7 +1,6 @@
 "use client"
 
 import { FC } from "react"
-import { SIDEBAR_PANEL_WIDTH } from "../ui/dashboard"
 import { TabsContent } from "../ui/tabs"
 import { CognilanceSidebar } from "./cognilance-sidebar"
 
@@ -10,7 +9,7 @@ interface SidebarProps {
   showSidebar: boolean
 }
 
-export const Sidebar: FC<SidebarProps> = ({ contentType, showSidebar }) => {
+export const Sidebar: FC<SidebarProps> = ({ contentType }) => {
   const panel =
     contentType === "sessions" || contentType === "integrations"
       ? contentType
@@ -19,14 +18,12 @@ export const Sidebar: FC<SidebarProps> = ({ contentType, showSidebar }) => {
   return (
     <TabsContent
       className="m-0 h-full w-full"
-      style={{
-        minWidth: showSidebar ? `${SIDEBAR_PANEL_WIDTH}px` : "0px",
-        maxWidth: showSidebar ? `${SIDEBAR_PANEL_WIDTH}px` : "0px",
-        width: showSidebar ? `${SIDEBAR_PANEL_WIDTH}px` : "0px"
-      }}
       value={contentType}
     >
-      <div className="flex h-full flex-col px-3 pb-3 pt-2">
+      <div
+        key={contentType}
+        className="chat-panel-in flex h-full flex-col px-3 pb-3 pt-3"
+      >
         <CognilanceSidebar contentType={panel} />
       </div>
     </TabsContent>

@@ -32,6 +32,36 @@ echo "Installing Python package..."
 pip install -q -e .
 
 COORDINATOR_PORT="${COGNILANCE_COORDINATOR_PORT:-${COGNILANCE_ORCHESTRATOR_PORT:-8200}}"
+SUPABASE_URL="http://127.0.0.1:54321"
+CHAT_DIR="${ROOT}/UIs/chat"
+
+supabase_answers() {
+  curl -sS --max-time 2 -o /dev/null "${SUPABASE_URL}/"
+}
+
+if supabase_answers; then
+  echo "Chat database already running at ${SUPABASE_URL}"
+else
+  if ! command -v supabase >/dev/null 2>&1; then
+    echo "ERROR: The Supabase CLI is missing. Install it, then run: supabase start" >&2
+    echo "  https://supabase.com/docs/guides/cli/getting-started" >&2
+    exit 1
+  fi
+  echo "Starting chat database..."
+  (cd "${CHAT_DIR}" && supabase start)
+fi
+
+for _ in $(seq 1 60); do
+  if supabase_answers; then
+    break
+  fi
+  sleep 0.5
+done
+
+if ! supabase_answers; then
+  echo "ERROR: Chat database did not answer at ${SUPABASE_URL}" >&2
+  exit 1
+fi
 
 PIDS=()
 cleanup() {
@@ -60,7 +90,9 @@ echo "  Cognilance demo is running locally"
 echo "========================================"
 echo "  Health:  http://127.0.0.1:${COORDINATOR_PORT}/health"
 echo "  Roles:   http://127.0.0.1:${COORDINATOR_PORT}/skills/online"
+echo "  Chat DB: ${SUPABASE_URL}"
 echo ""
+echo "  Chat UI: cd UIs/chat && npm run dev"
 echo "  Share online (free): ./scripts/expose_demo.sh"
 echo "  Stop: Ctrl+C"
 echo "========================================"

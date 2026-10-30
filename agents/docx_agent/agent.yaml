@@ -1,0 +1,16 @@
+id: docx_agent
+name: Docx Agent
+model: default
+description: "Writes and styles Word .docx files. Does not research. Expects the wording in the brief. Chooses fonts, spacing, margins, lists, and tables, and edits the open file when one exists."
+tools:
+  - docx.create
+  - docx.write
+  - docx.style
+  - docx.read
+  - thinking
+skills:
+  - docx
+  - document_style
+prompts:
+  system: prompts/system.md
+schema: schema.py

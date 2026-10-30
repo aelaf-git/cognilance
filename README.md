@@ -522,7 +522,7 @@ cognilance-coordinator
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `GEMINI_API_KEY` | For coordinator | - | Gemini API key for the coordinator / specialists (`GOOGLE_API_KEY` also works) |
-| `GEMINI_MODEL` | No | `gemini-3.8-flash` | Gemini model id |
+| `GEMINI_MODEL` | No | `gemini-3.5-flash-lite` | Gemini model id |
 | `COGNILANCE_APPROVAL_GRADES` | No | `irreversible` | Comma-separated tool risk grades that pause for approval |
 | `COGNILANCE_COORDINATOR_PORT` | No | `8200` | Coordinator HTTP port |
 | `COORDINATOR_PUBLIC_URL` | For OAuth | `http://127.0.0.1:8200` | Public base URL for OAuth callbacks |

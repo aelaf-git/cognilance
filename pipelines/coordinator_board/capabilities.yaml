@@ -1,0 +1,35 @@
+# Capabilities users commonly ask for.
+# A label is "not available" when no loaded specialist lists one of its tools.
+capabilities:
+  - label: Public web research
+    tools: [web.search, web.fetch]
+  - label: Email drafts and sending
+    tools: [gmail.draft, gmail.send]
+  - label: Google Docs and written reports
+    tools: [google_docs.create, google_docs.write]
+  - label: Word documents
+    tools: [docx.create, docx.write]
+  - label: Concept notes
+    tools: [google_docs.create]
+  - label: Inbox and web monitoring
+    tools: [gmail.search, web.search]
+  - label: Posts on X
+    tools: [x.post, x.draft]
+  - label: Reddit posts
+    tools: [reddit.post]
+  - label: LinkedIn posts
+    tools: [linkedin.post]
+  - label: Slide decks
+    tools: [slides.create, slides.write]
+  - label: CRM records
+    tools: [crm.read, crm.write]
+  - label: Calendar events and invites
+    tools: [calendar.create, calendar.list]
+  - label: Slack messages
+    tools: [slack.post]
+  - label: Spreadsheets
+    tools: [sheets.read, sheets.write]
+  - label: Payments and invoices
+    tools: [stripe.charge]
+  - label: GitHub pull requests
+    tools: [github.create_pr]

@@ -33,6 +33,10 @@ type SessionItem = {
   listener_integration?: string | null
 }
 
+const rowDelay = (index: number) => ({
+  animationDelay: `${Math.min(index, 8) * 30}ms`
+})
+
 type IntegrationItem = {
   id: string
   name: string
@@ -224,50 +228,65 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
   if (contentType === "integrations") {
     return (
       <Panel title="Integrations" loading={loading} error={error}>
-        {integrations.map(item => {
-          const logoKey = item.logo || item.id
-          return (
-            <div
-              key={item.id}
-              className="mb-2 rounded-[12px] border border-border bg-[hsl(var(--chat-surface))] p-3 transition-colors hover:bg-accent"
-            >
-              <div className="flex items-start gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-border bg-[hsl(var(--chat-canvas))]">
-                  <img
-                    src={`/api/cognilance/integrations/logos/${encodeURIComponent(logoKey)}`}
-                    alt=""
-                    className="size-6 object-contain"
-                    onError={event => {
-                      event.currentTarget.style.display = "none"
-                      const fallback = event.currentTarget.nextElementSibling
-                      if (fallback instanceof HTMLElement) {
-                        fallback.style.display = "block"
+        <div className="space-y-0.5">
+          {integrations.map((item, index) => {
+            const logoKey = item.logo || item.id
+            const isGithub = logoKey === "github" || item.id === "github"
+            const isMonochromeSvg =
+              isGithub ||
+              logoKey === "x" ||
+              logoKey === "reddit" ||
+              logoKey === "linkedin"
+            return (
+              <div
+                key={item.id}
+                className="chat-row flex items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent/70"
+                style={rowDelay(index)}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/80 bg-[hsl(var(--chat-canvas))]">
+                    <img
+                      src={
+                        isGithub
+                          ? "/integrations/github.svg"
+                          : `/api/cognilance/integrations/logos/${encodeURIComponent(logoKey)}`
                       }
-                    }}
-                  />
-                  <IconPlugConnected
-                    size={18}
-                    className="text-muted-foreground hidden"
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-[family-name:var(--font-display)] text-sm font-semibold tracking-tight">
+                      alt=""
+                      className={cn(
+                        "size-5 object-contain",
+                        isMonochromeSvg && "dark:invert"
+                      )}
+                      onError={event => {
+                        event.currentTarget.style.display = "none"
+                        const fallback = event.currentTarget.nextElementSibling
+                        if (fallback instanceof HTMLElement) {
+                          fallback.style.display = "block"
+                        }
+                      }}
+                    />
+                    <IconPlugConnected
+                      size={16}
+                      className="text-muted-foreground hidden"
+                    />
+                  </div>
+                  <div className="font-[family-name:var(--font-display)] min-w-0 truncate text-[13.5px] font-medium tracking-tight text-foreground">
                     {item.name}
                   </div>
-                  {item.description && (
-                    <div className="text-muted-foreground mt-1 text-xs leading-5">
-                      {item.description}
-                    </div>
-                  )}
-                  <div className="mt-2">
-                    {item.coming_soon ? (
-                      <span className="font-[family-name:var(--font-display)] text-[0.65rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                        Coming soon
+                </div>
+                <div className="shrink-0">
+                  {item.coming_soon ? (
+                    <span className="font-[family-name:var(--font-display)] rounded-md border border-border/60 bg-[hsl(var(--chat-canvas))] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                      Soon
+                    </span>
+                  ) : item.connected ? (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+                        <span className="size-1.5 rounded-full bg-foreground" />
+                        Connected
                       </span>
-                    ) : item.connected ? (
                       <button
                         type="button"
-                        className="text-xs font-medium text-foreground underline underline-offset-2 hover:opacity-70"
+                        className="rounded-md border border-border bg-[hsl(var(--chat-canvas))] px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
                         onClick={async () => {
                           await cognilanceJson(
                             `integrations/${item.id}/disconnect`,
@@ -282,22 +301,22 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
                           )
                         }}
                       >
-                        Connected
+                        Disconnect
                       </button>
-                    ) : (
-                      <a
-                        className="text-xs font-medium text-foreground underline underline-offset-2 hover:opacity-70"
-                        href={`/api/cognilance/integrations/${item.id}/connect`}
-                      >
-                        Connect
-                      </a>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <a
+                      className="inline-flex items-center rounded-md border border-border bg-[hsl(var(--chat-canvas))] px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-foreground hover:bg-foreground hover:text-background"
+                      href={`/api/cognilance/integrations/${item.id}/connect`}
+                    >
+                      Connect
+                    </a>
+                  )}
                 </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </Panel>
     )
   }
@@ -349,12 +368,13 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
                 No background sessions yet.
               </p>
             ) : (
-              longRunning.map(session => {
+              longRunning.map((session, index) => {
                 const running = isSessionRunning(session)
                 return (
                   <div
                     key={session.id}
-                    className="mb-2 flex items-start justify-between gap-2 rounded-[12px] border border-border bg-[hsl(var(--chat-surface))] p-3 transition-colors hover:bg-accent"
+                    className="chat-row mb-2 flex items-start justify-between gap-2 rounded-[12px] border border-border bg-[hsl(var(--chat-surface))] p-3 transition-colors hover:bg-accent"
+                    style={rowDelay(index)}
                   >
                     <div className="min-w-0 flex-1">
                       <div className="line-clamp-2 text-sm">
@@ -410,70 +430,91 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
       action={
         <button
           type="button"
-          className="flex size-8 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex size-7 items-center justify-center rounded-md border border-border bg-[hsl(var(--chat-canvas))] text-muted-foreground transition-colors hover:border-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => void startConversation()}
           aria-label="New conversation"
         >
-          <IconPlus size={18} />
+          <IconPlus size={15} stroke={2} />
         </button>
       }
     >
       {conversations.length === 0 && !loading && (
-        <p className="text-muted-foreground text-sm">No conversations yet.</p>
+        <p className="text-muted-foreground px-2 py-2 text-xs">
+          No conversations yet.
+        </p>
       )}
-      {conversations.map(item => (
-        <div
-          key={item.id}
-          className={cn(
-            "group flex w-full items-start gap-1 rounded-[6px] border border-transparent px-3 py-2.5 transition-colors hover:bg-accent",
-            snapshot.id === item.id &&
-              "border-l-2 border-l-foreground border-y-transparent border-r-transparent bg-accent font-medium"
-          )}
-        >
-          <button
-            type="button"
-            onClick={() => openConversation(item)}
-            className="min-w-0 flex-1 text-left"
+      <div className="space-y-0.5">
+        {conversations.map((item, index) => (
+          <div
+            key={item.id}
+            className={cn(
+              "chat-row group flex w-full items-center gap-1 rounded-lg px-2.5 py-2 transition-colors hover:bg-accent/70",
+              snapshot.id === item.id &&
+                "bg-accent font-medium text-foreground"
+            )}
+            style={rowDelay(index)}
           >
-            <div className="truncate text-sm">
-              {item.title || "New conversation"}
-            </div>
-          </button>
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-destructive mt-0.5 shrink-0 rounded-[6px] p-1 opacity-70 hover:bg-background/50 hover:opacity-100"
-            aria-label={`Delete ${item.title || "conversation"}`}
-            onClick={event => {
-              event.stopPropagation()
-              void deleteConversation(item)
-            }}
-          >
-            <IconTrash size={16} />
-          </button>
-        </div>
-      ))}
+            <button
+              type="button"
+              onClick={() => openConversation(item)}
+              className="min-w-0 flex-1 text-left"
+            >
+              <div className="truncate text-[13.5px]">
+                {item.title || "New conversation"}
+              </div>
+            </button>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-destructive shrink-0 rounded-md p-1 opacity-0 transition-opacity hover:bg-background/60 group-hover:opacity-100"
+              aria-label={`Delete ${item.title || "conversation"}`}
+              onClick={event => {
+                event.stopPropagation()
+                void deleteConversation(item)
+              }}
+            >
+              <IconTrash size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
     </Panel>
   )
 }
 
 const Panel: FC<{
   title: string
+  eyebrow?: string
+  lead?: string
   loading: boolean
   error: string
   action?: React.ReactNode
   children: React.ReactNode
-}> = ({ title, loading, error, action, children }) => (
+}> = ({ title, eyebrow, lead, loading, error, action, children }) => (
   <div className="flex h-full min-h-0 flex-col px-1">
-    <div className="mb-3 flex h-10 items-center justify-between border-b border-border pb-2">
-      <div className="font-[family-name:var(--font-display)] text-base font-semibold tracking-tight">
-        {title}
+    <div className="mb-2 border-b border-border/70 px-2 pb-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          {eyebrow && (
+            <p className="font-[family-name:var(--font-display)] mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {eyebrow}
+            </p>
+          )}
+          <div className="font-[family-name:var(--font-display)] text-[15px] font-semibold tracking-tight text-foreground">
+            {title}
+          </div>
+          {lead && (
+            <p className="text-muted-foreground mt-1 text-xs leading-5">
+              {lead}
+            </p>
+          )}
+        </div>
+        {action}
       </div>
-      {action}
     </div>
-    {error && <p className="text-destructive mb-2 text-xs">{error}</p>}
-    <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+    {error && <p className="text-destructive mb-2 px-2 text-xs">{error}</p>}
+    <div className="sidebar-panel-scroll min-h-0 flex-1 overflow-y-auto">
       {loading ? (
-        <p className="text-muted-foreground text-sm">Loading</p>
+        <p className="text-muted-foreground px-2 py-2 text-xs">Loading…</p>
       ) : (
         children
       )}

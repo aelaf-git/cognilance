@@ -1,6 +1,7 @@
 import { useChatHandler } from "@/components/chat/chat-hooks/use-chat-handler"
 import { ChatbotUIContext } from "@/context/context"
 import { ActivityStep } from "@/lib/coordinator-chat"
+import { DocxDocument } from "@/lib/docx-document"
 import { LLM_LIST } from "@/lib/models/llm/llm-list"
 import { cn } from "@/lib/utils"
 import { Tables } from "@/supabase/types"
@@ -11,7 +12,6 @@ import {
   IconCaretRightFilled,
   IconCircleFilled,
   IconFileText,
-  IconMoodSmile,
   IconPencil
 } from "@tabler/icons-react"
 import { useTheme } from "next-themes"
@@ -27,12 +27,13 @@ import { ActivityTrace } from "./activity-trace"
 import { MessageActions } from "./message-actions"
 import { MessageMarkdown } from "./message-markdown"
 
-const ICON_SIZE = 32
+const ICON_SIZE = 24
 
 interface MessageProps {
   message: Tables<"messages">
   fileItems: Tables<"file_items">[]
   activity?: ActivityStep[]
+  docx?: DocxDocument
   isEditing: boolean
   isLast: boolean
   onStartEdit: (message: Tables<"messages">) => void
@@ -44,6 +45,7 @@ export const Message: FC<MessageProps> = ({
   message,
   fileItems,
   activity,
+  docx,
   isEditing,
   isLast,
   onStartEdit,
@@ -63,7 +65,11 @@ export const Message: FC<MessageProps> = ({
     assistantImages,
     toolInUse,
     files,
-    models
+    models,
+    activeDocument,
+    documentPaneOpen,
+    setActiveDocument,
+    setDocumentPaneOpen
   } = useContext(ChatbotUIContext)
 
   const { handleSendMessage } = useChatHandler()
@@ -194,18 +200,18 @@ export const Message: FC<MessageProps> = ({
 
   return (
     <div
-      className="flex w-full justify-center px-3 sm:px-6"
+      className="chat-rise flex w-full justify-center px-3 sm:px-6"
       onKeyDown={handleKeyDown}
     >
       <div
         className={cn(
-          "relative flex w-full max-w-3xl flex-col py-5 sm:py-6",
+          "relative flex w-full max-w-3xl flex-col py-2 sm:py-2.5",
           message.role === "user" && "items-end"
         )}
       >
         <div
           className={cn(
-            "w-full space-y-3",
+            "w-full space-y-1.5",
             message.role === "user" && "flex flex-col items-end"
           )}
         >
@@ -218,84 +224,62 @@ export const Message: FC<MessageProps> = ({
 
               <div className="text-lg font-semibold">Prompt</div>
             </div>
-          ) : (
-            <div
-              className={cn(
-                "flex items-center gap-2.5",
-                message.role === "user" && "flex-row-reverse"
-              )}
-            >
-              {message.role === "assistant" && !profile ? (
+          ) : message.role === "assistant" ? (
+            <div className="flex items-center gap-2">
+              {!profile ? (
                 <img
                   src="/cognilance-logo.png"
                   alt="Cognilance"
                   width={ICON_SIZE}
                   height={ICON_SIZE}
-                  className="size-8 object-contain"
+                  className="size-6 object-contain"
                 />
-              ) : message.role === "assistant" ? (
-                messageAssistantImage ? (
-                  <Image
-                    style={{
-                      width: `${ICON_SIZE}px`,
-                      height: `${ICON_SIZE}px`
-                    }}
-                    className="rounded"
-                    src={messageAssistantImage}
-                    alt="assistant image"
-                    height={ICON_SIZE}
-                    width={ICON_SIZE}
-                  />
-                ) : (
-                  <WithTooltip
-                    display={<div>{MODEL_DATA?.modelName}</div>}
-                    trigger={
-                      <ModelIcon
-                        provider={modelDetails?.provider || "custom"}
-                        height={ICON_SIZE}
-                        width={ICON_SIZE}
-                      />
-                    }
-                  />
-                )
-              ) : profile?.image_url ? (
+              ) : messageAssistantImage ? (
                 <Image
-                  className={`size-[32px] rounded`}
-                  src={profile?.image_url}
-                  height={32}
-                  width={32}
-                  alt="user image"
+                  style={{
+                    width: `${ICON_SIZE}px`,
+                    height: `${ICON_SIZE}px`
+                  }}
+                  className="rounded"
+                  src={messageAssistantImage}
+                  alt="assistant image"
+                  height={ICON_SIZE}
+                  width={ICON_SIZE}
                 />
               ) : (
-                <IconMoodSmile
-                  className="rounded-[6px] border border-border bg-primary p-1 text-primary-foreground"
-                  size={ICON_SIZE}
+                <WithTooltip
+                  display={<div>{MODEL_DATA?.modelName}</div>}
+                  trigger={
+                    <ModelIcon
+                      provider={modelDetails?.provider || "custom"}
+                      height={ICON_SIZE}
+                      width={ICON_SIZE}
+                    />
+                  }
                 />
               )}
 
-              <div className="font-[family-name:var(--font-display)] text-sm font-medium tracking-wide">
-                {message.role === "assistant"
-                  ? message.assistant_id
-                    ? assistants.find(
-                        assistant => assistant.id === message.assistant_id
-                      )?.name
-                    : !profile
-                      ? "Cognilance"
-                      : selectedAssistant
-                        ? selectedAssistant?.name
-                        : MODEL_DATA?.modelName
-                  : profile?.display_name ?? profile?.username ?? "You"}
+              <div className="font-[family-name:var(--font-display)] text-xs font-medium tracking-wide">
+                {message.assistant_id
+                  ? assistants.find(
+                      assistant => assistant.id === message.assistant_id
+                    )?.name
+                  : !profile
+                    ? "Cognilance"
+                    : selectedAssistant
+                      ? selectedAssistant?.name
+                      : MODEL_DATA?.modelName}
               </div>
             </div>
-          )}
+          ) : null}
           {message.role === "assistant" && activity && activity.length > 0 && (
             <ActivityTrace steps={activity} />
           )}
           <div
             className={cn(
-              "min-w-0 text-[15px] leading-7",
+              "min-w-0 text-[14px] leading-6",
               message.role === "user" &&
-                "max-w-[88%] rounded-[12px] rounded-tr-[6px] border border-[hsl(var(--chat-user-border))] bg-[hsl(var(--chat-user))] px-4 py-3 sm:max-w-[78%]"
+                "max-w-[88%] rounded-[10px] rounded-tr-[4px] border border-[hsl(var(--chat-user-border))] bg-[hsl(var(--chat-user))] px-3 py-2 sm:max-w-[78%]"
             )}
           >
             {!firstTokenReceived &&
@@ -338,6 +322,31 @@ export const Message: FC<MessageProps> = ({
               <MessageMarkdown content={message.content} />
             )}
           </div>
+          {message.role === "assistant" && docx ? (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveDocument(docx)
+                setDocumentPaneOpen(true)
+              }}
+              className={cn(
+                "mt-1 flex w-full max-w-sm items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 text-left transition-colors hover:bg-accent",
+                documentPaneOpen &&
+                  activeDocument?.id === docx.id &&
+                  "border-foreground/30"
+              )}
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-orange-500/15 text-orange-400">
+                <IconFileText size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{docx.title}</span>
+                <span className="block text-xs text-muted-foreground">
+                  Cognilance Doc · Only you
+                </span>
+              </span>
+            </button>
+          ) : null}
         </div>
 
         {fileItems.length > 0 && (
@@ -437,7 +446,7 @@ export const Message: FC<MessageProps> = ({
         </div>
         <div
           className={cn(
-            "mt-2 flex w-full",
+            "mt-1 flex w-full",
             message.role === "user" ? "justify-end" : "justify-start"
           )}
         >
