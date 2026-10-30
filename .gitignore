@@ -121,6 +121,7 @@ agents/orchestrator/orchestrator/ui/static/*
 
 # --- Cognilance runtime data ---
 data/hosted-agents/
+data/docx/
 agents/orchestrator/data/*
 !agents/orchestrator/data/.gitkeep
 agents/orchestrator/.langgraph_api/

@@ -7,6 +7,8 @@ capabilities:
     tools: [gmail.draft, gmail.send]
   - label: Google Docs and written reports
     tools: [google_docs.create, google_docs.write]
+  - label: Word documents
+    tools: [docx.create, docx.write]
   - label: Concept notes
     tools: [google_docs.create]
   - label: Inbox and web monitoring

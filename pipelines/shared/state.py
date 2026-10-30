@@ -95,6 +95,7 @@ class State(TypedDict, total=False):
     proposed_answer: str
     accepted_ids: list[str]
     retry_feedback: str
+    revision: dict[str, Any]
     blocked_claims: list[str]
     unsupported_remaining: int
     halt: bool

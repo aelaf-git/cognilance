@@ -1,6 +1,7 @@
 import { useChatHandler } from "@/components/chat/chat-hooks/use-chat-handler"
 import { ChatbotUIContext } from "@/context/context"
 import { ActivityStep } from "@/lib/coordinator-chat"
+import { DocxDocument } from "@/lib/docx-document"
 import { LLM_LIST } from "@/lib/models/llm/llm-list"
 import { cn } from "@/lib/utils"
 import { Tables } from "@/supabase/types"
@@ -32,6 +33,7 @@ interface MessageProps {
   message: Tables<"messages">
   fileItems: Tables<"file_items">[]
   activity?: ActivityStep[]
+  docx?: DocxDocument
   isEditing: boolean
   isLast: boolean
   onStartEdit: (message: Tables<"messages">) => void
@@ -43,6 +45,7 @@ export const Message: FC<MessageProps> = ({
   message,
   fileItems,
   activity,
+  docx,
   isEditing,
   isLast,
   onStartEdit,
@@ -62,7 +65,11 @@ export const Message: FC<MessageProps> = ({
     assistantImages,
     toolInUse,
     files,
-    models
+    models,
+    activeDocument,
+    documentPaneOpen,
+    setActiveDocument,
+    setDocumentPaneOpen
   } = useContext(ChatbotUIContext)
 
   const { handleSendMessage } = useChatHandler()
@@ -315,6 +322,31 @@ export const Message: FC<MessageProps> = ({
               <MessageMarkdown content={message.content} />
             )}
           </div>
+          {message.role === "assistant" && docx ? (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveDocument(docx)
+                setDocumentPaneOpen(true)
+              }}
+              className={cn(
+                "mt-1 flex w-full max-w-sm items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 text-left transition-colors hover:bg-accent",
+                documentPaneOpen &&
+                  activeDocument?.id === docx.id &&
+                  "border-foreground/30"
+              )}
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-orange-500/15 text-orange-400">
+                <IconFileText size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{docx.title}</span>
+                <span className="block text-xs text-muted-foreground">
+                  Cognilance Doc · Only you
+                </span>
+              </span>
+            </button>
+          ) : null}
         </div>
 
         {fileItems.length > 0 && (

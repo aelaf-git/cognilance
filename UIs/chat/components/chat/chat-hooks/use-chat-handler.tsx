@@ -10,6 +10,7 @@ import {
   clearOrchestratorConversation,
   streamOrchestratorReply
 } from "@/lib/coordinator-chat"
+import { DocxDocument } from "@/lib/docx-document"
 import { Tables } from "@/supabase/types"
 import { ChatMessage, ChatPayload, LLMID, ModelProvider } from "@/types"
 import { useRouter } from "next/navigation"
@@ -70,7 +71,9 @@ export const useChatHandler = () => {
     models,
     isPromptPickerOpen,
     isFilePickerOpen,
-    isToolPickerOpen
+    isToolPickerOpen,
+    setActiveDocument,
+    setDocumentPaneOpen
   } = useContext(ChatbotUIContext)
 
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
@@ -250,12 +253,27 @@ export const useChatHandler = () => {
             )
           )
         }
+        const showDocument = (snapshot: DocxDocument) => {
+          setFirstTokenReceived(true)
+          setChatMessages(previous =>
+            previous.map(item =>
+              item.message.id === assistantId || item.document?.id === snapshot.id
+                ? { ...item, document: snapshot }
+                : item
+            )
+          )
+          setActiveDocument(snapshot)
+          if (window.matchMedia("(min-width: 1024px)").matches) {
+            setDocumentPaneOpen(true)
+          }
+        }
         try {
           await streamOrchestratorReply(
             messageContent,
             newAbortController.signal,
             showReply,
             showActivity,
+            showDocument,
             isRegeneration
           )
         } catch (error) {

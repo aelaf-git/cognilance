@@ -50,6 +50,20 @@ def test_roster_is_live_manifests_with_gaps():
     assert "Calendar events and invites" in roster.not_available
     assert "Public web research" not in roster.not_available
     assert "Email drafts and sending" not in roster.not_available
+    assert "docx_agent" in ids
+    assert "Word documents" not in roster.not_available
+    docx_agent = next(agent for agent in roster.agents if agent.id == "docx_agent")
+    assert "docx.create" in docx_agent.required_inputs
+    assert "docx.write" in docx_agent.required_inputs
+    assert "web.search" not in docx_agent.required_inputs
+    assert "google_docs.create" not in docx_agent.required_inputs
+    assert "title" in docx_agent.output_shape
+    report_writer = next(agent for agent in roster.agents if agent.id == "report_writer")
+    assert "google_docs.create" in report_writer.required_inputs
+    assert not any(tool.startswith("docx.") for tool in report_writer.required_inputs)
+    concept = next(agent for agent in roster.agents if agent.id == "concept_note_writer")
+    assert not any(tool.startswith("docx.") for tool in concept.required_inputs)
+    assert not any(tool.startswith("docx.") for tool in researcher.required_inputs)
 
 
 def test_unknown_agent_is_rejected_before_execution():

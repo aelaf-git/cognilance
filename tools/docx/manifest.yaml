@@ -1,0 +1,16 @@
+id: docx
+name: Word documents
+description: Create, style, and edit local .docx files. Does not use Google Docs.
+actions:
+  create:
+    risk: draft
+    description: Create a Word file with a title, style, and optional blocks.
+  write:
+    risk: reversible_write
+    description: Append, insert, or replace blocks. A full replace must still contain every paragraph, caption, and chart title.
+  style:
+    risk: reversible_write
+    description: Change fonts, spacing, margins, alignment, page size, header, footer, page numbers, orientation, and columns.
+  read:
+    risk: read
+    description: Read the open file's title, style, and blocks.

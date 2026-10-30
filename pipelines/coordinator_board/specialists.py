@@ -85,9 +85,24 @@ def _pick_tool(role_id: str, instruction: str, allowed: tuple[str, ...] = ()) ->
             return first("linkedin.post", "linkedin.draft")
         return first("linkedin.draft")
     if role_id in {"report_writer", "concept_note_writer"}:
+        if "docx" in text or "word file" in text or "word document" in text:
+            return "thinking"
         if "doc" in text or "proposal" in text or "google" in text or "concept note" in text:
             return first("google_docs.create")
         return "thinking"
+    if role_id == "docx_agent":
+        new_file = ("new document", "new file", "another document", "new word file")
+        if any(phrase in text for phrase in new_file):
+            return first("docx.create")
+        style_words = ("font", "typeface", "margin", "spacing", "layout", "heading size")
+        if any(word in text for word in style_words):
+            return first("docx.style")
+        from core.context.request import current_conversation_id
+        from tools.docx.store import active_document_id
+
+        if active_document_id(current_conversation_id.get()):
+            return first("docx.write")
+        return first("docx.create")
     return "thinking"
 
 

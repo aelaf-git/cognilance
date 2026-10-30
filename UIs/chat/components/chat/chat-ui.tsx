@@ -11,11 +11,12 @@ import { convertBlobToBase64 } from "@/lib/blob-to-b64"
 import useHotkey from "@/lib/hooks/use-hotkey"
 import { LLMID, MessageImage } from "@/types"
 import { useParams } from "next/navigation"
-import { FC, useContext, useEffect, useState } from "react"
+import { FC, useContext, useEffect, useRef, useState } from "react"
 import { useScroll } from "./chat-hooks/use-scroll"
 import { ChatInput } from "./chat-input"
 import { ChatMessages } from "./chat-messages"
 import { ChatSecondaryButtons } from "./chat-secondary-buttons"
+import { DocumentPane } from "./document-pane"
 
 interface ChatUIProps {}
 
@@ -35,7 +36,10 @@ export const ChatUI: FC<ChatUIProps> = ({}) => {
     setChatFiles,
     setShowFilesDisplay,
     setUseRetrieval,
-    setSelectedTools
+    setSelectedTools,
+    activeDocument,
+    documentPaneOpen,
+    setDocumentPaneOpen
   } = useContext(ChatbotUIContext)
 
   const { handleNewChat, handleFocusChatInput } = useChatHandler()
@@ -49,6 +53,50 @@ export const ChatUI: FC<ChatUIProps> = ({}) => {
   } = useScroll()
 
   const [loading, setLoading] = useState(true)
+  const [wide, setWide] = useState(false)
+  const [layoutReady, setLayoutReady] = useState(false)
+  const [chatWidth, setChatWidth] = useState(460)
+  const [resizing, setResizing] = useState(false)
+  const splitRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)")
+    const apply = () => setWide(query.matches)
+    apply()
+    setLayoutReady(true)
+    query.addEventListener("change", apply)
+    return () => query.removeEventListener("change", apply)
+  }, [])
+
+  useEffect(() => {
+    if (!resizing) return
+
+    const move = (event: PointerEvent) => {
+      const bounds = splitRef.current?.getBoundingClientRect()
+      if (!bounds) return
+      const next = event.clientX - bounds.left
+      const max = Math.max(360, bounds.width - 420)
+      setChatWidth(Math.min(max, Math.max(320, next)))
+    }
+    const stop = () => {
+      setResizing(false)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", stop)
+    window.addEventListener("pointercancel", stop)
+    return () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", stop)
+      window.removeEventListener("pointercancel", stop)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+  }, [resizing])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -178,28 +226,68 @@ export const ChatUI: FC<ChatUIProps> = ({}) => {
     return <Loading />
   }
 
+  const showSplit = layoutReady && wide && documentPaneOpen && activeDocument !== null
+  const showOverlay = layoutReady && !wide && documentPaneOpen && activeDocument !== null
+  const closePane = () => setDocumentPaneOpen(false)
+
   return (
-    <div className="chat-canvas chat-rise relative flex h-full min-h-0 flex-col items-center overflow-hidden">
-      <div className="absolute right-4 top-3 z-20 flex h-10 items-center space-x-2">
-        <ChatSecondaryButtons />
-      </div>
-
+    <div ref={splitRef} className="chat-canvas relative flex h-full min-h-0 overflow-hidden">
       <div
-        className="size-full min-h-0 overflow-y-auto overscroll-contain scroll-smooth"
-        onScroll={handleScroll}
+        className="chat-rise relative flex h-full min-h-0 min-w-0 flex-col items-center overflow-hidden"
+        style={showSplit ? { width: chatWidth, flex: "0 0 auto" } : { flex: "1 1 auto" }}
       >
-        <div ref={messagesStartRef} />
+        <div className="absolute right-4 top-3 z-20 flex h-10 items-center space-x-2">
+          <ChatSecondaryButtons />
+        </div>
 
-        <ChatMessages />
+        <div
+          className="size-full min-h-0 overflow-y-auto overscroll-contain scroll-smooth"
+          onScroll={handleScroll}
+        >
+          <div ref={messagesStartRef} />
 
-        <div ref={messagesEndRef} className="h-28 sm:h-32" />
-      </div>
+          <ChatMessages />
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-[hsl(var(--chat-canvas))] via-[hsl(var(--chat-canvas)/0.96)] to-transparent px-3 pb-4 pt-8 sm:px-6 sm:pb-5">
-        <div className="chat-rise-delay pointer-events-auto mx-auto w-full max-w-3xl">
-          <ChatInput />
+          <div ref={messagesEndRef} className="h-28 sm:h-32" />
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-[hsl(var(--chat-canvas))] via-[hsl(var(--chat-canvas)/0.96)] to-transparent px-3 pb-4 pt-8 sm:px-6 sm:pb-5">
+          <div className="chat-rise-delay pointer-events-auto mx-auto w-full max-w-3xl">
+            <ChatInput />
+          </div>
         </div>
       </div>
+
+      {showSplit && activeDocument ? (
+        <>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize document"
+            title="Drag to resize"
+            onPointerDown={event => {
+              event.preventDefault()
+              setResizing(true)
+            }}
+            className="group relative z-20 w-2 shrink-0 cursor-col-resize"
+          >
+            <div
+              className={
+                resizing
+                  ? "absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-foreground/50"
+                  : "absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-transparent group-hover:bg-foreground/30"
+              }
+            />
+          </div>
+          <DocumentPane docx={activeDocument} onClose={closePane} />
+        </>
+      ) : null}
+
+      {showOverlay && activeDocument ? (
+        <div className="absolute inset-0 z-30">
+          <DocumentPane docx={activeDocument} onClose={closePane} />
+        </div>
+      ) : null}
     </div>
   )
 }

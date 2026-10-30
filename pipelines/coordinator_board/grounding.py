@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from pipelines.coordinator_board import llm_call
+from pipelines.coordinator_board.evidence import evidence_text
 from pipelines.coordinator_board.models import ClaimSet
 from pipelines.shared.state import State
 
@@ -153,7 +154,7 @@ def apply_claims(answer: str, claims: ClaimSet, accepted_ids: set[str]) -> tuple
 def _claim_prompt(answer: str, observations: list[dict[str, Any]]) -> str:
     blocks = []
     for obs in observations:
-        payload = json.dumps(obs.get("payload") or {}, default=str)[:1500]
+        payload = evidence_text(obs.get("payload") or {})
         blocks.append(
             "<untrusted-data>\n"
             f"id={obs.get('id')} status={obs.get('status')}\n"
