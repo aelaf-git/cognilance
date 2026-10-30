@@ -9,6 +9,7 @@ import {
   WorkspaceImage
 } from "@/types"
 import { AssistantImage } from "@/types/images/assistant-image"
+import { DocxDocument } from "@/lib/docx-document"
 import { VALID_ENV_KEYS } from "@/types/valid-keys"
 import { Dispatch, SetStateAction, createContext } from "react"
 
@@ -136,6 +137,12 @@ interface ChatbotUIContext {
   setSelectedTools: Dispatch<SetStateAction<Tables<"tools">[]>>
   toolInUse: string
   setToolInUse: Dispatch<SetStateAction<string>>
+
+  // WORD DOCUMENT PANE
+  activeDocument: DocxDocument | null
+  setActiveDocument: Dispatch<SetStateAction<DocxDocument | null>>
+  documentPaneOpen: boolean
+  setDocumentPaneOpen: Dispatch<SetStateAction<boolean>>
 }
 
 export const ChatbotUIContext = createContext<ChatbotUIContext>({
@@ -261,5 +268,11 @@ export const ChatbotUIContext = createContext<ChatbotUIContext>({
   selectedTools: [],
   setSelectedTools: () => {},
   toolInUse: "none",
-  setToolInUse: () => {}
+  setToolInUse: () => {},
+
+  // WORD DOCUMENT PANE
+  activeDocument: null,
+  setActiveDocument: () => {},
+  documentPaneOpen: false,
+  setDocumentPaneOpen: () => {}
 })

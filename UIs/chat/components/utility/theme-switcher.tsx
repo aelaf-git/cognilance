@@ -17,7 +17,7 @@ export const ThemeSwitcher: FC<ThemeSwitcherProps> = () => {
 
   return (
     <Button
-      className="flex cursor-pointer space-x-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+      className="chat-press flex cursor-pointer space-x-2 text-muted-foreground hover:bg-accent hover:text-foreground"
       variant="ghost"
       size="icon"
       aria-label="Toggle theme"

@@ -49,6 +49,14 @@ class PendingApproval(TypedDict, total=False):
     task_id: str | None
 
 
+class Clarification(TypedDict, total=False):
+    task_id: str
+    role: str
+    title: str
+    issues: list[str]
+    questions: list[str]
+
+
 class State(TypedDict, total=False):
     """Shared state for the durable coordinator graph."""
 
@@ -69,3 +77,25 @@ class State(TypedDict, total=False):
     direct_reply: bool
     pending_approval: PendingApproval | None
     waiting_approval: bool
+    needs_clarification: bool
+    clarification: Clarification
+    # ReAct loop. Optional so preset board graphs keep compiling.
+    trace_id: str
+    roster: dict[str, Any]
+    observations: list[dict[str, Any]]
+    iteration: int
+    delegation_count: int
+    deadline_ts: float
+    verdicts: list[dict[str, Any]]
+    claims: list[dict[str, Any]]
+    retries: dict[str, int]
+    loop_status: str
+    last_decision: dict[str, Any]
+    pending_observations: list[dict[str, Any]]
+    proposed_answer: str
+    accepted_ids: list[str]
+    retry_feedback: str
+    revision: dict[str, Any]
+    blocked_claims: list[str]
+    unsupported_remaining: int
+    halt: bool

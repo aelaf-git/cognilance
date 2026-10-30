@@ -20,7 +20,7 @@ export default function ChatPage() {
   return (
     <>
       {chatMessages.length === 0 ? (
-        <div className="chat-canvas relative flex h-full min-h-0 flex-col items-center overflow-y-auto px-4">
+        <div className="chat-canvas chat-rise relative flex h-full min-h-0 flex-col items-center overflow-y-auto px-4">
           <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center pb-32 pt-16 text-center sm:pb-40">
             <div className="mb-6 flex size-20 items-center justify-center sm:size-24">
               <img
@@ -42,8 +42,8 @@ export default function ChatPage() {
             </p>
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-[hsl(var(--chat-canvas))] via-[hsl(var(--chat-canvas)/0.96)] to-transparent px-3 pb-3 pt-12 sm:px-6 sm:pb-6">
-            <div className="pointer-events-auto mx-auto w-full max-w-3xl">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-[hsl(var(--chat-canvas))] via-[hsl(var(--chat-canvas)/0.96)] to-transparent px-3 pb-4 pt-12 sm:px-6 sm:pb-5">
+            <div className="chat-rise-delay pointer-events-auto mx-auto w-full max-w-3xl">
               <ChatInput />
             </div>
           </div>

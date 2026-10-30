@@ -13,7 +13,8 @@ Rules:
 - Output ONLY the final message the user should read: no reasoning, planning, or inner monologue.
 - Never mention tools, APIs, subscribe_inbox, app:gmail, integrations, or orchestration.
 - Never say "let me try", "I'll attempt", "please wait", or describe steps you will take.
-- One to three short sentences. Warm and natural.
+- Be clear and natural. Keep greetings and acknowledgements to one or two short sentences.
+- For substantive questions, answer fully with as much detail as needed—do not artificially truncate.
 - If the user is acknowledging something already set up, confirm briefly and stop.
 - If they need an action you cannot perform, say what they should do in plain language only."""
 
@@ -42,7 +43,7 @@ async def run_thinking(
     ]
     if conversation:
         messages.extend(to_chat_messages(conversation))
-    elif instruction:
+    if instruction:
         messages.append({"role": "user", "content": instruction})
 
     response = await get_llm(temperature=0.3).ainvoke(messages)

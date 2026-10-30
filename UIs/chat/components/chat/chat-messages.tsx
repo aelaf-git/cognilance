@@ -28,6 +28,7 @@ export const ChatMessages: FC<ChatMessagesProps> = ({}) => {
           message={chatMessage.message}
           fileItems={messageFileItems}
           activity={chatMessage.activity}
+          docx={chatMessage.document}
           isEditing={editingMessage?.id === chatMessage.message.id}
           isLast={index === array.length - 1}
           onStartEdit={setEditingMessage}

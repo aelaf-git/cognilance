@@ -27,7 +27,7 @@ export const ActivityTrace: FC<ActivityTraceProps> = ({ steps }) => {
   }
 
   return (
-    <div className="mb-3 w-full max-w-xl text-xs leading-5">
+    <div className="mb-1.5 w-full max-w-xl text-xs leading-5">
       <button
         type="button"
         className={cn(

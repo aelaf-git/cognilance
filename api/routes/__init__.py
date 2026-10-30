@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from api.routes import chat, conversations, health, integrations, runs, sessions
+from api.routes import chat, conversations, docx, health, integrations, runs, sessions
 
 ALL_ROUTERS: tuple[APIRouter, ...] = (
     health.router,
@@ -13,6 +13,7 @@ ALL_ROUTERS: tuple[APIRouter, ...] = (
     conversations.router,
     sessions.router,
     chat.router,
+    docx.router,
 )
 
 __all__ = ["ALL_ROUTERS"]

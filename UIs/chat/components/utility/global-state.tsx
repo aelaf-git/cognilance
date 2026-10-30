@@ -24,6 +24,7 @@ import {
   WorkspaceImage
 } from "@/types"
 import { AssistantImage } from "@/types/images/assistant-image"
+import { DocxDocument } from "@/lib/docx-document"
 import { VALID_ENV_KEYS } from "@/types/valid-keys"
 import { useRouter } from "next/navigation"
 import { FC, useEffect, useState } from "react"
@@ -122,6 +123,10 @@ export const GlobalState: FC<GlobalStateProps> = ({ children }) => {
   // TOOL STORE
   const [selectedTools, setSelectedTools] = useState<Tables<"tools">[]>([])
   const [toolInUse, setToolInUse] = useState<string>("none")
+
+  // WORD DOCUMENT PANE
+  const [activeDocument, setActiveDocument] = useState<DocxDocument | null>(null)
+  const [documentPaneOpen, setDocumentPaneOpen] = useState(false)
 
   useEffect(() => {
     ;(async () => {
@@ -322,7 +327,13 @@ export const GlobalState: FC<GlobalStateProps> = ({ children }) => {
         selectedTools,
         setSelectedTools,
         toolInUse,
-        setToolInUse
+        setToolInUse,
+
+        // WORD DOCUMENT PANE
+        activeDocument,
+        setActiveDocument,
+        documentPaneOpen,
+        setDocumentPaneOpen
       }}
     >
       {children}

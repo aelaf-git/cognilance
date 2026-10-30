@@ -5,12 +5,17 @@ import { SidebarSwitcher } from "@/components/sidebar/sidebar-switcher"
 import { Tabs } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { FC, useState } from "react"
+import { FC, useCallback, useEffect, useState } from "react"
 import { CommandK } from "../utility/command-k"
 
-export const SIDEBAR_WIDTH = 350
-export const ICON_RAIL_WIDTH = 60
-export const SIDEBAR_PANEL_WIDTH = SIDEBAR_WIDTH - ICON_RAIL_WIDTH
+export const ICON_RAIL_WIDTH = 52
+export const SIDEBAR_PANEL_WIDTH = 320
+export const MIN_PANEL_WIDTH = 240
+export const MAX_PANEL_WIDTH = 520
+export const SIDEBAR_WIDTH = ICON_RAIL_WIDTH + SIDEBAR_PANEL_WIDTH
+
+const clampPanelWidth = (value: number) =>
+  Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, Math.round(value)))
 
 interface DashboardProps {
   children: React.ReactNode
@@ -30,13 +35,54 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
   const [showSidebar, setShowSidebar] = useState(
     localStorage.getItem("showSidebar") !== "false"
   )
+  const [panelWidth, setPanelWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem("sidebarPanelWidth"))
+    return Number.isFinite(saved) && saved > 0
+      ? clampPanelWidth(saved)
+      : SIDEBAR_PANEL_WIDTH
+  })
+  const [isResizing, setIsResizing] = useState(false)
 
-  const leftWidth = ICON_RAIL_WIDTH + (showSidebar ? SIDEBAR_PANEL_WIDTH : 0)
+  const leftWidth = ICON_RAIL_WIDTH + (showSidebar ? panelWidth : 0)
 
   const setSidebarOpen = (open: boolean) => {
     setShowSidebar(open)
     localStorage.setItem("showSidebar", String(open))
   }
+
+  const updatePanelWidth = useCallback((nextWidth: number) => {
+    const clamped = clampPanelWidth(nextWidth)
+    setPanelWidth(clamped)
+    localStorage.setItem("sidebarPanelWidth", String(clamped))
+  }, [])
+
+  useEffect(() => {
+    if (!isResizing) return
+
+    const handlePointerMove = (event: PointerEvent) => {
+      updatePanelWidth(event.clientX - ICON_RAIL_WIDTH)
+    }
+
+    const stopResizing = () => {
+      setIsResizing(false)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", stopResizing)
+    window.addEventListener("pointercancel", stopResizing)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", stopResizing)
+      window.removeEventListener("pointercancel", stopResizing)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+  }, [isResizing, updatePanelWidth])
 
   const handleRailSelect = (nextType: string) => {
     if (showSidebar && nextType === contentType) {
@@ -58,14 +104,17 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
       <CommandK />
 
       <Tabs
-        className="sidebar-shell relative flex h-full shrink-0 flex-col"
+        className={cn(
+          "sidebar-shell relative flex h-full shrink-0 flex-col",
+          isResizing && "sidebar-resizing"
+        )}
         value={contentType}
         onValueChange={() => {
           // Selection is handled in SidebarSwitchItem so re-clicks can collapse.
         }}
         style={{
           "--sidebar-left-width": `${leftWidth}px`,
-          "--sidebar-panel-width": `${SIDEBAR_PANEL_WIDTH}px`
+          "--sidebar-panel-width": `${panelWidth}px`
         } as React.CSSProperties}
       >
         <div
@@ -84,12 +133,12 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
             <img
               src="/brand/Cognilance-Logo.png"
               alt=""
-              className="size-8 object-contain"
+              className="size-7 object-contain"
             />
           </button>
 
           {showSidebar && (
-            <span className="sidebar-brand-wordmark brand-wordmark min-w-0 truncate pr-3 text-base text-foreground">
+            <span className="sidebar-brand-wordmark brand-wordmark min-w-0 truncate pl-1 pr-3 text-[15px] font-semibold tracking-tight text-foreground">
               Cognilance
             </span>
           )}
@@ -109,10 +158,8 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
 
           <div
             className={cn(
-              "sidebar-panel h-full overflow-hidden duration-200",
-              showSidebar
-                ? "sidebar-panel-open"
-                : "sidebar-panel-closed"
+              "sidebar-panel h-full overflow-hidden",
+              showSidebar ? "sidebar-panel-open" : "sidebar-panel-closed"
             )}
           >
             {showSidebar && (
@@ -120,6 +167,32 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
             )}
           </div>
         </div>
+
+        {showSidebar && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            title="Drag to resize · Double-click to reset"
+            onPointerDown={event => {
+              event.preventDefault()
+              setIsResizing(true)
+            }}
+            onDoubleClick={() => updatePanelWidth(SIDEBAR_PANEL_WIDTH)}
+            className={cn(
+              "group absolute inset-y-0 -right-1 z-40 hidden w-2 cursor-col-resize items-stretch justify-center sm:flex"
+            )}
+          >
+            <div
+              className={cn(
+                "h-full w-[2px] transition-colors",
+                isResizing
+                  ? "bg-foreground/50"
+                  : "bg-transparent group-hover:bg-foreground/30"
+              )}
+            />
+          </div>
+        )}
       </Tabs>
 
       <div className="relative flex min-w-0 grow flex-col">

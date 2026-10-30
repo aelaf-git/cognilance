@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 import core.context.env  # noqa: F401
 
-DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 
 def gemini_model_name() -> str:

@@ -26,8 +26,8 @@ export const SidebarSwitchItem: FC<SidebarSwitchItemProps> = ({
       trigger={
         <TabsTrigger
           className={cn(
-            "rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground hover:opacity-100",
-            "data-[state=active]:bg-accent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+            "chat-press flex size-9 items-center justify-center rounded-lg p-0 text-muted-foreground hover:bg-accent hover:text-foreground hover:opacity-100",
+            "data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-none"
           )}
           value={contentType}
           onClick={() => {
