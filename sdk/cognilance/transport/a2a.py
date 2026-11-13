@@ -10,7 +10,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from cognilance.assets import ICON_PATH, LOGO_PATH
+from cognilance.assets import ICON_PATH
 from cognilance.core.models import AgentCard, Task, TaskResult, TaskState
 
 
@@ -69,12 +69,6 @@ class A2AServer:
         @self.app.get("/health")
         async def health() -> dict[str, str]:
             return {"status": "ok"}
-
-        @self.app.get("/logo.png")
-        async def logo() -> FileResponse:
-            if not LOGO_PATH.is_file():
-                raise HTTPException(status_code=404, detail="Logo not found")
-            return FileResponse(LOGO_PATH, media_type="image/png")
 
         @self.app.get("/icon.png")
         async def icon() -> FileResponse:

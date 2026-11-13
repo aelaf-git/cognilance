@@ -3,10 +3,8 @@
 from pathlib import Path
 
 ASSETS_DIR = Path(__file__).resolve().parent
-LOGO_PATH = ASSETS_DIR / "logo.png"
 ICON_PATH = ASSETS_DIR / "icon.png"
-# Dark marks reversed for light backgrounds (same alpha, inverted RGB).
-LOGO_LIGHT_PATH = ASSETS_DIR / "logo-light.png"
+# Dark mark reversed for light backgrounds (same alpha, inverted RGB).
 ICON_LIGHT_PATH = ASSETS_DIR / "icon-light.png"
 INTEGRATIONS_DIR = ASSETS_DIR / "integrations"
 
@@ -54,9 +52,7 @@ __all__ = [
     "ASSETS_DIR",
     "INTEGRATIONS_DIR",
     "INTEGRATION_LOGO_FILES",
-    "LOGO_PATH",
     "ICON_PATH",
-    "LOGO_LIGHT_PATH",
     "ICON_LIGHT_PATH",
     "integration_logo_media_type",
     "integration_logo_path",

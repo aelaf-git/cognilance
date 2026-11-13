@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="web/public/brand/logo.png" alt="Cognilance" width="320">
+  <img src="web/public/brand/icon.png" alt="Cognilance" width="160">
 </p>
 
 # Cognilance
