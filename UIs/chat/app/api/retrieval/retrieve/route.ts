@@ -1,5 +1,6 @@
 import { generateLocalEmbedding } from "@/lib/generate-local-embedding"
 import { checkApiKey, getServerProfile } from "@/lib/server/server-chat-helpers"
+import { getSupabaseServerUrl } from "@/lib/supabase/server-url"
 import { Database } from "@/supabase/types"
 import { createClient } from "@supabase/supabase-js"
 import OpenAI from "openai"
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
 
   try {
     const supabaseAdmin = createClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      getSupabaseServerUrl(),
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 

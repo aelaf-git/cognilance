@@ -57,6 +57,10 @@ services:
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
       COGNILANCE_COORDINATOR_URL: http://coordinator:8200
+      # Browser uses 127.0.0.1 from .env.local. The server runs in this container.
+      SUPABASE_INTERNAL_URL: http://host.docker.internal:54321
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - coordinator
     develop:

@@ -1,3 +1,4 @@
+import { getSupabaseServerUrl } from "@/lib/supabase/server-url"
 import { Database, Tables } from "@/supabase/types"
 import { VALID_ENV_KEYS } from "@/types/valid-keys"
 import { createServerClient } from "@supabase/ssr"
@@ -6,7 +7,7 @@ import { cookies } from "next/headers"
 export async function getServerProfile() {
   const cookieStore = cookies()
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    getSupabaseServerUrl(),
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {

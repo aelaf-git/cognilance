@@ -1,3 +1,4 @@
+import { getSupabaseServerUrl } from "@/lib/supabase/server-url"
 import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
@@ -10,7 +11,7 @@ export const createClient = (request: NextRequest) => {
   })
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    getSupabaseServerUrl(),
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
