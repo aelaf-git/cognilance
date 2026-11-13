@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 _SUPER = {
     "0": "\u2070",
     "1": "\u00b9",
@@ -71,16 +69,41 @@ _COMMANDS = {
     "alpha": "\u03b1",
     "beta": "\u03b2",
     "gamma": "\u03b3",
+    "Gamma": "\u0393",
     "delta": "\u03b4",
     "Delta": "\u0394",
     "epsilon": "\u03b5",
+    "varepsilon": "\u03b5",
+    "zeta": "\u03b6",
+    "eta": "\u03b7",
     "theta": "\u03b8",
+    "Theta": "\u0398",
+    "vartheta": "\u03d1",
+    "iota": "\u03b9",
+    "kappa": "\u03ba",
     "lambda": "\u03bb",
+    "Lambda": "\u039b",
     "mu": "\u03bc",
+    "nu": "\u03bd",
+    "xi": "\u03be",
+    "Xi": "\u039e",
     "pi": "\u03c0",
+    "Pi": "\u03a0",
+    "varpi": "\u03d6",
+    "rho": "\u03c1",
+    "varrho": "\u03f1",
     "sigma": "\u03c3",
     "Sigma": "\u03a3",
+    "varsigma": "\u03c2",
+    "tau": "\u03c4",
+    "upsilon": "\u03c5",
+    "Upsilon": "\u03a5",
     "phi": "\u03c6",
+    "Phi": "\u03a6",
+    "varphi": "\u03d5",
+    "chi": "\u03c7",
+    "psi": "\u03c8",
+    "Psi": "\u03a8",
     "omega": "\u03c9",
     "Omega": "\u03a9",
     "leq": "\u2264",
@@ -98,27 +121,37 @@ _COMMANDS = {
     "cdot": "\u00b7",
     "div": "\u00f7",
     "approx": "\u2248",
+    "equiv": "\u2261",
     "rightarrow": "\u2192",
     "to": "\u2192",
-    "degree": "\u00b0",
+    "nabla": "\u2207",
     "partial": "\u2202",
+    "degree": "\u00b0",
+    "propto": "\u221d",
+    "hbar": "\u210f",
 }
-_FRAC = re.compile(r"\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}")
-_SQRT = re.compile(r"\\sqrt\s*\{([^{}]*)\}")
-_CMD = re.compile(r"\\([A-Za-z]+)")
-_GROUP_SUPER = re.compile(r"\^\{([^{}]*)\}")
-_GROUP_SUB = re.compile(r"_\{([^{}]*)\}")
-_CHAR_SUPER = re.compile(r"\^([A-Za-z0-9])")
-_CHAR_SUB = re.compile(r"_(\d+|[A-Za-z](?![A-Za-z]))")
 _FROM_SUPER = {symbol: base for base, symbol in _SUPER.items()}
 _FROM_SUB = {symbol: base for base, symbol in _SUB.items()}
 _MATH_SYMBOLS = set(_COMMANDS.values()) | {"\u2044", "\u221a"}
 
 
+def math_runs(text: str) -> list[dict[str, str]]:
+    """Split notation into plain text and sub/super runs.
+
+    Digits use Unicode superscripts and subscripts. Greek letters, which have
+    no Unicode subscript, keep their characters and set script to sub or super.
+    """
+    if not text:
+        return []
+    if not any(mark in text for mark in "\\^_"):
+        return [{"text": text}]
+    return _parse(text)
+
+
 def normalize_math(text: str) -> str:
     if not text or not any(mark in text for mark in "\\^_"):
         return text
-    return _normalize(text)
+    return "".join(run["text"] for run in _parse(text))
 
 
 def split_runs(text: str) -> list[tuple[str, str]]:
@@ -144,28 +177,183 @@ def split_runs(text: str) -> list[tuple[str, str]]:
     return [(item_kind, item) for item_kind, item in runs if item]
 
 
-def _normalize(text: str) -> str:
-    text = _FRAC.sub(lambda match: _fraction(match.group(1), match.group(2)), text)
-    text = _SQRT.sub(lambda match: "\u221a" + _normalize(match.group(1)), text)
-    text = _CMD.sub(lambda match: _COMMANDS.get(match.group(1), match.group(0)), text)
-    text = _GROUP_SUPER.sub(lambda match: _script(_normalize(match.group(1)), superscript=True), text)
-    text = _GROUP_SUB.sub(lambda match: _script(_normalize(match.group(1)), superscript=False), text)
-    text = _CHAR_SUPER.sub(lambda match: _script(match.group(1), superscript=True), text)
-    text = _CHAR_SUB.sub(lambda match: _script(match.group(1), superscript=False), text)
-    return text
+def _parse(text: str) -> list[dict[str, str]]:
+    runs: list[dict[str, str]] = []
+    plain: list[str] = []
+
+    def flush() -> None:
+        if plain:
+            runs.append({"text": "".join(plain)})
+            plain.clear()
+
+    index = 0
+    length = len(text)
+    while index < length:
+        if text.startswith("\\frac", index) and _brace_ahead(text, index + 5):
+            flush()
+            numerator, denominator, index = _read_frac(text, index + 5)
+            runs.extend(_mark(_parse(numerator), "super"))
+            runs.append({"text": "\u2044"})
+            runs.extend(_mark(_parse(denominator), "sub"))
+            continue
+        if text.startswith("\\sqrt", index) and _brace_ahead(text, index + 5):
+            flush()
+            body, index = _read_group_after(text, index + 5)
+            plain.append("\u221a")
+            flush()
+            runs.extend(_parse(body))
+            continue
+        if text[index] in "^_" and index + 1 < length:
+            flush()
+            script = "super" if text[index] == "^" else "sub"
+            body, index = _read_script_body(text, index + 1)
+            runs.extend(_mark(body, script))
+            continue
+        if text[index] == "\\":
+            symbol, index = _read_command(text, index)
+            plain.append(symbol)
+            continue
+        plain.append(text[index])
+        index += 1
+    flush()
+    return _merge(runs)
 
 
-def _fraction(numerator: str, denominator: str) -> str:
-    return (
-        _script(_normalize(numerator), superscript=True)
-        + "\u2044"
-        + _script(_normalize(denominator), superscript=False)
-    )
+def _read_script_body(text: str, index: int) -> tuple[list[dict[str, str]], int]:
+    if text[index] == "{":
+        end = _matching_brace(text, index)
+        return _parse(text[index + 1 : end]), end + 1 if end < len(text) else len(text)
+    pieces: list[dict[str, str]] = []
+    if text[index] == "\\":
+        while index < len(text) and text[index] == "\\" and not _starts_structure(text, index):
+            symbol, index = _read_command(text, index)
+            pieces.append({"text": symbol})
+        return pieces, index
+    if text[index].isdigit():
+        end = index + 1
+        while end < len(text) and text[end].isdigit():
+            end += 1
+        return [{"text": text[index:end]}], end
+    if _is_greek(text[index]):
+        while index < len(text) and (_is_greek(text[index]) or text[index] == "\\"):
+            if text[index] == "\\":
+                if _starts_structure(text, index):
+                    break
+                symbol, index = _read_command(text, index)
+                pieces.append({"text": symbol})
+                continue
+            pieces.append({"text": text[index]})
+            index += 1
+        return pieces, index
+    return [{"text": text[index]}], index + 1
 
 
-def _script(text: str, *, superscript: bool) -> str:
-    table = _SUPER if superscript else _SUB
-    return "".join(table.get(char, char) for char in text)
+def _mark(runs: list[dict[str, str]], script: str) -> list[dict[str, str]]:
+    table = _SUPER if script == "super" else _SUB
+    other = _FROM_SUB if script == "super" else _FROM_SUPER
+    marked: list[dict[str, str]] = []
+    encoded: list[str] = []
+    raw: list[str] = []
+
+    def flush_encoded() -> None:
+        if encoded:
+            marked.append({"text": "".join(encoded)})
+            encoded.clear()
+
+    def flush_raw() -> None:
+        if raw:
+            marked.append({"text": "".join(raw), "script": script})
+            raw.clear()
+
+    for run in runs:
+        if run.get("script"):
+            flush_encoded()
+            flush_raw()
+            marked.append(run)
+            continue
+        for char in run.get("text") or "":
+            if char in table:
+                flush_raw()
+                encoded.append(table[char])
+            elif char in other or char.isspace():
+                flush_encoded()
+                flush_raw()
+                marked.append({"text": char})
+            else:
+                flush_encoded()
+                raw.append(char)
+    flush_encoded()
+    flush_raw()
+    return marked
+
+
+def _merge(runs: list[dict[str, str]]) -> list[dict[str, str]]:
+    merged: list[dict[str, str]] = []
+    for run in runs:
+        text = run.get("text") or ""
+        if not text:
+            continue
+        script = run.get("script")
+        if merged and merged[-1].get("script") == script:
+            merged[-1]["text"] += text
+            continue
+        item = {"text": text}
+        if script:
+            item["script"] = script
+        merged.append(item)
+    return merged
+
+
+def _read_command(text: str, index: int) -> tuple[str, int]:
+    end = index + 1
+    while end < len(text) and text[end].isalpha():
+        end += 1
+    name = text[index + 1 : end]
+    if not name:
+        return text[index], index + 1
+    return _COMMANDS.get(name, text[index:end]), end
+
+
+def _read_frac(text: str, index: int) -> tuple[str, str, int]:
+    numerator, index = _read_group_after(text, index)
+    denominator, index = _read_group_after(text, index)
+    return numerator, denominator, index
+
+
+def _read_group_after(text: str, index: int) -> tuple[str, int]:
+    while index < len(text) and text[index].isspace():
+        index += 1
+    if index >= len(text) or text[index] != "{":
+        return "", index
+    end = _matching_brace(text, index)
+    return text[index + 1 : end], end + 1 if end < len(text) else len(text)
+
+
+def _matching_brace(text: str, index: int) -> int:
+    depth = 0
+    for cursor in range(index, len(text)):
+        if text[cursor] == "{":
+            depth += 1
+        elif text[cursor] == "}":
+            depth -= 1
+            if depth == 0:
+                return cursor
+    return len(text)
+
+
+def _brace_ahead(text: str, index: int) -> bool:
+    while index < len(text) and text[index].isspace():
+        index += 1
+    return index < len(text) and text[index] == "{"
+
+
+def _starts_structure(text: str, index: int) -> bool:
+    return text.startswith("\\frac", index) or text.startswith("\\sqrt", index)
+
+
+def _is_greek(char: str) -> bool:
+    code = ord(char)
+    return 0x0370 <= code <= 0x03FF
 
 
 def _class(char: str) -> str:

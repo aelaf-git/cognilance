@@ -101,8 +101,14 @@ def _write_text(
     link: str = "",
     document: Any = None,
     literal: bool = False,
+    script: str = "",
 ) -> None:
-    runs = [("plain", text)] if literal else split_runs(text)
+    if script == "sub":
+        runs = [("sub", text)]
+    elif script == "super":
+        runs = [("super", text)]
+    else:
+        runs = [("plain", text)] if literal else split_runs(text)
     if not runs:
         _run(paragraph, "", name, size_pt, bold=bold, italic=italic, underline=underline)
         return
@@ -196,6 +202,7 @@ def _write_content(paragraph: Any, block: dict[str, Any], document: Any, notes: 
                 highlight=str(run.get("highlight") or ""),
                 link=str(run.get("link") or ""),
                 document=document,
+                script=str(run.get("script") or ""),
             )
             if run.get("note"):
                 _footnote(paragraph, notes, str(run["note"]))

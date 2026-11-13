@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
-from tools.docx.store import DOCX_MEDIA, export_file
+from tools.docx.store import DOCX_MEDIA, export_file, public_document
 
 router = APIRouter()
+
+
+@router.get("/docx/{document_id}")
+async def read_docx(document_id: str) -> JSONResponse:
+    try:
+        return JSONResponse(public_document(document_id))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/docx/{document_id}/file")

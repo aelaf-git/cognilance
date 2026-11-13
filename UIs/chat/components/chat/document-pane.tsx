@@ -54,6 +54,12 @@ function cellValue(cell: DocxCell) {
   return typeof cell === "string" ? { text: cell } : cell
 }
 
+function scripted(text: string, script?: string) {
+  if (script === "sub") return <sub>{text}</sub>
+  if (script === "super") return <sup>{text}</sup>
+  return text
+}
+
 function RunText({
   runs,
   text,
@@ -74,10 +80,10 @@ function RunText({
         }
         const content = run.link ? (
           <a href={run.link} style={style}>
-            {run.text}
+            {scripted(run.text, run.script)}
           </a>
         ) : (
-          <span style={style}>{run.text}</span>
+          <span style={style}>{scripted(run.text, run.script)}</span>
         )
         return (
           <span key={`run-${index}`}>

@@ -1,3 +1,4 @@
+import { DocxDocument, parseDocumentEvent } from "@/lib/docx-document"
 import { ChatMessage, LLMID } from "@/types"
 
 export async function cognilanceJson(path: string, init?: RequestInit) {
@@ -34,4 +35,31 @@ export function toChatMessages(
     },
     fileItems: []
   }))
+}
+
+export function withActiveDocument(
+  messages: ChatMessage[],
+  document: DocxDocument | null
+): ChatMessage[] {
+  if (!document) return messages
+  let index = -1
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].message.role === "assistant") {
+      index = i
+      break
+    }
+  }
+  if (index < 0) return messages
+  return messages.map((item, itemIndex) =>
+    itemIndex === index ? { ...item, document } : item
+  )
+}
+
+export async function fetchDocxDocument(id: string): Promise<DocxDocument | null> {
+  if (!/^doc_[a-f0-9]{12}$/.test(id)) return null
+  const response = await fetch(`/api/docx/${id}/content`, { cache: "no-store" })
+  if (!response.ok) return null
+  const payload = await response.json().catch(() => null)
+  if (!payload || typeof payload !== "object") return null
+  return parseDocumentEvent(payload as Record<string, unknown>)
 }

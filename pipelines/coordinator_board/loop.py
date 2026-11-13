@@ -501,14 +501,18 @@ def _code_verdict(obs: dict[str, Any], decision: ThinkDecision) -> Verdict | Non
     elif obs.get("status") == "partial":
         reason = "The result did not match the expected fields."
     elif obs.get("status") == "error":
-        reason = "The specialist returned an error."
+        detail = str((obs.get("payload") or {}).get("error") or "").strip()
+        reason = detail or "The specialist returned an error."
+        feedback = detail or f"{reason} Re-brief with the missing pieces."
     else:
         return None
+    if obs.get("status") != "error":
+        feedback = f"{reason} Re-brief with the missing pieces."
     return Verdict(
         observation_id=obs["id"],
         verdict="retry",
         reason=reason,
-        feedback=f"{reason} Re-brief with the missing pieces.",
+        feedback=feedback,
     )
 
 

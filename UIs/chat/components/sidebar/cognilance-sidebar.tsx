@@ -1,7 +1,12 @@
 "use client"
 
 import { ChatbotUIContext } from "@/context/context"
-import { cognilanceJson, toChatMessages } from "@/lib/cognilance-client"
+import {
+  cognilanceJson,
+  fetchDocxDocument,
+  toChatMessages,
+  withActiveDocument
+} from "@/lib/cognilance-client"
 import {
   getCognilanceServerSnapshot,
   getCognilanceSnapshot,
@@ -80,8 +85,23 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
     getCognilanceSnapshot,
     getCognilanceServerSnapshot
   )
-  const { setChatMessages, setUserInput, chatMessages } =
-    useContext(ChatbotUIContext)
+  const {
+    setChatMessages,
+    setUserInput,
+    chatMessages,
+    setActiveDocument,
+    setDocumentPaneOpen
+  } = useContext(ChatbotUIContext)
+
+  const showSavedDocument = async (
+    messages: ReturnType<typeof toChatMessages>,
+    documentId: string | null | undefined
+  ) => {
+    const document = documentId ? await fetchDocxDocument(documentId) : null
+    setActiveDocument(document)
+    setDocumentPaneOpen(document !== null)
+    return withActiveDocument(messages, document)
+  }
 
   useEffect(() => {
     const storedId = getConversationId()
@@ -95,13 +115,14 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
     if (!id || chatMessages.length > 0) return
     let cancelled = false
     cognilanceJson(`conversations/${id}`)
-      .then(payload => {
+      .then(async payload => {
         if (cancelled) return
-        setChatMessages(current =>
-          current.length > 0
-            ? current
-            : toChatMessages(payload.messages || [], id)
+        const loaded = await showSavedDocument(
+          toChatMessages(payload.messages || [], id),
+          payload.active_docx
         )
+        if (cancelled) return
+        setChatMessages(current => (current.length > 0 ? current : loaded))
         if (payload.title) setCognilanceConversation(id, payload.title)
       })
       .catch(() => {})
@@ -166,7 +187,12 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
     setUserInput("")
     try {
       const payload = await cognilanceJson(`conversations/${item.id}`)
-      setChatMessages(toChatMessages(payload.messages || [], item.id))
+      setChatMessages(
+        await showSavedDocument(
+          toChatMessages(payload.messages || [], item.id),
+          payload.active_docx
+        )
+      )
       if (payload.title) setCognilanceConversation(item.id, payload.title)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't open that conversation.")
@@ -192,6 +218,8 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
       ])
       setCognilanceConversation(item.id, item.title)
       setChatMessages([])
+      setActiveDocument(null)
+      setDocumentPaneOpen(false)
       setUserInput("")
       if (!window.location.pathname.endsWith("/chat")) {
         router.push("/local/chat")
@@ -215,6 +243,8 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
         } else {
           setCognilanceConversation("", "")
           setChatMessages([])
+          setActiveDocument(null)
+          setDocumentPaneOpen(false)
           setUserInput("")
         }
       }

@@ -7,6 +7,7 @@ import { getCollectionFilesByCollectionId } from "@/db/collection-files"
 import { deleteMessagesIncludingAndAfter } from "@/db/messages"
 import { buildFinalMessages } from "@/lib/build-prompt"
 import {
+  ActivityStep,
   clearOrchestratorConversation,
   streamOrchestratorReply
 } from "@/lib/coordinator-chat"
@@ -243,9 +244,7 @@ export const useChatHandler = () => {
             )
           )
         }
-        const showActivity = (
-          activity: { id: string; label: string; detail: string }[]
-        ) => {
+        const showActivity = (activity: ActivityStep[]) => {
           setFirstTokenReceived(true)
           setChatMessages(previous =>
             previous.map(item =>

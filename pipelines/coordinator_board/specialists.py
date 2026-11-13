@@ -101,9 +101,28 @@ def _pick_tool(role_id: str, instruction: str, allowed: tuple[str, ...] = ()) ->
         from tools.docx.store import active_document_id
 
         if active_document_id(current_conversation_id.get()):
-            return first("docx.write")
+            return first("docx.read")
         return first("docx.create")
     return "thinking"
+
+
+def write_needs_read(tool: str, observations: list[dict[str, Any]]) -> bool:
+    """A Word write is held until this task has read the open file."""
+    if tool != "docx.write":
+        return False
+    return not any(str(item.get("tool") or "") == "docx.read" for item in observations)
+
+
+def read_instruction_for_write(instruction: str) -> str:
+    """Read the document the write named, or the file already open."""
+    import json
+
+    from tools.docx.model import parse_payload
+
+    document_id = str(parse_payload(instruction, None).get("document_id") or "").strip()
+    if document_id:
+        return json.dumps({"document_id": document_id})
+    return "{}"
 
 
 def _tool_blurb(tool_id: str) -> str:
@@ -252,13 +271,28 @@ async def _run_task_loop(
 
         tool = _normalize_tool(pack, action.tool)
         tool_instruction = (action.tool_instruction or instruction).strip() or instruction
-        out = await run_role_tool(
-            pack,
-            tool,
-            instruction=tool_instruction,
-            conversation=conversation,
-        )
+        if write_needs_read(tool, observations) and is_allowed(pack.tools, "docx.read"):
+            tool = "docx.read"
+            tool_instruction = read_instruction_for_write(tool_instruction)
+            held_write = True
+        else:
+            held_write = False
+        try:
+            out = await run_role_tool(
+                pack,
+                tool,
+                instruction=tool_instruction,
+                conversation=conversation,
+            )
+        except ApprovalRequired:
+            raise
+        except Exception as exc:
+            observations.append({"tool": tool, "text": str(exc)})
+            last_tool = tool
+            continue
         text = str(out.get("text") or "")
+        if held_write:
+            text = f"{text}\nThe write was not applied. Call docx.write next, using this document."
         data = dict(out.get("data") or {})
         last_tool = tool
         last_risk = out.get("risk")

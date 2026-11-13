@@ -251,6 +251,17 @@ def read_document(payload: dict[str, Any], conversation_id: str) -> dict[str, An
     return _load(resolve_id(str(payload.get("document_id") or ""), conversation_id))
 
 
+def public_document(document_id: str) -> dict[str, Any]:
+    record = _load(document_id)
+    return {
+        "id": record["id"],
+        "title": record.get("title") or "Document",
+        "version": record.get("version") or 1,
+        "style": record.get("style") or {},
+        "blocks": normalize_blocks(record.get("blocks") or []),
+    }
+
+
 def export_file(document_id: str) -> tuple[Path, str]:
     record = _load(document_id)
     path = docx_root() / f"{record['id']}.docx"

@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage
 
 from agents.loader import get_role
 from pipelines.coordinator_board.models import Brief
+from pipelines.shared.streaming import emit
 
 
 def format_brief(brief: Brief) -> str:
@@ -35,6 +36,13 @@ async def execute_brief(agent_id: str, brief: Brief) -> dict[str, Any]:
     if pack is None:
         return {"text": "", "data": {"error": "no such agent"}, "tool": ""}
     instruction = format_brief(brief)
+    emit(
+        "agent_start",
+        role=pack.id,
+        name=pack.name,
+        goal=brief.goal.strip(),
+        brief=instruction,
+    )
     messages = [HumanMessage(content=brief.context)] if brief.context.strip() else []
     from pipelines.coordinator_board import specialists as specialists_mod
 

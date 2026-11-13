@@ -7,6 +7,7 @@ export type DocxRun = {
   highlight?: string
   link?: string
   note?: string
+  script?: "sub" | "super"
 }
 
 export type DocxCell =
@@ -150,6 +151,7 @@ function normalizeRun(raw: unknown): DocxRun | null {
   const link = asText(run.link)
   if (/^(https?:|mailto:)/.test(link)) next.link = link
   if (note) next.note = note
+  if (run.script === "sub" || run.script === "super") next.script = run.script
   return next
 }
 
