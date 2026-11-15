@@ -166,10 +166,16 @@ async def test_download_route_returns_the_docx(tmp_path, monkeypatch, make_ctx):
     assert "attachment" in response.headers["content-disposition"]
     missing = client.get("/docx/not-a-real-id/file")
     assert missing.status_code == 404
+    saved = client.get(f"/docx/{document_id}")
+    assert saved.status_code == 200
+    assert saved.json()["title"] == "Export me"
+    assert saved.json()["blocks"][0]["text"] == "Body"
+    assert client.get("/docx/not-a-real-id").status_code == 404
 
 
 def test_equations_become_characters():
-    from tools.docx.math import normalize_math
+    from tools.docx.math import math_runs, normalize_math
+    from tools.docx.model import normalize_blocks
 
     assert normalize_math(r"E=mc^2") == "E=mc\u00b2"
     assert normalize_math(r"H_2O") == "H\u2082O"
@@ -177,6 +183,32 @@ def test_equations_become_characters():
     assert normalize_math(r"\leq") == "\u2264"
     assert normalize_math(r"\frac{1}{2}") == "\u00b9\u2044\u2082"
     assert normalize_math(r"x^{n+1}") == "x\u207f\u207a\u00b9"
+    field = r"G_{\mu\nu} + \Lambda g_{\mu\nu} = \frac{8\pi G}{c^{4}} T_{\mu\nu}"
+    runs = math_runs(field)
+    subscripts = [run["text"] for run in runs if run.get("script") == "sub"]
+    assert subscripts.count("\u03bc\u03bd") == 3
+    assert any("\u039b" in run["text"] and not run.get("script") for run in runs)
+    assert any(run.get("script") == "super" and run["text"] == "\u03c0" for run in runs)
+    assert normalize_math(r"G_\mu\nu") == "G\u03bc\u03bd"
+    assert math_runs(r"G_\mu\nu")[1] == {"text": "\u03bc\u03bd", "script": "sub"}
+    blocks = normalize_blocks(
+        [
+            {"type": "equation", "text": field},
+            {"type": "paragraph", "text": r"Where G_\mu\nu is the tensor and \Lambda is the constant."},
+        ]
+    )
+    assert blocks[0]["runs"][1]["script"] == "sub"
+    assert any(run.get("script") == "sub" and "\u03bc" in run["text"] for run in blocks[1]["runs"])
+    from tools.docx.model import parse_payload
+
+    payload = parse_payload(
+        r'{"blocks":[{"type":"equation","text":"G_{\mu\nu} + \Lambda g_{\mu\nu} = \frac{8\pi G}{c^{4}} T_{\mu\nu}"}]}',
+        None,
+    )
+    written = normalize_blocks(payload["blocks"])
+    assert written[0]["type"] == "equation"
+    assert any(run.get("script") == "sub" and run["text"] == "\u03bc\u03bd" for run in written[0]["runs"])
+    assert "\u039b" in written[0]["text"]
 
 
 @pytest.mark.asyncio
@@ -308,5 +340,171 @@ async def test_formula_is_saved_with_superscript_and_subscript(tmp_path, monkeyp
         assert "subscript" in xml
         assert "\u03b1" in xml
         assert "Cambria Math" in xml
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_write_without_mode_appends(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-append-default")
+    try:
+        await tool.run(
+            "create",
+            instruction=json.dumps({"title": "Notes", "blocks": [{"type": "paragraph", "text": "Keep this."}]}),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        updated = await tool.run(
+            "write",
+            instruction=json.dumps({"blocks": [{"type": "paragraph", "text": "Added."}]}),
+            params={},
+            ctx=make_ctx("docx.write"),
+        )
+        assert [block.get("text") for block in updated.data["blocks"]] == ["Keep this.", "Added."]
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_structured_blocks_are_written(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-fields")
+    try:
+        await tool.run(
+            "create",
+            instruction=json.dumps({"title": "Notes", "blocks": [{"type": "paragraph", "text": "Keep this."}]}),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        updated = await tool.run(
+            "write",
+            instruction="",
+            params={"blocks": [{"type": "paragraph", "text": "From fields."}]},
+            ctx=make_ctx("docx.write"),
+        )
+        assert [block.get("text") for block in updated.data["blocks"]] == ["Keep this.", "From fields."]
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_fraction_is_stored_as_office_math(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-omml")
+    try:
+        created = await tool.run(
+            "create",
+            instruction=json.dumps(
+                {
+                    "title": "Field equation",
+                    "blocks": [
+                        {
+                            "type": "equation",
+                            "text": r"G_{\mu\nu} = \frac{8\pi G}{c^{4}} T_{\mu\nu}",
+                        }
+                    ],
+                }
+            ),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        xml = _zip_xml(tmp_path / f"{created.data['document_id']}.docx", "word/document.xml")
+        assert "oMath" in xml
+        assert "m:f" in xml or ":f " in xml or "<m:f>" in xml
+        assert created.data["blocks"][0]["notation"] == r"G_{\mu\nu} = \frac{8\pi G}{c^{4}} T_{\mu\nu}"
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_block_ids_survive_replace_and_delete(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-block-ids")
+    try:
+        created = await tool.run(
+            "create",
+            instruction=json.dumps(
+                {
+                    "title": "Notes",
+                    "blocks": [
+                        {"type": "paragraph", "text": "Keep this."},
+                        {"type": "paragraph", "text": "Change this."},
+                        {"type": "paragraph", "text": "Leave this."},
+                    ],
+                }
+            ),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        blocks = created.data["blocks"]
+        assert all(str(block["id"]).startswith("blk_") for block in blocks)
+        kept, target, other = (block["id"] for block in blocks)
+        replaced = await tool.run(
+            "write",
+            instruction="",
+            params={
+                "mode": "replace_block",
+                "block_id": target,
+                "blocks": [{"type": "paragraph", "text": "Changed."}],
+            },
+            ctx=make_ctx("docx.write"),
+        )
+        assert [block["id"] for block in replaced.data["blocks"]] == [kept, target, other]
+        assert [block["text"] for block in replaced.data["blocks"]] == ["Keep this.", "Changed.", "Leave this."]
+        deleted = await tool.run(
+            "write",
+            instruction="",
+            params={"mode": "delete", "block_id": target},
+            ctx=make_ctx("docx.write"),
+        )
+        assert [block["id"] for block in deleted.data["blocks"]] == [kept, other]
+        assert [block["text"] for block in deleted.data["blocks"]] == ["Keep this.", "Leave this."]
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_grouped_subscript_keeps_notation(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-notation")
+    try:
+        created = await tool.run(
+            "create",
+            instruction=json.dumps(
+                {"title": "Tensor", "blocks": [{"type": "equation", "text": r"G_{\mu\nu}"}]}
+            ),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        assert created.data["blocks"][0]["notation"] == r"G_{\mu\nu}"
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_restore_brings_back_the_previous_paragraph(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-restore")
+    try:
+        created = await tool.run(
+            "create",
+            instruction=json.dumps(
+                {"title": "Draft", "blocks": [{"type": "paragraph", "text": "The first paragraph."}]}
+            ),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        document_id = created.data["document_id"]
+        await tool.run(
+            "write",
+            instruction=json.dumps({"blocks": [{"type": "paragraph", "text": "A later paragraph."}]}),
+            params={},
+            ctx=make_ctx("docx.write"),
+        )
+        from tools.docx.store import public_document, restore_previous
+
+        restored = public_document(restore_previous(document_id)["id"])
+        assert [block["text"] for block in restored["blocks"]] == ["The first paragraph."]
     finally:
         current_conversation_id.reset(token)

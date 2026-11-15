@@ -143,6 +143,8 @@ interface ChatbotUIContext {
   setActiveDocument: Dispatch<SetStateAction<DocxDocument | null>>
   documentPaneOpen: boolean
   setDocumentPaneOpen: Dispatch<SetStateAction<boolean>>
+  selectedBlockId: string | null
+  setSelectedBlockId: Dispatch<SetStateAction<string | null>>
 }
 
 export const ChatbotUIContext = createContext<ChatbotUIContext>({
@@ -274,5 +276,7 @@ export const ChatbotUIContext = createContext<ChatbotUIContext>({
   activeDocument: null,
   setActiveDocument: () => {},
   documentPaneOpen: false,
-  setDocumentPaneOpen: () => {}
+  setDocumentPaneOpen: () => {},
+  selectedBlockId: null,
+  setSelectedBlockId: () => {}
 })

@@ -7,6 +7,7 @@ import { getCollectionFilesByCollectionId } from "@/db/collection-files"
 import { deleteMessagesIncludingAndAfter } from "@/db/messages"
 import { buildFinalMessages } from "@/lib/build-prompt"
 import {
+  ActivityStep,
   clearOrchestratorConversation,
   streamOrchestratorReply
 } from "@/lib/coordinator-chat"
@@ -73,7 +74,9 @@ export const useChatHandler = () => {
     isFilePickerOpen,
     isToolPickerOpen,
     setActiveDocument,
-    setDocumentPaneOpen
+    setDocumentPaneOpen,
+    selectedBlockId,
+    setSelectedBlockId
   } = useContext(ChatbotUIContext)
 
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
@@ -243,9 +246,7 @@ export const useChatHandler = () => {
             )
           )
         }
-        const showActivity = (
-          activity: { id: string; label: string; detail: string }[]
-        ) => {
+        const showActivity = (activity: ActivityStep[]) => {
           setFirstTokenReceived(true)
           setChatMessages(previous =>
             previous.map(item =>
@@ -268,13 +269,16 @@ export const useChatHandler = () => {
           }
         }
         try {
+          const blockId = selectedBlockId || ""
+          setSelectedBlockId(null)
           await streamOrchestratorReply(
             messageContent,
             newAbortController.signal,
             showReply,
             showActivity,
             showDocument,
-            isRegeneration
+            isRegeneration,
+            blockId
           )
         } catch (error) {
           if (error instanceof Error && error.name === "AbortError") {

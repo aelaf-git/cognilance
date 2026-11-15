@@ -7,6 +7,7 @@ export type DocxRun = {
   highlight?: string
   link?: string
   note?: string
+  script?: "sub" | "super"
 }
 
 export type DocxCell =
@@ -54,6 +55,8 @@ export type DocxBlock = {
   title?: string
   categories?: string[]
   series?: DocxSeries[]
+  id?: string
+  notation?: string
 }
 
 export type DocxStyle = {
@@ -150,6 +153,7 @@ function normalizeRun(raw: unknown): DocxRun | null {
   const link = asText(run.link)
   if (/^(https?:|mailto:)/.test(link)) next.link = link
   if (note) next.note = note
+  if (run.script === "sub" || run.script === "super") next.script = run.script
   return next
 }
 
@@ -167,19 +171,25 @@ function normalizeCell(raw: unknown): DocxCell {
   return String(raw ?? "")
 }
 
+function withId(raw: Record<string, unknown>, block: DocxBlock): DocxBlock {
+  const id = asText(raw.id)
+  if (/^blk_[a-f0-9]{8}$/.test(id)) block.id = id
+  return block
+}
+
 function normalizeBlock(raw: unknown): DocxBlock | null {
   if (!raw || typeof raw !== "object") return null
   const block = raw as Record<string, unknown>
   const type = asText(block.type)
   if (!BLOCK_TYPES.has(type)) return null
   if (type === "rule" || type === "page_break" || type === "contents") {
-    return { type }
+    return withId(block, { type })
   }
   if (type === "bullet" || type === "numbered" || type === "references") {
     const items = Array.isArray(block.items)
       ? block.items.map(item => String(item).trim()).filter(Boolean)
       : []
-    return items.length ? { type, items } : null
+    return items.length ? withId(block, { type, items }) : null
   }
   if (type === "table") {
     const rows = Array.isArray(block.rows)
@@ -189,12 +199,12 @@ function normalizeBlock(raw: unknown): DocxBlock | null {
       : []
     if (!rows.length) return null
     const caption = asText(block.caption)
-    return {
+    return withId(block, {
       type,
       rows,
       header: block.header !== false,
       ...(caption ? { caption } : {})
-    }
+    })
   }
   if (type === "chart") {
     const categories = Array.isArray(block.categories)
@@ -214,14 +224,14 @@ function normalizeBlock(raw: unknown): DocxBlock | null {
       : []
     if (!categories.length || !series.length) return null
     const caption = asText(block.caption)
-    return {
+    return withId(block, {
       type,
       chart: asText(block.chart) || "column",
       title: asText(block.title),
       categories,
       series,
       ...(caption ? { caption } : {})
-    }
+    })
   }
   const runs = Array.isArray(block.runs)
     ? block.runs.map(normalizeRun).filter((run): run is DocxRun => run !== null)
@@ -229,7 +239,9 @@ function normalizeBlock(raw: unknown): DocxBlock | null {
   const text = asText(block.text)
   const note = asText(block.note)
   if (type === "code") {
-    return text ? { type, text, ...(asText(block.language) ? { language: asText(block.language) } : {}) } : null
+    return text
+      ? withId(block, { type, text, ...(asText(block.language) ? { language: asText(block.language) } : {}) })
+      : null
   }
   if (!text && !note && !runs.length) return null
   const next: DocxBlock = {
@@ -244,7 +256,11 @@ function normalizeBlock(raw: unknown): DocxBlock | null {
     const kind = asText(block.kind)
     next.kind = kind === "tip" || kind === "warning" ? kind : "note"
   }
-  return next
+  if (type === "equation") {
+    const notation = asText(block.notation)
+    if (notation) next.notation = notation
+  }
+  return withId(block, next)
 }
 
 export function parseDocumentEvent(event: Record<string, unknown>): DocxDocument | null {

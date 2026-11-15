@@ -62,19 +62,9 @@ def _static_png(name: str) -> FileResponse:
     return FileResponse(path, media_type="image/png")
 
 
-@router.get("/logo.png")
-async def logo() -> FileResponse:
-    return _static_png("logo.png")
-
-
 @router.get("/icon.png")
 async def icon() -> FileResponse:
     return _static_png("icon.png")
-
-
-@router.get("/logo-light.png")
-async def logo_light() -> FileResponse:
-    return _static_png("logo-light.png")
 
 
 @router.get("/icon-light.png")

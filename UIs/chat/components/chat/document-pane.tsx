@@ -1,16 +1,20 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { ChatbotUIContext } from "@/context/context"
 import {
   DocxBlock,
   DocxCell,
   DocxDocument,
   DocxRun,
   DocxStyle,
-  fontStack
+  fontStack,
+  parseDocumentEvent
 } from "@/lib/docx-document"
-import { IconDownload, IconFileText, IconMinus, IconPlus, IconX } from "@tabler/icons-react"
-import { CSSProperties, FC, useState } from "react"
+import { IconArrowBackUp, IconDownload, IconFileText, IconMinus, IconPlus, IconX } from "@tabler/icons-react"
+import katex from "katex"
+import "katex/dist/katex.min.css"
+import { CSSProperties, FC, useContext, useEffect, useState } from "react"
 
 interface DocumentPaneProps {
   docx: DocxDocument
@@ -54,6 +58,12 @@ function cellValue(cell: DocxCell) {
   return typeof cell === "string" ? { text: cell } : cell
 }
 
+function scripted(text: string, script?: string) {
+  if (script === "sub") return <sub>{text}</sub>
+  if (script === "super") return <sup>{text}</sup>
+  return text
+}
+
 function RunText({
   runs,
   text,
@@ -74,10 +84,10 @@ function RunText({
         }
         const content = run.link ? (
           <a href={run.link} style={style}>
-            {run.text}
+            {scripted(run.text, run.script)}
           </a>
         ) : (
-          <span style={style}>{run.text}</span>
+          <span style={style}>{scripted(run.text, run.script)}</span>
         )
         return (
           <span key={`run-${index}`}>
@@ -267,6 +277,14 @@ function arc(cx: number, cy: number, radius: number, start: number, end: number)
   return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2} Z`
 }
 
+function katexHtml(notation: string): string | null {
+  try {
+    return katex.renderToString(notation, { throwOnError: true, displayMode: true })
+  } catch {
+    return null
+  }
+}
+
 function BlockView({
   block,
   style,
@@ -340,6 +358,10 @@ function BlockView({
     )
   }
   if (block.type === "equation") {
+    const html = block.notation ? katexHtml(block.notation) : null
+    if (html) {
+      return <div className="text-center" style={after} dangerouslySetInnerHTML={{ __html: html }} />
+    }
     return (
       <p className="text-center" style={{ ...after, fontFamily: fontStack("Cambria Math") }}>
         <RunText runs={runs} text={block.text} noteNumber={marker("block")} />
@@ -455,7 +477,9 @@ function noteNumbers(blocks: DocxBlock[]) {
 }
 
 export const DocumentPane: FC<DocumentPaneProps> = ({ docx, onClose }) => {
+  const { selectedBlockId, setSelectedBlockId, setActiveDocument } = useContext(ChatbotUIContext)
   const [zoom, setZoom] = useState(100)
+  const [restoring, setRestoring] = useState(false)
   const style = docx.style
   const portraitWidth = style.page === "a4" ? 794 : 816
   const portraitHeight = style.page === "a4" ? 1123 : 1056
@@ -469,6 +493,12 @@ export const DocumentPane: FC<DocumentPaneProps> = ({ docx, onClose }) => {
     .filter(Boolean)
   const { numbers, notes } = noteNumbers(blocks)
 
+  useEffect(() => {
+    if (selectedBlockId && !blocks.some(block => block.id === selectedBlockId)) {
+      setSelectedBlockId(null)
+    }
+  }, [blocks, selectedBlockId, setSelectedBlockId])
+
   const exportFile = () => {
     const anchor = window.document.createElement("a")
     anchor.href = `/api/docx/${docx.id}`
@@ -476,6 +506,21 @@ export const DocumentPane: FC<DocumentPaneProps> = ({ docx, onClose }) => {
     window.document.body.appendChild(anchor)
     anchor.click()
     anchor.remove()
+  }
+
+  const restorePrevious = async () => {
+    setRestoring(true)
+    try {
+      const response = await fetch(`/api/docx/${docx.id}/restore`, { method: "POST" })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) return
+      const next = parseDocumentEvent(payload)
+      if (!next) return
+      setActiveDocument(next)
+      setSelectedBlockId(null)
+    } finally {
+      setRestoring(false)
+    }
   }
 
   return (
@@ -504,6 +549,17 @@ export const DocumentPane: FC<DocumentPaneProps> = ({ docx, onClose }) => {
             onClick={() => setZoom(current => Math.min(140, current + 10))}
           >
             <IconPlus size={16} />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-1 h-8"
+            disabled={restoring}
+            onClick={restorePrevious}
+          >
+            <IconArrowBackUp size={15} className="mr-1.5" />
+            Restore previous
           </Button>
           <Button type="button" variant="outline" size="sm" className="ml-1 h-8" onClick={exportFile}>
             <IconDownload size={15} className="mr-1.5" />
@@ -544,16 +600,36 @@ export const DocumentPane: FC<DocumentPaneProps> = ({ docx, onClose }) => {
               columnGap: style.columns > 1 ? "0.5in" : undefined
             }}
           >
-            {blocks.map((block, index) => (
-              <BlockView
-                key={`${docx.id}-${docx.version}-${index}`}
-                block={block}
-                style={style}
-                headings={headings}
-                blockIndex={index}
-                numbers={numbers}
-              />
-            ))}
+            {blocks.map((block, index) => {
+              const selected = Boolean(block.id) && block.id === selectedBlockId
+              return (
+                <div
+                  key={block.id || `${docx.id}-${docx.version}-${index}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selected}
+                  className={
+                    selected
+                      ? "cursor-pointer rounded-sm bg-orange-100 ring-2 ring-orange-400"
+                      : "cursor-pointer rounded-sm hover:bg-orange-50"
+                  }
+                  onClick={() => setSelectedBlockId(selected ? null : block.id || null)}
+                  onKeyDown={event => {
+                    if (event.key !== "Enter" && event.key !== " ") return
+                    event.preventDefault()
+                    setSelectedBlockId(selected ? null : block.id || null)
+                  }}
+                >
+                  <BlockView
+                    block={block}
+                    style={style}
+                    headings={headings}
+                    blockIndex={index}
+                    numbers={numbers}
+                  />
+                </div>
+              )
+            })}
           </div>
           {notes.length ? (
             <ol className="mt-6 list-decimal border-t border-neutral-300 pl-5 pt-2 text-[10pt]">

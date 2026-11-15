@@ -142,6 +142,18 @@ def _tool_module(base: str):
     return importlib.import_module(f"tools.{base}.tool")
 
 
+def _clip(text: str, limit: int) -> str:
+    cleaned = str(text or "").strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1].rstrip() + "…"
+
+
+def _summary_line(text: str) -> str:
+    line = next((part.strip() for part in str(text or "").splitlines() if part.strip()), "")
+    return _clip(line, 500)
+
+
 async def run_tool(
     role: Any,
     tool: str,
@@ -171,7 +183,13 @@ async def run_tool(
     if not skip_approval_check and requires_approval(tool_id):
         raise ApprovalRequired(tool_id, action or None, params, risk.value)
 
-    emit("tool_start", tool=tool_id, assignee=pack.id, risk=risk.value)
+    emit(
+        "tool_start",
+        tool=tool_id,
+        assignee=pack.id,
+        risk=risk.value,
+        instruction=_clip(instruction, 4000),
+    )
     client = integrations or IntegrationClient()
     user_id = current_user_id.get() or ""
 
@@ -200,7 +218,13 @@ async def run_tool(
         if not isinstance(output, ToolOutput):
             output = ToolOutput(text=str(output.get("text") or ""), data=dict(output.get("data") or {}))
 
-    emit("tool_done", tool=tool_id, assignee=pack.id, status=output.status)
+    emit(
+        "tool_done",
+        tool=tool_id,
+        assignee=pack.id,
+        status=output.status,
+        summary=_summary_line(output.text),
+    )
     return {
         "text": output.text,
         "data": output.data,

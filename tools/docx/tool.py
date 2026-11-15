@@ -40,20 +40,22 @@ def _describe(record: dict[str, Any], action: str) -> str:
     if action == "read":
         for block in record.get("blocks") or []:
             kind = block.get("type")
+            label = str(block.get("id") or "")
+            prefix = f"{label} " if label else ""
             if kind in {"bullet", "numbered"}:
-                lines.append(f"{kind}: " + "; ".join(block.get("items") or []))
+                lines.append(f"{prefix}{kind}: " + "; ".join(block.get("items") or []))
             elif kind == "table":
                 caption = block.get("caption") or ""
-                lines.append(f"table: {caption} {len(block.get('rows') or [])} rows".strip())
+                lines.append(f"{prefix}table: {caption} {len(block.get('rows') or [])} rows".strip())
             elif kind == "chart":
-                lines.append(f"chart: {block.get('chart') or 'column'} {block.get('title') or ''}".strip())
+                lines.append(f"{prefix}chart: {block.get('chart') or 'column'} {block.get('title') or ''}".strip())
             elif kind == "references":
-                lines.append("references: " + "; ".join(block.get("items") or []))
+                lines.append(f"{prefix}references: " + "; ".join(block.get("items") or []))
             elif kind in {"rule", "page_break", "contents"}:
-                lines.append(str(kind))
+                lines.append(f"{prefix}{kind}")
             else:
                 note = f" note: {block['note']}" if block.get("note") else ""
-                lines.append(f"{kind}: {block.get('text') or ''}{note}")
+                lines.append(f"{prefix}{kind}: {block.get('text') or ''}{note}")
     return "\n".join(lines)
 
 

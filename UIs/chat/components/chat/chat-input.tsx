@@ -35,7 +35,10 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
     isPromptPickerOpen,
     setIsPromptPickerOpen,
     isFilePickerOpen,
-    setFocusFile
+    setFocusFile,
+    activeDocument,
+    selectedBlockId,
+    setSelectedBlockId
   } = useContext(ChatbotUIContext)
 
   const {
@@ -119,10 +122,35 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
   }
 
   const canSend = Boolean(userInput.trim())
+  const selectedBlock = activeDocument?.blocks.find(block => block.id === selectedBlockId)
+  const selectedSnippet = (
+    selectedBlock?.text ||
+    selectedBlock?.items?.join(", ") ||
+    selectedBlock?.caption ||
+    selectedBlock?.title ||
+    selectedBlock?.type ||
+    ""
+  ).trim()
 
   return (
     <div className="flex w-full flex-col gap-2">
-      <div className="chat-motion flex min-h-[64px] w-full items-end gap-2 rounded-[12px] border border-[hsl(var(--chat-border))] bg-[hsl(var(--chat-surface))] px-2 py-2 pl-1 shadow-none transition-[border-color] focus-within:border-foreground/40">
+      <div className="chat-motion flex min-h-[64px] w-full flex-col rounded-[12px] border border-[hsl(var(--chat-border))] bg-[hsl(var(--chat-surface))] px-2 py-2 pl-1 shadow-none transition-[border-color] focus-within:border-foreground/40">
+        {selectedBlockId && selectedSnippet ? (
+          <div className="flex items-center gap-1 px-3 pt-1">
+            <span className="max-w-[280px] truncate rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-950">
+              {selectedSnippet.length > 48 ? `${selectedSnippet.slice(0, 48)}…` : selectedSnippet}
+            </span>
+            <button
+              type="button"
+              aria-label="Clear selected block"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setSelectedBlockId(null)}
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
+        <div className="flex w-full items-end gap-2">
         <TextareaAutosize
           textareaRef={chatInputRef}
           className="placeholder:text-muted-foreground/70 flex w-full resize-none border-none bg-transparent px-3 py-2.5 text-[15px] leading-6 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
@@ -166,6 +194,7 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
               <IconArrowUp size={18} stroke={2} />
             </button>
           )}
+        </div>
         </div>
       </div>
 

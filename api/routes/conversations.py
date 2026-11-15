@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from api.deps import conv_store, mission_store, sub_store, user_from
 from api.sse import sse_line, sse_response
 from core.context.drafts.store import DraftStore
+from tools.docx.store import active_document_id
 from core.context.subscriptions.session_sync import enrich_session_dict
 
 router = APIRouter()
@@ -102,6 +103,7 @@ async def get_conversation(conversation_id: str, request: Request) -> JSONRespon
                 s.to_dict() for s in sub_store.list_active_for_conversation(conversation_id)
             ],
             "active_doc": DraftStore().get_active_doc(conversation_id),
+            "active_docx": active_document_id(conversation_id),
         }
     )
 
