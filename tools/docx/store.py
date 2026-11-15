@@ -22,6 +22,8 @@ from tools.docx.model import (
 from tools.docx.render import render_docx
 
 _ID = re.compile(r"^doc_[a-f0-9]{12}$")
+_BLOCK_ID = re.compile(r"^blk_[a-f0-9]{8}$")
+_VERSIONS = 20
 DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
@@ -73,6 +75,23 @@ def set_active(conversation_id: str, document_id: str) -> None:
     tmp.replace(path)
 
 
+def _versions_dir(document_id: str) -> Path:
+    return docx_root() / "versions" / document_id
+
+
+def _snapshot(record: dict[str, Any]) -> None:
+    document_id = str(record.get("id") or "")
+    if not valid_id(document_id):
+        return
+    folder = _versions_dir(document_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = uuid.uuid4().hex[:12]
+    (folder / f"{stamp}.json").write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    kept = sorted(folder.glob("*.json"), key=lambda path: path.stat().st_mtime)
+    for old in kept[:-_VERSIONS]:
+        old.unlink(missing_ok=True)
+
+
 def _save(record: dict[str, Any]) -> None:
     root = docx_root()
     document_id = record["id"]
@@ -80,8 +99,15 @@ def _save(record: dict[str, Any]) -> None:
     docx_final = root / f"{document_id}.docx"
     json_tmp = root / f"{document_id}.json.tmp"
     docx_tmp = root / f"{document_id}.docx.tmp"
+    if json_final.is_file():
+        try:
+            previous = json.loads(json_final.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeError):
+            previous = None
+        if isinstance(previous, dict):
+            _snapshot(previous)
     render_docx(docx_tmp, record)
-    json_tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2))
+    json_tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
     docx_tmp.replace(docx_final)
     json_tmp.replace(json_final)
 
@@ -98,6 +124,14 @@ def _load(document_id: str) -> dict[str, Any]:
             raise KeyError("id")
     except (OSError, json.JSONDecodeError, AttributeError, KeyError) as exc:
         raise RuntimeError("The Word file could not be read") from exc
+    blocks = list(record.get("blocks") or [])
+    missing = any(
+        not isinstance(block, dict) or not _BLOCK_ID.fullmatch(str(block.get("id") or ""))
+        for block in blocks
+    )
+    if missing:
+        record["blocks"] = normalize_blocks(blocks)
+        _save(record)
     return record
 
 
@@ -188,6 +222,14 @@ def _index(value: Any, size: int, *, allow_end: bool) -> int:
     return index
 
 
+def _block_index(blocks: list[dict[str, Any]], block_id: str) -> int:
+    wanted = block_id.strip()
+    for index, block in enumerate(blocks):
+        if str(block.get("id") or "") == wanted:
+            return index
+    raise _unchanged("There is no block with that id.")
+
+
 def _blocks_for_write(payload: dict[str, Any], mode: str) -> list[dict[str, Any]]:
     if payload.get("blocks") is not None:
         incoming = normalize_blocks(payload.get("blocks"))
@@ -212,22 +254,36 @@ def _blocks_for_write(payload: dict[str, Any], mode: str) -> list[dict[str, Any]
 def write_document(payload: dict[str, Any], conversation_id: str) -> dict[str, Any]:
     record = _load(resolve_id(str(payload.get("document_id") or ""), conversation_id))
     existing = list(record.get("blocks") or [])
-    mode = str(payload.get("mode") or "replace").strip().lower()
-    incoming = _blocks_for_write(payload, mode)
-    if mode in {"append", "add"}:
-        updated = existing + incoming
-    elif mode == "insert":
-        at = _index(payload.get("at"), len(existing), allow_end=True)
-        updated = existing[:at] + incoming + existing[at:]
-    elif mode in {"replace_block", "replace-block"}:
-        index = _index(payload.get("index"), len(existing), allow_end=False)
-        updated = existing[:index] + incoming + existing[index + 1 :]
-    elif existing and not _preserves(existing, incoming):
-        raise _unchanged(
-            "That replace would drop existing text. Use append or insert, or include every current paragraph."
-        )
+    mode = str(payload.get("mode") or "append").strip().lower()
+    block_id = str(payload.get("block_id") or "").strip()
+    if mode == "delete":
+        if not block_id:
+            raise _unchanged("A delete needs a block id.")
+        index = _block_index(existing, block_id)
+        updated = existing[:index] + existing[index + 1 :]
     else:
-        updated = incoming
+        incoming = _blocks_for_write(payload, mode)
+        if block_id and mode in {"replace_block", "replace-block"}:
+            index = _block_index(existing, block_id)
+            incoming[0]["id"] = block_id
+            updated = existing[:index] + incoming + existing[index + 1 :]
+        elif block_id and mode == "insert":
+            index = _block_index(existing, block_id)
+            updated = existing[: index + 1] + incoming + existing[index + 1 :]
+        elif mode in {"append", "add"}:
+            updated = existing + incoming
+        elif mode == "insert":
+            at = _index(payload.get("at"), len(existing), allow_end=True)
+            updated = existing[:at] + incoming + existing[at:]
+        elif mode in {"replace_block", "replace-block"}:
+            index = _index(payload.get("index"), len(existing), allow_end=False)
+            updated = existing[:index] + incoming + existing[index + 1 :]
+        elif existing and not _preserves(existing, incoming):
+            raise _unchanged(
+                "That replace would drop existing text. Use append or insert, or include every current paragraph."
+            )
+        else:
+            updated = incoming
     title = normalize_math(str(payload.get("title") or "").strip())
     if title:
         record["title"] = title[:200]
@@ -251,6 +307,28 @@ def read_document(payload: dict[str, Any], conversation_id: str) -> dict[str, An
     return _load(resolve_id(str(payload.get("document_id") or ""), conversation_id))
 
 
+def restore_previous(document_id: str) -> dict[str, Any]:
+    record = _load(document_id)
+    folder = _versions_dir(record["id"])
+    snapshots = sorted(folder.glob("*.json"), key=lambda path: path.stat().st_mtime) if folder.is_dir() else []
+    previous: dict[str, Any] | None = None
+    for path in reversed(snapshots):
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeError):
+            continue
+        if isinstance(loaded, dict) and loaded.get("blocks") is not None:
+            previous = loaded
+            break
+    if previous is None:
+        raise RuntimeError("There is no earlier version of this file.")
+    previous["id"] = record["id"]
+    previous["conversation_id"] = record.get("conversation_id") or previous.get("conversation_id") or ""
+    previous["version"] = int(record.get("version") or 1) + 1
+    _save(previous)
+    return previous
+
+
 def public_document(document_id: str) -> dict[str, Any]:
     record = _load(document_id)
     return {
@@ -265,6 +343,7 @@ def public_document(document_id: str) -> dict[str, Any]:
 def export_file(document_id: str) -> tuple[Path, str]:
     record = _load(document_id)
     path = docx_root() / f"{record['id']}.docx"
+    render_docx(path, record)
     if not path.is_file():
         raise RuntimeError("The Word file is missing")
     cleaned = re.sub(r"[^A-Za-z0-9._ -]+", "", str(record.get("title") or "document")).strip() or "document"

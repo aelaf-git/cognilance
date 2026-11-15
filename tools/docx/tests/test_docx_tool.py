@@ -342,3 +342,169 @@ async def test_formula_is_saved_with_superscript_and_subscript(tmp_path, monkeyp
         assert "Cambria Math" in xml
     finally:
         current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_write_without_mode_appends(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-append-default")
+    try:
+        await tool.run(
+            "create",
+            instruction=json.dumps({"title": "Notes", "blocks": [{"type": "paragraph", "text": "Keep this."}]}),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        updated = await tool.run(
+            "write",
+            instruction=json.dumps({"blocks": [{"type": "paragraph", "text": "Added."}]}),
+            params={},
+            ctx=make_ctx("docx.write"),
+        )
+        assert [block.get("text") for block in updated.data["blocks"]] == ["Keep this.", "Added."]
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_structured_blocks_are_written(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-fields")
+    try:
+        await tool.run(
+            "create",
+            instruction=json.dumps({"title": "Notes", "blocks": [{"type": "paragraph", "text": "Keep this."}]}),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        updated = await tool.run(
+            "write",
+            instruction="",
+            params={"blocks": [{"type": "paragraph", "text": "From fields."}]},
+            ctx=make_ctx("docx.write"),
+        )
+        assert [block.get("text") for block in updated.data["blocks"]] == ["Keep this.", "From fields."]
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_fraction_is_stored_as_office_math(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-omml")
+    try:
+        created = await tool.run(
+            "create",
+            instruction=json.dumps(
+                {
+                    "title": "Field equation",
+                    "blocks": [
+                        {
+                            "type": "equation",
+                            "text": r"G_{\mu\nu} = \frac{8\pi G}{c^{4}} T_{\mu\nu}",
+                        }
+                    ],
+                }
+            ),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        xml = _zip_xml(tmp_path / f"{created.data['document_id']}.docx", "word/document.xml")
+        assert "oMath" in xml
+        assert "m:f" in xml or ":f " in xml or "<m:f>" in xml
+        assert created.data["blocks"][0]["notation"] == r"G_{\mu\nu} = \frac{8\pi G}{c^{4}} T_{\mu\nu}"
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_block_ids_survive_replace_and_delete(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-block-ids")
+    try:
+        created = await tool.run(
+            "create",
+            instruction=json.dumps(
+                {
+                    "title": "Notes",
+                    "blocks": [
+                        {"type": "paragraph", "text": "Keep this."},
+                        {"type": "paragraph", "text": "Change this."},
+                        {"type": "paragraph", "text": "Leave this."},
+                    ],
+                }
+            ),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        blocks = created.data["blocks"]
+        assert all(str(block["id"]).startswith("blk_") for block in blocks)
+        kept, target, other = (block["id"] for block in blocks)
+        replaced = await tool.run(
+            "write",
+            instruction="",
+            params={
+                "mode": "replace_block",
+                "block_id": target,
+                "blocks": [{"type": "paragraph", "text": "Changed."}],
+            },
+            ctx=make_ctx("docx.write"),
+        )
+        assert [block["id"] for block in replaced.data["blocks"]] == [kept, target, other]
+        assert [block["text"] for block in replaced.data["blocks"]] == ["Keep this.", "Changed.", "Leave this."]
+        deleted = await tool.run(
+            "write",
+            instruction="",
+            params={"mode": "delete", "block_id": target},
+            ctx=make_ctx("docx.write"),
+        )
+        assert [block["id"] for block in deleted.data["blocks"]] == [kept, other]
+        assert [block["text"] for block in deleted.data["blocks"]] == ["Keep this.", "Leave this."]
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_grouped_subscript_keeps_notation(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-notation")
+    try:
+        created = await tool.run(
+            "create",
+            instruction=json.dumps(
+                {"title": "Tensor", "blocks": [{"type": "equation", "text": r"G_{\mu\nu}"}]}
+            ),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        assert created.data["blocks"][0]["notation"] == r"G_{\mu\nu}"
+    finally:
+        current_conversation_id.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_restore_brings_back_the_previous_paragraph(tmp_path, monkeypatch, make_ctx):
+    monkeypatch.setenv("COGNILANCE_DOCX_DIR", str(tmp_path))
+    token = current_conversation_id.set("conv-restore")
+    try:
+        created = await tool.run(
+            "create",
+            instruction=json.dumps(
+                {"title": "Draft", "blocks": [{"type": "paragraph", "text": "The first paragraph."}]}
+            ),
+            params={},
+            ctx=make_ctx("docx.create"),
+        )
+        document_id = created.data["document_id"]
+        await tool.run(
+            "write",
+            instruction=json.dumps({"blocks": [{"type": "paragraph", "text": "A later paragraph."}]}),
+            params={},
+            ctx=make_ctx("docx.write"),
+        )
+        from tools.docx.store import public_document, restore_previous
+
+        restored = public_document(restore_previous(document_id)["id"])
+        assert [block["text"] for block in restored["blocks"]] == ["The first paragraph."]
+    finally:
+        current_conversation_id.reset(token)

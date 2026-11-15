@@ -127,6 +127,7 @@ export const GlobalState: FC<GlobalStateProps> = ({ children }) => {
   // WORD DOCUMENT PANE
   const [activeDocument, setActiveDocument] = useState<DocxDocument | null>(null)
   const [documentPaneOpen, setDocumentPaneOpen] = useState(false)
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -333,7 +334,9 @@ export const GlobalState: FC<GlobalStateProps> = ({ children }) => {
         activeDocument,
         setActiveDocument,
         documentPaneOpen,
-        setDocumentPaneOpen
+        setDocumentPaneOpen,
+        selectedBlockId,
+        setSelectedBlockId
       }}
     >
       {children}

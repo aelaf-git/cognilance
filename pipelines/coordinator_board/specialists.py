@@ -12,7 +12,7 @@ from core.models.gateway import get_structured_llm, to_chat_messages
 from core.runtime.board.store import BoardStore
 from core.runtime.runs.models import RunStatus
 from core.runtime.runs.store import RunStore
-from pipelines.coordinator_board.schema import SpecialistAction
+from pipelines.coordinator_board.schema import DocxAction, SpecialistAction
 from pipelines.coordinator_board.verify import verify_task_output
 from pipelines.shared.state import State, SubtaskResult
 from pipelines.shared.streaming import emit, emit_status, reveal_text
@@ -125,6 +125,72 @@ def read_instruction_for_write(instruction: str) -> str:
     return "{}"
 
 
+def _action_schema(pack: RolePack):
+    return DocxAction if pack.id == "docx_agent" else SpecialistAction
+
+
+def _docx_params(action: Any) -> dict[str, Any] | None:
+    if not isinstance(action, DocxAction):
+        return None
+    params: dict[str, Any] = {"mode": action.mode or "append"}
+    if action.document_id.strip():
+        params["document_id"] = action.document_id.strip()
+    if action.block_id.strip():
+        params["block_id"] = action.block_id.strip()
+    if action.at is not None:
+        params["at"] = action.at
+    if action.index is not None:
+        params["index"] = action.index
+    if action.title.strip():
+        params["title"] = action.title.strip()
+    blocks = [
+        block.model_dump(exclude_none=True)
+        for block in action.blocks
+        if block.text.strip() or block.items
+    ]
+    if blocks:
+        params["blocks"] = blocks
+    return params
+
+
+def _remember_tool(
+    observations: list[dict[str, str]],
+    merged_data: dict[str, Any],
+    tool: str,
+    out: dict[str, Any],
+) -> None:
+    data = dict(out.get("data") or {})
+    for key, value in data.items():
+        if key not in merged_data or merged_data[key] in (None, "", [], {}):
+            merged_data[key] = value
+        elif isinstance(merged_data[key], list) and isinstance(value, list):
+            merged_data[key] = merged_data[key] + value
+    observations.append({"tool": tool, "text": str(out.get("text") or "")})
+
+
+async def _seed_open_document(
+    pack: RolePack,
+    observations: list[dict[str, str]],
+    merged_data: dict[str, Any],
+    conversation: list[BaseMessage],
+) -> None:
+    """Read the open file before the model is asked, so the first step can write."""
+    if pack.id != "docx_agent" or not is_allowed(pack.tools, "docx.read"):
+        return
+    if any(item.get("tool") == "docx.read" for item in observations):
+        return
+    from core.context.request import current_conversation_id
+    from tools.docx.store import active_document_id
+
+    if not active_document_id(current_conversation_id.get() or ""):
+        return
+    try:
+        out = await run_role_tool(pack, "docx.read", instruction="{}", conversation=conversation)
+    except Exception:
+        return
+    _remember_tool(observations, merged_data, "docx.read", out)
+
+
 def _tool_blurb(tool_id: str) -> str:
     if tool_id == "thinking":
         return "Answer or reason directly without external APIs"
@@ -218,11 +284,13 @@ async def _run_task_loop(
     last_tool = "thinking"
     last_risk: str | None = None
     conversation = list(messages or [])
+    schema = _action_schema(pack)
+    await _seed_open_document(pack, observations, merged_data, conversation)
 
     for _ in range(MAX_LOOP_STEPS):
         try:
-            llm = get_structured_llm(SpecialistAction, temperature=0.1)
-            action: SpecialistAction = await llm.ainvoke(
+            llm = get_structured_llm(schema, temperature=0.1)
+            action = await llm.ainvoke(
                 _decision_prompt(
                     pack,
                     instruction=instruction,
@@ -231,7 +299,7 @@ async def _run_task_loop(
                 )
             )
         except Exception:
-            if observations:
+            if observations and last_tool != "thinking":
                 text = observations[-1].get("text") or ""
                 return {
                     "text": text,
@@ -282,6 +350,7 @@ async def _run_task_loop(
                 pack,
                 tool,
                 instruction=tool_instruction,
+                params=_docx_params(action),
                 conversation=conversation,
             )
         except ApprovalRequired:
@@ -306,7 +375,7 @@ async def _run_task_loop(
     # Max steps: synthesize from last observation or ask the model once more for done.
     if observations:
         try:
-            llm = get_structured_llm(SpecialistAction, temperature=0.1)
+            llm = get_structured_llm(schema, temperature=0.1)
             action = await llm.ainvoke(
                 _decision_prompt(
                     pack,

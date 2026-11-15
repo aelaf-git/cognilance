@@ -1,5 +1,6 @@
 import {
   createActivityState,
+  messageForSelection,
   reduceActivityEvent,
   settleActivity
 } from "@/lib/coordinator-chat"
@@ -80,5 +81,12 @@ describe("activity trace reducer", () => {
       detail: "Draft the file.",
       status: "done"
     })
+  })
+
+  it("prefixes a selected block id and leaves other messages alone", () => {
+    expect(messageForSelection("Make this shorter.", "blk_ab12cd34")).toBe(
+      "Change only block blk_ab12cd34. Leave every other block as it is.\nMake this shorter."
+    )
+    expect(messageForSelection("Hello", "")).toBe("Hello")
   })
 })
