@@ -6,9 +6,10 @@ and applies the workspace policy (which grades need a human approval).
 
 from __future__ import annotations
 
-import os
 from enum import Enum
 from typing import Any
+
+from core.config import get_settings
 
 
 class RiskGrade(str, Enum):
@@ -81,7 +82,7 @@ def risk_for(tool: str, action: str | None = None) -> RiskGrade:
 
 
 def _env_grades_requiring_approval() -> set[RiskGrade]:
-    raw = os.getenv("COGNILANCE_APPROVAL_GRADES", "irreversible").strip().lower()
+    raw = get_settings().approval_grades.strip().lower()
     if raw in {"", "none", "off", "0"}:
         return set()
     grades: set[RiskGrade] = set()

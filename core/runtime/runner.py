@@ -52,6 +52,7 @@ async def stream_mission_graph(
     use_checkpointer: bool = True,
     run_id: str | None = None,
     user_id: str | None = None,
+    organization_id: str | None = None,
     trigger: RunTrigger = RunTrigger.MESSAGE,
 ) -> AsyncIterator[str]:
     """Yield SSE lines while running the durable coordinator graph."""
@@ -65,6 +66,10 @@ async def stream_mission_graph(
     BoardStore().init_db()
 
     rid = run_id or current_mission_id.get() or thread_id
+    if organization_id is None and user_id:
+        from core.context.orgs.store import OrgStore
+
+        organization_id = OrgStore().active_for_account(user_id)
     existing = runs.get_run(rid)
     if existing is None:
         runs.create_run(
@@ -73,6 +78,7 @@ async def stream_mission_graph(
             trigger=trigger,
             conversation_id=thread_id,
             user_id=user_id,
+            organization_id=organization_id,
             mission_id=rid,
             run_id=rid,
         )

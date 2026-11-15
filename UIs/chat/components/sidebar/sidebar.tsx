@@ -11,7 +11,9 @@ interface SidebarProps {
 
 export const Sidebar: FC<SidebarProps> = ({ contentType }) => {
   const panel =
-    contentType === "sessions" || contentType === "integrations"
+    contentType === "sessions" ||
+    contentType === "integrations" ||
+    contentType === "account"
       ? contentType
       : "chats"
 

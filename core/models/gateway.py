@@ -19,7 +19,9 @@ def gemini_model_name() -> str:
 
 
 def gemini_api_key() -> str:
-    key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+    from core.config import get_settings
+
+    key = get_settings().gemini_api_key
     if not key:
         raise RuntimeError("Set GEMINI_API_KEY (or GOOGLE_API_KEY) to use Gemini.")
     return key

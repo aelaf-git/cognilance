@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
 
-export default function ChangePasswordPage() {
-  redirect("/local/chat")
+export default function LoginPassword() {
+  redirect("/login")
 }

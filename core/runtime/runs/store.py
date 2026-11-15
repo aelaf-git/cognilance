@@ -61,6 +61,15 @@ class RunStore:
                 CREATE INDEX IF NOT EXISTS idx_run_steps_run ON run_steps(run_id);
                 """
             )
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(runs)")}
+            if "organization_id" not in cols:
+                conn.execute("ALTER TABLE runs ADD COLUMN organization_id TEXT")
+                conn.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_runs_organization
+                    ON runs(organization_id)
+                    """
+                )
 
     def create_run(
         self,
@@ -70,6 +79,7 @@ class RunStore:
         trigger: RunTrigger = RunTrigger.MESSAGE,
         conversation_id: str | None = None,
         user_id: str | None = None,
+        organization_id: str | None = None,
         mission_id: str | None = None,
         run_id: str | None = None,
     ) -> Run:
@@ -83,6 +93,7 @@ class RunStore:
             thread_id=thread_id,
             conversation_id=conversation_id or thread_id,
             user_id=user_id,
+            organization_id=organization_id,
             mission_id=mission_id or rid,
             created_at=now,
             updated_at=now,
@@ -92,9 +103,9 @@ class RunStore:
                 """
                 INSERT INTO runs (
                     id, instruction, status, trigger, thread_id, conversation_id,
-                    user_id, mission_id, created_at, updated_at, result_text,
-                    result_ui, error, pending_approval
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)
+                    user_id, organization_id, mission_id, created_at, updated_at,
+                    result_text, result_ui, error, pending_approval
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)
                 """,
                 (
                     run.id,
@@ -104,6 +115,7 @@ class RunStore:
                     run.thread_id,
                     run.conversation_id,
                     run.user_id,
+                    run.organization_id,
                     run.mission_id,
                     run.created_at.isoformat(),
                     run.updated_at.isoformat(),
@@ -111,10 +123,38 @@ class RunStore:
             )
         return run
 
-    def get_run(self, run_id: str) -> Run | None:
+    def get_run(
+        self,
+        run_id: str,
+        *,
+        user_id: str | None = None,
+        organization_id: str | None = None,
+    ) -> Run | None:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
-        return self._row_to_run(row) if row else None
+        if not row:
+            return None
+        run = self._row_to_run(row)
+        if user_id and run.user_id and run.user_id != user_id:
+            return None
+        if organization_id and run.organization_id and run.organization_id != organization_id:
+            return None
+        return run
+
+    def list_for_organization(self, organization_id: str, *, limit: int = 50) -> list[Run]:
+        if not organization_id:
+            return []
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM runs
+                WHERE organization_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (organization_id, limit),
+            ).fetchall()
+        return [self._row_to_run(row) for row in rows]
 
     def update_status(
         self,
@@ -212,6 +252,7 @@ class RunStore:
             thread_id=row["thread_id"],
             conversation_id=row["conversation_id"],
             user_id=row["user_id"],
+            organization_id=row["organization_id"] if "organization_id" in row.keys() else None,
             mission_id=row["mission_id"],
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),

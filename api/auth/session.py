@@ -1,38 +1,19 @@
-"""Anonymous per-browser user sessions for integration scoping."""
+"""HMAC cookie sessions keyed by account id."""
 
 from __future__ import annotations
 
 import hashlib
 import hmac
-import logging
-import os
-import uuid
 
 from fastapi import Request, Response
 
+from core.config import session_secret_bytes
+
 COOKIE_NAME = "coordinator_uid"
-_log = logging.getLogger(__name__)
-
-
-def _demo_mode() -> bool:
-    return os.getenv("COGNILANCE_DEMO", "").strip() in {"1", "true", "yes"}
 
 
 def _secret() -> bytes:
-    explicit = os.getenv("COORDINATOR_SESSION_SECRET") or os.getenv(
-        "ORCHESTRATOR_SESSION_SECRET"
-    )
-    if explicit:
-        return explicit.encode()
-    if _demo_mode():
-        _log.warning(
-            "COORDINATOR_SESSION_SECRET unset; using insecure demo default "
-            "(COGNILANCE_DEMO=1)"
-        )
-        return b"cognilance-dev-insecure-session"
-    raise RuntimeError(
-        "COORDINATOR_SESSION_SECRET is required (or set COGNILANCE_DEMO=1 for local demo)"
-    )
+    return session_secret_bytes()
 
 
 def _sign(value: str) -> str:
@@ -57,6 +38,11 @@ def get_user_id(request: Request) -> str | None:
     return _verify(cookie)
 
 
+def resolve_user_id(request: Request) -> str | None:
+    """Return the verified account id, or None when anonymous."""
+    return get_user_id(request)
+
+
 def set_user_cookie(response: Response, user_id: str) -> None:
     response.set_cookie(
         COOKIE_NAME,
@@ -68,5 +54,5 @@ def set_user_cookie(response: Response, user_id: str) -> None:
     )
 
 
-def resolve_user_id(request: Request) -> str:
-    return get_user_id(request) or str(uuid.uuid4())
+def clear_user_cookie(response: Response) -> None:
+    response.delete_cookie(COOKIE_NAME, path="/")

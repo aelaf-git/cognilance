@@ -12,8 +12,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import HumanMessage
 
 from api.deps import (
+    active_organization_id,
     conv_store,
     mission_store,
+    owner_filter,
     register_mission_task,
     thread_config,
     user_from,
@@ -50,15 +52,21 @@ async def chat_stream(request: Request) -> StreamingResponse:
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
     user_id = user_from(request)
+    org_id = active_organization_id(user_id)
     conversation_id = (
         str(payload.get("conversation_id") or payload.get("thread_id") or "").strip()
         or str(uuid.uuid4())
     )
-    existing = conv_store.get_conversation(conversation_id, user_id=user_id)
+    existing = conv_store.get_conversation(conversation_id, **owner_filter(user_id))
     if existing is None and conv_store.get_conversation(conversation_id) is not None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     provisional_title = fallback_conversation_title(text)
-    conv_store.ensure_conversation(conversation_id, title=provisional_title, user_id=user_id)
+    conv_store.ensure_conversation(
+        conversation_id,
+        title=provisional_title,
+        user_id=user_id,
+        organization_id=org_id,
+    )
     regenerating = bool(payload.get("regenerate")) and existing is not None
     if regenerating:
         regenerating = conv_store.delete_last_assistant_message(conversation_id)
@@ -82,7 +90,11 @@ async def chat_stream(request: Request) -> StreamingResponse:
         conversation_title = conv_store.display_title(current) if current else provisional_title
     thread_id = conversation_id
     mission = mission_store.create_mission(
-        instruction=text, thread_id=thread_id, conversation_id=conversation_id, user_id=user_id
+        instruction=text,
+        thread_id=thread_id,
+        conversation_id=conversation_id,
+        user_id=user_id,
+        organization_id=org_id,
     )
     mission_id = mission.id
     current_user_id.set(user_id)
@@ -131,6 +143,7 @@ async def chat_stream(request: Request) -> StreamingResponse:
                 use_checkpointer=True,
                 run_id=mission_id,
                 user_id=user_id,
+                organization_id=org_id,
                 trigger=RunTrigger.MESSAGE,
             ):
                 current = mission_store.get_mission(mission_id)
@@ -221,7 +234,13 @@ async def chat_message(request: Request) -> JSONResponse:
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
     thread_id = str(payload.get("thread_id") or "").strip() or str(uuid.uuid4())
-    mission = mission_store.create_mission(instruction=text, thread_id=thread_id)
+    user_id = user_from(request)
+    mission = mission_store.create_mission(
+        instruction=text,
+        thread_id=thread_id,
+        user_id=user_id,
+        organization_id=active_organization_id(user_id),
+    )
     mission_store.update_status(mission.id, MissionStatus.RUNNING)
     try:
         graph = await ensure_graph()

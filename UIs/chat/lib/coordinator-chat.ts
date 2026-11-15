@@ -1,4 +1,5 @@
 import {
+  clearOrchestratorConversation,
   getConversationId,
   setCognilanceConversation,
   touchCognilance
@@ -491,6 +492,52 @@ export function messageForSelection(text: string, blockId = ""): string {
   return `Change only block ${blockId}. Leave every other block as it is.\n${text}`
 }
 
+async function openChatStream(
+  text: string,
+  signal: AbortSignal,
+  regenerate: boolean,
+  blockId: string,
+  conversationId: string,
+  allowStaleRetry: boolean
+): Promise<Response> {
+  const response = await fetch("/api/chat/cognilance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({
+      text: messageForSelection(text, blockId),
+      conversation_id: conversationId || undefined,
+      regenerate: conversationId ? regenerate : false
+    })
+  })
+
+  if (response.ok && response.body) return response
+
+  let detail = ""
+  try {
+    const payload = await response.json()
+    detail = String(payload.error || payload.detail || "")
+  } catch {
+    detail = ""
+  }
+
+  if (response.status === 401) {
+    throw new Error("Sign in to continue.")
+  }
+
+  const missingConversation =
+    response.status === 404 &&
+    /conversation not found/i.test(detail) &&
+    Boolean(conversationId)
+
+  if (allowStaleRetry && missingConversation) {
+    clearOrchestratorConversation()
+    return openChatStream(text, signal, false, blockId, "", false)
+  }
+
+  throw new Error(detail || "Cognilance didn't accept that message.")
+}
+
 export async function streamOrchestratorReply(
   text: string,
   signal: AbortSignal,
@@ -500,28 +547,14 @@ export async function streamOrchestratorReply(
   regenerate = false,
   blockId = ""
 ): Promise<void> {
-  const conversationId = getConversationId()
-  const response = await fetch("/api/chat/cognilance", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+  const response = await openChatStream(
+    text,
     signal,
-    body: JSON.stringify({
-      text: messageForSelection(text, blockId),
-      conversation_id: conversationId || undefined,
-      regenerate
-    })
-  })
-
-  if (!response.ok || !response.body) {
-    let detail = ""
-    try {
-      const payload = await response.json()
-      detail = String(payload.error || payload.detail || "")
-    } catch {
-      detail = ""
-    }
-    throw new Error(detail || "Cognilance didn't accept that message.")
-  }
+    regenerate,
+    blockId,
+    getConversationId(),
+    true
+  )
 
   let activity = createActivityState()
   const publish = () => {
@@ -529,7 +562,7 @@ export async function streamOrchestratorReply(
   }
   publish()
 
-  const reader = response.body.getReader()
+  const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ""
   let answer = ""

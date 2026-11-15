@@ -6,9 +6,23 @@ const COORDINATOR_URL =
 
 function allowed(method: string, path: string) {
   return (
+    (method === "POST" && path === "auth/register") ||
+    (method === "POST" && path === "auth/login") ||
+    (method === "POST" && path === "auth/logout") ||
+    (method === "POST" && path === "auth/password") ||
+    (method === "GET" && path === "auth/me") ||
+    (method === "PATCH" && path === "auth/me") ||
     (method === "GET" && path === "conversations") ||
     (method === "POST" && path === "conversations") ||
     (method === "GET" && path === "integrations/list") ||
+    (method === "GET" && path === "organizations") ||
+    (method === "GET" && path === "invitations") ||
+    /^POST organizations\/[^/]+\/invitations$/.test(`${method} ${path}`) ||
+    /^GET organizations\/[^/]+\/conversations$/.test(`${method} ${path}`) ||
+    /^GET organizations\/[^/]+\/runs$/.test(`${method} ${path}`) ||
+    /^GET organizations\/[^/]+\/integrations$/.test(`${method} ${path}`) ||
+    /^DELETE organizations\/[^/]+$/.test(`${method} ${path}`) ||
+    /^POST invitations\/[^/]+\/accept$/.test(`${method} ${path}`) ||
     /^GET conversations\/[^/]+$/.test(`${method} ${path}`) ||
     /^DELETE conversations\/[^/]+$/.test(`${method} ${path}`) ||
     /^GET conversations\/[^/]+\/sessions$/.test(`${method} ${path}`) ||
@@ -101,5 +115,9 @@ export function POST(request: Request, context: RouteContext) {
 }
 
 export function DELETE(request: Request, context: RouteContext) {
+  return proxy(request, context.params.path)
+}
+
+export function PATCH(request: Request, context: RouteContext) {
   return proxy(request, context.params.path)
 }

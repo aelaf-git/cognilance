@@ -28,6 +28,7 @@ class Mission:
     session_type: SessionType = SessionType.ONCE
     conversation_id: str | None = None
     user_id: str | None = None
+    organization_id: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     result_text: str | None = None
@@ -43,6 +44,7 @@ class Mission:
             "thread_id": self.thread_id,
             "conversation_id": self.conversation_id or self.thread_id,
             "user_id": self.user_id,
+            "organization_id": self.organization_id,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "result_text": self.result_text,
