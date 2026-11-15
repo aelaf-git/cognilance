@@ -146,7 +146,7 @@ def vague_question(user_text: str, conversation: str = "") -> str | None:
         return "What should the document be about?"
     if any(word in lowered for word in ("send", "email", "mail", "post")):
         return "Who should I send it to?"
-    return "What should I focus on?"
+    return "I need a clearer task before I can hand that off."
 
 
 def apply_vague_guard(user_text: str, conversation: str, decision: ThinkDecision) -> ThinkDecision:
