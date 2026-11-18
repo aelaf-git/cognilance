@@ -10,7 +10,6 @@ import {
   IconBolt,
   IconCaretDownFilled,
   IconCaretRightFilled,
-  IconCircleFilled,
   IconFileText,
   IconPencil
 } from "@tabler/icons-react"
@@ -180,6 +179,15 @@ export const Message: FC<MessageProps> = ({
     }
   > = {}
 
+  const awaitingReply =
+    message.role === "assistant" && isLast && isGenerating && !firstTokenReceived
+  const thinkingSteps: ActivityStep[] =
+    activity && activity.length > 0
+      ? activity
+      : awaitingReply
+        ? [{ id: "thinking", label: "Thinking…", detail: "Working through the request.", status: "running" }]
+        : []
+
   const fileSummary = fileItems.reduce((acc, fileItem) => {
     const parentFile = files.find(file => file.id === fileItem.file_id)
     if (parentFile) {
@@ -224,7 +232,7 @@ export const Message: FC<MessageProps> = ({
 
               <div className="text-lg font-semibold">Prompt</div>
             </div>
-          ) : message.role === "assistant" ? (
+          ) : message.role === "assistant" && !awaitingReply ? (
             <div className="flex items-center gap-2">
               {!profile ? (
                 <img
@@ -272,14 +280,20 @@ export const Message: FC<MessageProps> = ({
               </div>
             </div>
           ) : null}
-          {message.role === "assistant" && activity && activity.length > 0 && (
-            <ActivityTrace steps={activity} />
+          {message.role === "assistant" && thinkingSteps.length > 0 && (
+            <ActivityTrace steps={thinkingSteps} />
           )}
           <div
             className={cn(
               "min-w-0 text-[14px] leading-6",
               message.role === "user" &&
-                "max-w-[88%] rounded-[10px] rounded-tr-[4px] border border-[hsl(var(--chat-user-border))] bg-[hsl(var(--chat-user))] px-3 py-2 sm:max-w-[78%]"
+                "max-w-[88%] rounded-[10px] rounded-tr-[4px] border border-[hsl(var(--chat-user-border))] bg-[hsl(var(--chat-user))] px-3 py-2 sm:max-w-[78%]",
+              !firstTokenReceived &&
+                isGenerating &&
+                isLast &&
+                message.role === "assistant" &&
+                toolInUse === "none" &&
+                "hidden"
             )}
           >
             {!firstTokenReceived &&
@@ -289,9 +303,7 @@ export const Message: FC<MessageProps> = ({
               (() => {
                 switch (toolInUse) {
                   case "none":
-                    return (
-                      <IconCircleFilled className="animate-pulse" size={20} />
-                    )
+                    return null
                   case "retrieval":
                     return (
                       <div className="flex animate-pulse items-center space-x-2">

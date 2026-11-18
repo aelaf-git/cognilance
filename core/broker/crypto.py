@@ -17,13 +17,11 @@ def _derive_key(secret: str) -> bytes:
 
 @lru_cache(maxsize=1)
 def _fernet() -> Fernet:
+    from core.config import get_settings
+
     raw = os.getenv("INTEGRATION_ENCRYPTION_KEY", "").strip()
     if not raw:
-        raw = (
-            os.getenv("COORDINATOR_SESSION_SECRET")
-            or os.getenv("ORCHESTRATOR_SESSION_SECRET")
-            or "cognilance-dev-insecure-key"
-        )
+        raw = get_settings().session_secret or "cognilance-dev-insecure-key"
     return Fernet(_derive_key(raw))
 
 

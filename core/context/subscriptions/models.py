@@ -30,6 +30,7 @@ class Subscription:
     updated_at: datetime
     created_from_mission_id: str | None = None
     error: str | None = None
+    organization_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,4 +47,5 @@ class Subscription:
             "updated_at": self.updated_at.isoformat(),
             "created_from_mission_id": self.created_from_mission_id,
             "error": self.error,
+            "organization_id": self.organization_id,
         }

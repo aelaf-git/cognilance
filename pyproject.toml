@@ -7,14 +7,14 @@ name = "cognilance"
 version = "0.2.0"
 description = "Cognilance — durable coordinator + specialist agents with brokered tools"
 readme = "README.md"
-license = "MIT"
+license = "AGPL-3.0-only"
 requires-python = ">=3.10"
 authors = [{ name = "Cognilance" }]
 keywords = ["ai", "agents", "langgraph", "multi-agent"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

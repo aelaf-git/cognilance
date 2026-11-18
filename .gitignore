@@ -143,6 +143,9 @@ docker-compose.override.yml
 *.swo
 *~
 
+# One-shot GitHub issue bootstrap (re-running duplicates issues)
+create-issues.ps1
+
 # Reference clones (not part of the product)
 chatbot-ui/
 _refs/

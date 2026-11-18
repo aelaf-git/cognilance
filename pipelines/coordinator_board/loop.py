@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from core.context.users.identity import signed_in_display_name
 from core.models.gateway import last_user_text, to_chat_messages
 from pipelines.coordinator_board import llm_call
 from pipelines.coordinator_board.evidence import evidence_text
@@ -128,9 +129,24 @@ def _thread(state: State) -> str:
 
 def _think_prompt(state: State) -> str:
     feedback = str(state.get("retry_feedback") or "").strip()
+    name = signed_in_display_name()
     parts = [
         _POLICY,
         "",
+    ]
+    if name:
+        parts.extend(
+            [
+                (
+                    f"The signed-in user's name is {name}. "
+                    "That name comes from their account settings. "
+                    "Use it when they ask who they are, and when a reply should address them."
+                ),
+                "",
+            ]
+        )
+    parts.extend(
+        [
         "Roster:",
         _roster_text(dict(state.get("roster") or {})),
         "",
@@ -141,7 +157,8 @@ def _think_prompt(state: State) -> str:
         _thread(state),
         "",
         f"Latest user message:\n{last_user_text(list(state.get('messages') or []))}",
-    ]
+        ]
+    )
     if feedback:
         parts.extend(
             [

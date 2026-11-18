@@ -17,6 +17,14 @@ from core.context.subscriptions.store import SubscriptionStore
 DEFAULT_POLL_SECONDS = 90
 
 
+def _organization_for(user_id: str, organization_id: str | None) -> str | None:
+    if organization_id:
+        return organization_id
+    from core.context.orgs.store import OrgStore
+
+    return OrgStore().active_for_account(user_id)
+
+
 class SubscriptionService:
     def __init__(
         self,
@@ -37,6 +45,7 @@ class SubscriptionService:
         query: str = "",
         poll_interval_seconds: int = DEFAULT_POLL_SECONDS,
         mission_id: str | None = None,
+        organization_id: str | None = None,
     ) -> dict[str, Any]:
         if not self._integrations.is_connected(user_id, "gmail"):
             raise RuntimeError("gmail is not connected: connect it on the Integrations page")
@@ -70,6 +79,7 @@ class SubscriptionService:
             cursor={"seen_ids": seen_ids},
             poll_interval_seconds=poll_interval_seconds,
             created_from_mission_id=mission_id,
+            organization_id=_organization_for(user_id, organization_id),
         )
         if mission_id:
             mission_store = MissionStore()
@@ -131,6 +141,7 @@ class SubscriptionService:
         instruction: str,
         poll_interval_seconds: int = 86_400,
         mission_id: str | None = None,
+        organization_id: str | None = None,
     ) -> dict[str, Any]:
         instruction = instruction.strip()
         if not instruction:
@@ -159,6 +170,7 @@ class SubscriptionService:
             cursor={"run_count": 0, "last_run_at": None},
             poll_interval_seconds=poll_interval_seconds,
             created_from_mission_id=mission_id,
+            organization_id=_organization_for(user_id, organization_id),
         )
         if mission_id:
             mission_store = MissionStore()

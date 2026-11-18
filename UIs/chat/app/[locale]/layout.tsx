@@ -87,7 +87,7 @@ export default async function RootLayout({
       className={`${spaceGrotesk.variable} ${ibmPlex.variable}`}
     >
       <body>
-        <Providers attribute="class" defaultTheme="dark">
+        <Providers attribute="class" defaultTheme="dark" enableSystem>
           <TranslationsProvider
             namespaces={i18nNamespaces}
             locale={locale}

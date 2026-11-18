@@ -67,6 +67,15 @@ class SubscriptionStore:
                     ON subscription_notifications(conversation_id, id);
                 """
             )
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(subscriptions)")}
+            if "organization_id" not in cols:
+                conn.execute("ALTER TABLE subscriptions ADD COLUMN organization_id TEXT")
+                conn.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_subscriptions_organization
+                    ON subscriptions(organization_id)
+                    """
+                )
 
     def _row_to_subscription(self, row: sqlite3.Row) -> Subscription:
         return Subscription(
@@ -83,6 +92,7 @@ class SubscriptionStore:
             updated_at=datetime.fromisoformat(row["updated_at"]),
             created_from_mission_id=row["created_from_mission_id"],
             error=row["error"],
+            organization_id=row["organization_id"] if "organization_id" in row.keys() else None,
         )
 
     def create_subscription(
@@ -96,6 +106,7 @@ class SubscriptionStore:
         cursor: dict[str, Any] | None = None,
         poll_interval_seconds: int = 90,
         created_from_mission_id: str | None = None,
+        organization_id: str | None = None,
     ) -> Subscription:
         sub_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
@@ -107,8 +118,8 @@ class SubscriptionStore:
                 INSERT INTO subscriptions (
                     id, user_id, conversation_id, integration, kind,
                     config, cursor, status, next_check_at,
-                    created_at, updated_at, created_from_mission_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at, updated_at, created_from_mission_id, organization_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     sub_id,
@@ -123,19 +134,33 @@ class SubscriptionStore:
                     now_iso,
                     now_iso,
                     created_from_mission_id,
+                    organization_id,
                 ),
             )
         sub = self.get_subscription(sub_id)
         assert sub is not None
         return sub
 
-    def get_subscription(self, subscription_id: str) -> Subscription | None:
+    def get_subscription(
+        self,
+        subscription_id: str,
+        *,
+        user_id: str | None = None,
+        organization_id: str | None = None,
+    ) -> Subscription | None:
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT * FROM subscriptions WHERE id = ?",
                 (subscription_id,),
             ).fetchone()
-        return self._row_to_subscription(row) if row else None
+        if not row:
+            return None
+        sub = self._row_to_subscription(row)
+        if user_id and sub.user_id and sub.user_id != user_id:
+            return None
+        if organization_id and sub.organization_id and sub.organization_id != organization_id:
+            return None
+        return sub
 
     def get_by_mission_id(self, mission_id: str) -> Subscription | None:
         with self._conn() as conn:

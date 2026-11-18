@@ -90,6 +90,15 @@ class MissionStore:
                     ON missions(user_id)
                     """
                 )
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(missions)")}
+            if "organization_id" not in cols:
+                conn.execute("ALTER TABLE missions ADD COLUMN organization_id TEXT")
+                conn.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_missions_organization
+                    ON missions(organization_id)
+                    """
+                )
 
     def recover_stale_running(self, *, max_age_seconds: int = 120) -> int:
         """Mark abandoned running missions as failed (e.g. after worker crash)."""
@@ -128,6 +137,7 @@ class MissionStore:
         conversation_id: str | None = None,
         session_type: SessionType | None = None,
         user_id: str | None = None,
+        organization_id: str | None = None,
     ) -> Mission:
         mission_id = str(uuid.uuid4())
         conversation = conversation_id or thread_id or str(uuid.uuid4())
@@ -139,8 +149,8 @@ class MissionStore:
                 """
                 INSERT INTO missions (
                     id, instruction, status, thread_id, conversation_id,
-                    session_type, created_at, updated_at, user_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    session_type, created_at, updated_at, user_id, organization_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     mission_id,
@@ -152,6 +162,7 @@ class MissionStore:
                     now,
                     now,
                     user_id,
+                    organization_id,
                 ),
             )
         return Mission(
@@ -162,34 +173,55 @@ class MissionStore:
             conversation_id=conversation,
             session_type=kind,
             user_id=user_id,
+            organization_id=organization_id,
             created_at=datetime.fromisoformat(now),
             updated_at=datetime.fromisoformat(now),
         )
 
-    def get_mission(self, mission_id: str) -> Mission | None:
+    def get_mission(
+        self,
+        mission_id: str,
+        *,
+        user_id: str | None = None,
+        organization_id: str | None = None,
+    ) -> Mission | None:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM missions WHERE id = ?", (mission_id,)).fetchone()
         if not row:
             return None
-        return self._row_to_mission(row)
+        mission = self._row_to_mission(row)
+        if user_id and mission.user_id and mission.user_id != user_id:
+            return None
+        if organization_id and mission.organization_id and mission.organization_id != organization_id:
+            return None
+        return mission
 
-    def list_missions(self, *, limit: int = 50, include_hidden: bool = False) -> list[Mission]:
+    def list_missions(
+        self,
+        *,
+        limit: int = 50,
+        include_hidden: bool = False,
+        user_id: str | None = None,
+        organization_id: str | None = None,
+    ) -> list[Mission]:
         self.init_db()
+        clauses: list[str] = []
+        params: list[Any] = []
+        if not include_hidden:
+            clauses.append("COALESCE(hidden, 0) = 0")
+        if organization_id:
+            clauses.append("organization_id = ?")
+            params.append(organization_id)
+        elif user_id:
+            clauses.append("user_id = ?")
+            params.append(user_id)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(limit)
         with self._conn() as conn:
-            if include_hidden:
-                rows = conn.execute(
-                    "SELECT * FROM missions ORDER BY created_at DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """
-                    SELECT * FROM missions
-                    WHERE COALESCE(hidden, 0) = 0
-                    ORDER BY created_at DESC LIMIT ?
-                    """,
-                    (limit,),
-                ).fetchall()
+            rows = conn.execute(
+                f"SELECT * FROM missions{where} ORDER BY created_at DESC LIMIT ?",
+                params,
+            ).fetchall()
         return [self._row_to_mission(row) for row in rows]
 
     def list_missions_for_conversation(
@@ -198,28 +230,30 @@ class MissionStore:
         *,
         limit: int = 50,
         include_hidden: bool = False,
+        user_id: str | None = None,
+        organization_id: str | None = None,
     ) -> list[Mission]:
         self.init_db()
+        clauses = ["(conversation_id = ? OR thread_id = ?)"]
+        params: list[Any] = [conversation_id, conversation_id]
+        if not include_hidden:
+            clauses.append("COALESCE(hidden, 0) = 0")
+        if organization_id:
+            clauses.append("organization_id = ?")
+            params.append(organization_id)
+        elif user_id:
+            clauses.append("user_id = ?")
+            params.append(user_id)
+        params.append(limit)
         with self._conn() as conn:
-            if include_hidden:
-                rows = conn.execute(
-                    """
-                    SELECT * FROM missions
-                    WHERE conversation_id = ? OR thread_id = ?
-                    ORDER BY created_at ASC LIMIT ?
-                    """,
-                    (conversation_id, conversation_id, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """
-                    SELECT * FROM missions
-                    WHERE COALESCE(hidden, 0) = 0
-                      AND (conversation_id = ? OR thread_id = ?)
-                    ORDER BY created_at ASC LIMIT ?
-                    """,
-                    (conversation_id, conversation_id, limit),
-                ).fetchall()
+            rows = conn.execute(
+                f"""
+                SELECT * FROM missions
+                WHERE {' AND '.join(clauses)}
+                ORDER BY created_at ASC LIMIT ?
+                """,
+                params,
+            ).fetchall()
         return [self._row_to_mission(row) for row in rows]
 
     def delete_missions_for_conversation(self, conversation_id: str) -> int:
@@ -380,6 +414,7 @@ class MissionStore:
             conversation_id=raw_conversation or row["thread_id"],
             session_type=SessionType(raw_type or "once"),
             user_id=row["user_id"] if "user_id" in row.keys() else None,
+            organization_id=row["organization_id"] if "organization_id" in row.keys() else None,
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
             result_text=row["result_text"],

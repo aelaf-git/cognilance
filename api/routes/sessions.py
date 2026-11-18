@@ -8,7 +8,15 @@ from typing import Any, AsyncIterator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.deps import cancel_mission_task, mission_store, sub_store
+from api.deps import (
+    active_organization_id,
+    cancel_mission_task,
+    conv_store,
+    mission_store,
+    owner_filter,
+    sub_store,
+    user_from,
+)
 from api.sse import sse_line, sse_response
 from core.context.subscriptions.session_sync import (
     enrich_session_dict,
@@ -23,8 +31,8 @@ router = APIRouter()
 _TERMINAL = {MissionStatus.COMPLETED, MissionStatus.FAILED, MissionStatus.CANCELLED}
 
 
-def _require_mission(mission_id: str, label: str = "Session"):
-    mission = mission_store.get_mission(mission_id)
+def _require_mission(mission_id: str, request: Request, label: str = "Session"):
+    mission = mission_store.get_mission(mission_id, **owner_filter(user_from(request)))
     if not mission:
         raise HTTPException(status_code=404, detail=f"{label} not found")
     return mission
@@ -44,12 +52,16 @@ async def _instruction_from(request: Request) -> tuple[dict[str, Any], str, str 
 
 @router.get("/sessions")
 async def list_sessions(request: Request) -> JSONResponse:
+    scope = owner_filter(user_from(request))
     conversation_id = str(request.query_params.get("conversation_id") or "").strip() or None
-    missions = (
-        mission_store.list_missions_for_conversation(conversation_id, limit=50)
-        if conversation_id
-        else mission_store.list_missions(limit=50)
-    )
+    if conversation_id:
+        if not conv_store.get_conversation(conversation_id, **scope):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        missions = mission_store.list_missions_for_conversation(
+            conversation_id, limit=50, **scope
+        )
+    else:
+        missions = mission_store.list_missions(limit=50, **scope)
     return JSONResponse(
         content={"sessions": [enrich_session_dict(m, sub_store=sub_store) for m in missions]}
     )
@@ -60,25 +72,30 @@ async def create_session(request: Request) -> JSONResponse:
     payload, instruction, thread_id = await _instruction_from(request)
     raw_type = str(payload.get("session_type") or "").strip() or None
     session_type = SessionType(raw_type) if raw_type in {"once", "recurring"} else None
+    user_id = user_from(request)
     mission = mission_store.create_mission(
-        instruction=instruction, thread_id=thread_id, session_type=session_type
+        instruction=instruction,
+        thread_id=thread_id,
+        session_type=session_type,
+        user_id=user_id,
+        organization_id=active_organization_id(user_id),
     )
     return JSONResponse(content=mission.to_session_dict())
 
 
 @router.get("/sessions/{session_id}")
-async def get_session(session_id: str) -> JSONResponse:
-    mission = _require_mission(session_id)
+async def get_session(session_id: str, request: Request) -> JSONResponse:
+    mission = _require_mission(session_id, request)
     return JSONResponse(content=enrich_session_dict(mission, sub_store=sub_store))
 
 
 @router.post("/sessions/{session_id}/abort")
-async def abort_session(session_id: str) -> JSONResponse:
-    _require_mission(session_id)
+async def abort_session(session_id: str, request: Request) -> JSONResponse:
+    _require_mission(session_id, request)
     cancelled_task = cancel_mission_task(session_id)
     stop_listener_for_mission(session_id, sub_store=sub_store, mission_store=mission_store)
     # Ensure one-shot runs are marked cancelled even without a listener.
-    current = mission_store.get_mission(session_id)
+    current = mission_store.get_mission(session_id, **owner_filter(user_from(request)))
     if current and current.status in {MissionStatus.RUNNING, MissionStatus.QUEUED}:
         mission_store.update_status(session_id, MissionStatus.CANCELLED, error="Aborted by user")
         mission_store.append_event(session_id, {"event": "session_aborted", "reason": "user"})
@@ -88,8 +105,8 @@ async def abort_session(session_id: str) -> JSONResponse:
 
 
 @router.post("/sessions/{session_id}/start")
-async def start_session(session_id: str) -> JSONResponse:
-    mission = _require_mission(session_id)
+async def start_session(session_id: str, request: Request) -> JSONResponse:
+    mission = _require_mission(session_id, request)
     if mission.session_type != SessionType.RECURRING:
         raise HTTPException(
             status_code=400, detail="Only long-running background sessions can be started"
@@ -103,14 +120,16 @@ async def start_session(session_id: str) -> JSONResponse:
         )
     return JSONResponse(
         content=enrich_session_dict(
-            mission_store.get_mission(session_id) or mission, sub_store=sub_store
+            mission_store.get_mission(session_id, **owner_filter(user_from(request))) or mission,
+            sub_store=sub_store,
         )
     )
 
 
 @router.delete("/sessions/{session_id}")
 @router.post("/sessions/{session_id}/dismiss")
-async def dismiss_session(session_id: str) -> JSONResponse:
+async def dismiss_session(session_id: str, request: Request) -> JSONResponse:
+    _require_mission(session_id, request)
     try:
         mission_store.hide_session(session_id)
     except KeyError as exc:
@@ -126,8 +145,8 @@ async def session_events(session_id: str, request: Request) -> StreamingResponse
 
 
 @router.get("/sessions/{session_id}/history")
-async def session_history(session_id: str) -> JSONResponse:
-    mission = _require_mission(session_id)
+async def session_history(session_id: str, request: Request) -> JSONResponse:
+    mission = _require_mission(session_id, request)
     events = mission_store.list_events(session_id)
     for event in events:
         event.pop("_event_id", None)
@@ -140,15 +159,24 @@ async def session_history(session_id: str) -> JSONResponse:
 
 
 @router.get("/missions")
-async def list_missions() -> JSONResponse:
-    missions = [m.to_session_dict() for m in mission_store.list_missions(limit=50)]
+async def list_missions(request: Request) -> JSONResponse:
+    missions = [
+        m.to_session_dict()
+        for m in mission_store.list_missions(limit=50, **owner_filter(user_from(request)))
+    ]
     return JSONResponse(content={"missions": missions, "sessions": missions})
 
 
 @router.post("/missions")
 async def create_mission(request: Request) -> JSONResponse:
     _payload, instruction, thread_id = await _instruction_from(request)
-    mission = mission_store.create_mission(instruction=instruction, thread_id=thread_id)
+    user_id = user_from(request)
+    mission = mission_store.create_mission(
+        instruction=instruction,
+        thread_id=thread_id,
+        user_id=user_id,
+        organization_id=active_organization_id(user_id),
+    )
     return JSONResponse(
         content={
             "mission_id": mission.id,
@@ -159,13 +187,13 @@ async def create_mission(request: Request) -> JSONResponse:
 
 
 @router.get("/missions/{mission_id}")
-async def get_mission(mission_id: str) -> JSONResponse:
-    return JSONResponse(content=_require_mission(mission_id, "Mission").to_dict())
+async def get_mission(mission_id: str, request: Request) -> JSONResponse:
+    return JSONResponse(content=_require_mission(mission_id, request, "Mission").to_dict())
 
 
 @router.get("/missions/{mission_id}/events")
 async def mission_events(mission_id: str, request: Request) -> StreamingResponse:
-    _require_mission(mission_id, "Mission")
+    _require_mission(mission_id, request, "Mission")
     after_id = int(request.query_params.get("after", "0") or "0")
 
     async def replay() -> AsyncIterator[str]:

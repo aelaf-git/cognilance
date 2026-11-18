@@ -14,6 +14,24 @@
 
 ---
 
+## See it
+
+The chat app is the product. Open a conversation, connect the tools the team already uses, and manage the account from the same sidebar.
+
+<p align="center">
+  <img src="docs/screenshots/chat.png" alt="Cognilance chat, with an empty conversation list and the prompt What can we accomplish?" width="840">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/integrations.png" alt="Integrations panel listing Google Drive, Gmail, Calendar, Notion, Slack, GitHub, X, Reddit, and LinkedIn" width="840">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/settings.png" alt="Settings index with Profile, Team, Appearance, Security, and Timezone" width="840">
+</p>
+
+---
+
 ## Cognilance SDK
 
 **Deferred.** The runtime no longer dispatches via `CognilanceManager` / A2A hire.
@@ -24,6 +42,7 @@ in-process agents under [`agents/`](agents/) and graphs under [`pipelines/`](pip
 
 ## Table of contents
 
+- [See it](#see-it)
 - [Website](#website)
 - [Pick your role](#pick-your-role)
 - [Quick start](#quick-start)
@@ -57,15 +76,24 @@ Open [http://localhost:3000](http://localhost:3000). Optional waitlist webhook: 
 
 ### Chat + coordinator
 
+Two supported ways to run the stack:
+
 ```bash
-# From the repo root: watches Python/TS sources and reloads
+# 1) From the repo root: watches Python/TS sources and reloads
 docker compose watch
 ```
 
-- Chat UI: [http://localhost:3001](http://localhost:3001)
+```bash
+# 2) Local install: API on :8200 plus the background worker
+pip install -e .
+cognilance-coordinator
+cognilance-coordinator-worker
+```
+
+- Chat UI: [http://localhost:3001](http://localhost:3001) (compose path)
 - Coordinator health: [http://localhost:8200/health](http://localhost:8200/health)
 
-Uses root `.env` for `GEMINI_API_KEY` (and friends). Landing stays on `:3000` via `web/docker-compose.yml` so it does not clash with chat.
+Uses root `.env` for `GEMINI_API_KEY` (and friends). Outside `COGNILANCE_DEMO=1`, set `COORDINATOR_SESSION_SECRET` and `TOOL_PROXY_SIGNING_KEY`. Landing stays on `:3000` via `web/docker-compose.yml` so it does not clash with chat.
 
 ---
 
@@ -506,14 +534,17 @@ The remote host must still expose `/a2a`, `/a2a/tasks`, and `/health`.
 ## Local development
 
 ```bash
-# Durable coordinator + in-process specialists on :8200
-./scripts/start_demo.sh
+# Compose (chat :3001 + coordinator :8200, hot reload)
+docker compose watch
 
-# Or:
-source venv/bin/activate
+# Or install and run the two processes directly:
+source venv/bin/activate   # Windows: .\venv\Scripts\Activate.ps1
 pip install -e .
 cognilance-coordinator
+cognilance-coordinator-worker
 ```
+
+Demo shortcut (sets `COGNILANCE_DEMO=1`): `./scripts/start_demo.sh`.
 
 ---
 
@@ -523,6 +554,11 @@ cognilance-coordinator
 |----------|----------|---------|-------------|
 | `GEMINI_API_KEY` | For coordinator | - | Gemini API key for the coordinator / specialists (`GOOGLE_API_KEY` also works) |
 | `GEMINI_MODEL` | No | `gemini-3.5-flash-lite` | Gemini model id |
+| `GEMINI_THINKING_LEVEL` | No | `medium` | Gemini 3 reasoning depth: `minimal`, `low`, `medium`, or `high` |
+| `COORDINATOR_SESSION_SECRET` | Outside demo | - | HMAC secret for the `coordinator_uid` cookie (`ORCHESTRATOR_SESSION_SECRET` still works) |
+| `TOOL_PROXY_SIGNING_KEY` | Outside demo | - | HMAC secret for short-lived tool proxy grants |
+| `COGNILANCE_DEMO` | No | unset | `1`/`true`/`yes` allows insecure demo defaults when secrets are unset |
+| `COGNILANCE_COORDINATOR_DB` | No | `data/coordinator.db` | SQLite path for coordinator stores (`COGNILANCE_ORCHESTRATOR_DB` still works) |
 | `COGNILANCE_APPROVAL_GRADES` | No | `irreversible` | Comma-separated tool risk grades that pause for approval |
 | `COGNILANCE_COORDINATOR_PORT` | No | `8200` | Coordinator HTTP port |
 | `COORDINATOR_PUBLIC_URL` | For OAuth | `http://127.0.0.1:8200` | Public base URL for OAuth callbacks |
@@ -571,4 +607,6 @@ from cognilance import (
 
 ## License
 
-MIT: see [LICENSE](LICENSE).
+[GNU Affero General Public License v3](LICENSE). This is a published license, so Cognilance does not need to write its own. Anyone may use, change, and share the software. If someone changes it and runs that version as a network service, they must offer the source of that version to its users.
+
+The chat interface includes MIT-licensed work by Mckay Wrigley. See [UIs/chat/license](UIs/chat/license).
