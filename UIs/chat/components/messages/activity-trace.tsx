@@ -4,6 +4,17 @@ import { ActivityStep } from "@/lib/coordinator-chat"
 import { cn } from "@/lib/utils"
 import { IconChevronRight, IconLoader2 } from "@tabler/icons-react"
 import { FC, useEffect, useRef, useState } from "react"
+import remarkGfm from "remark-gfm"
+import { MessageMarkdownMemoized } from "./message-markdown-memoized"
+
+const ThoughtText: FC<{ text: string }> = ({ text }) => (
+  <MessageMarkdownMemoized
+    className="max-w-none text-xs leading-5 text-muted-foreground [&_em]:text-foreground/80 [&_h1]:mb-1 [&_h1]:text-[13px] [&_h1]:font-medium [&_h1]:text-foreground [&_h2]:mb-1 [&_h2]:text-[13px] [&_h2]:font-medium [&_h2]:text-foreground [&_h3]:mb-1 [&_h3]:text-xs [&_h3]:font-medium [&_h3]:text-foreground [&_li]:my-0.5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-medium [&_strong]:text-foreground [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-4 [&_code]:rounded [&_code]:bg-muted/70 [&_code]:px-1 [&_code]:text-[11px]"
+    remarkPlugins={[remarkGfm]}
+  >
+    {text}
+  </MessageMarkdownMemoized>
+)
 
 interface ActivityTraceProps {
   steps: ActivityStep[]
@@ -76,8 +87,8 @@ export const ActivityTrace: FC<ActivityTraceProps> = ({ steps }) => {
       {thoughtOpen && (
         <div className="ml-1.5 mt-1 space-y-1 border-l border-border pl-4">
           {rootStep.detail && (
-            <div className="py-0.5 text-xs leading-5 text-muted-foreground whitespace-pre-wrap">
-              {rootStep.detail}
+            <div className="py-0.5">
+              <ThoughtText text={rootStep.detail} />
             </div>
           )}
 
@@ -113,9 +124,7 @@ export const ActivityTrace: FC<ActivityTraceProps> = ({ steps }) => {
                         {step.prompt}
                       </div>
                     )}
-                    {step.detail && (
-                      <div className="whitespace-pre-wrap">{step.detail}</div>
-                    )}
+                    {step.detail && <ThoughtText text={step.detail} />}
                   </div>
                 )}
               </div>
