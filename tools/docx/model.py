@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Any
 
 from tools.docx.math import math_runs, normalize_math
@@ -318,6 +319,15 @@ def _attach_math(block: dict[str, Any], source: str = "") -> dict[str, Any]:
     return block
 
 
+_BLOCK_ID = re.compile(r"^blk_[a-f0-9]{8}$")
+
+
+def _finish(block: dict[str, Any], source: Any = None) -> dict[str, Any]:
+    current = str(source.get("id") or "") if isinstance(source, dict) else ""
+    block["id"] = current if _BLOCK_ID.fullmatch(current) else f"blk_{uuid.uuid4().hex[:8]}"
+    return block
+
+
 def _with_runs(block: dict[str, Any], item: dict[str, Any], text: str) -> dict[str, Any]:
     raw = _raw_text(item) or text
     runs = _runs(item.get("runs"))
@@ -334,38 +344,38 @@ def _with_runs(block: dict[str, Any], item: dict[str, Any], text: str) -> dict[s
 
 def normalize_blocks(raw: Any) -> list[dict[str, Any]]:
     if isinstance(raw, str) and raw.strip():
-        return [_attach_math({"type": "paragraph", "text": raw}, raw)]
+        return [_finish(_attach_math({"type": "paragraph", "text": raw}, raw))]
     if not isinstance(raw, list):
         return []
     blocks: list[dict[str, Any]] = []
     for item in raw:
         if isinstance(item, str) and item.strip():
-            blocks.append(_attach_math({"type": "paragraph", "text": item}, item))
+            blocks.append(_finish(_attach_math({"type": "paragraph", "text": item}, item)))
             continue
         if not isinstance(item, dict):
             continue
         kind = str(item.get("type") or "paragraph").strip().lower()
         if kind in {"rule", "hr", "line"}:
-            blocks.append({"type": "rule"})
+            blocks.append(_finish({"type": "rule"}, item))
             continue
         if kind in {"page_break", "pagebreak", "break"}:
-            blocks.append({"type": "page_break"})
+            blocks.append(_finish({"type": "page_break"}, item))
             continue
         if kind in {"contents", "toc"}:
-            blocks.append({"type": "contents"})
+            blocks.append(_finish({"type": "contents"}, item))
             continue
         if kind in {"bullet", "bullets", "list", "numbered", "number"}:
             items = _items(item.get("items") if item.get("items") is not None else item.get("text"))
             if items:
-                blocks.append({
+                blocks.append(_finish({
                     "type": "numbered" if kind in {"numbered", "number"} else "bullet",
                     "items": items,
-                })
+                }, item))
             continue
         if kind in {"references", "bibliography", "reference"}:
             items = _items(item.get("items") if item.get("items") is not None else item.get("text"))
             if items:
-                blocks.append({"type": "references", "items": items})
+                blocks.append(_finish({"type": "references", "items": items}, item))
             continue
         if kind == "table":
             rows = _rows(item.get("rows"))
@@ -374,12 +384,12 @@ def normalize_blocks(raw: Any) -> list[dict[str, Any]]:
                 caption = _plain(item.get("caption"))
                 if caption:
                     block["caption"] = caption
-                blocks.append(block)
+                blocks.append(_finish(block, item))
             continue
         if kind == "chart":
             chart = _chart(item)
             if chart:
-                blocks.append(chart)
+                blocks.append(_finish(chart, item))
             continue
         if kind == "code":
             text = str(item.get("text") or "").strip()
@@ -388,7 +398,7 @@ def normalize_blocks(raw: Any) -> list[dict[str, Any]]:
                 language = str(item.get("language") or "").strip()[:40]
                 if language:
                     block["language"] = language
-                blocks.append(block)
+                blocks.append(_finish(block, item))
             continue
         if kind == "callout":
             text = _joined(item)
@@ -399,7 +409,7 @@ def normalize_blocks(raw: Any) -> list[dict[str, Any]]:
                     item,
                     text,
                 )
-                blocks.append(block)
+                blocks.append(_finish(block, item))
             continue
         if kind in {"quote", "blockquote"}:
             text = _joined(item)
@@ -408,23 +418,29 @@ def normalize_blocks(raw: Any) -> list[dict[str, Any]]:
                 source = _plain(item.get("source"))
                 if source:
                     block["source"] = source
-                blocks.append(block)
+                blocks.append(_finish(block, item))
             continue
         if kind == "equation":
             text = _joined(item)
             if text:
-                blocks.append(_with_runs({"type": "equation"}, item, text))
+                block = _with_runs({"type": "equation"}, item, text)
+                raw = str(item.get("notation") or "")
+                if not any(mark in raw for mark in "\\_^"):
+                    raw = _raw_text(item)
+                if any(mark in raw for mark in "\\_^"):
+                    block["notation"] = raw.strip()
+                blocks.append(_finish(block, item))
             continue
         text = _joined(item)
         if not text and not _plain(item.get("note")):
             continue
         if kind == "title":
-            blocks.append(_with_runs({"type": "title"}, item, text))
+            blocks.append(_finish(_with_runs({"type": "title"}, item, text), item))
         elif kind in {"heading", "header"}:
             level = int(_number(item.get("level"), 1, 1, 3))
-            blocks.append(_with_runs({"type": "heading", "level": level}, item, text))
+            blocks.append(_finish(_with_runs({"type": "heading", "level": level}, item, text), item))
         else:
-            blocks.append(_with_runs({"type": "paragraph"}, item, text))
+            blocks.append(_finish(_with_runs({"type": "paragraph"}, item, text), item))
     return blocks
 
 

@@ -61,6 +61,15 @@ class RunStore:
                 CREATE INDEX IF NOT EXISTS idx_run_steps_run ON run_steps(run_id);
                 """
             )
+            run_cols = {row[1] for row in conn.execute("PRAGMA table_info(runs)")}
+            if "organization_id" not in run_cols:
+                conn.execute("ALTER TABLE runs ADD COLUMN organization_id TEXT")
+                conn.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_runs_org
+                    ON runs(organization_id)
+                    """
+                )
 
     def create_run(
         self,
@@ -181,6 +190,21 @@ class RunStore:
                 ),
             )
         return step
+
+    def list_for_organization(self, organization_id: str, *, limit: int = 50) -> list[Run]:
+        if not organization_id:
+            return []
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM runs
+                WHERE organization_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (organization_id, limit),
+            ).fetchall()
+        return [self._row_to_run(row) for row in rows]
 
     def list_steps(self, run_id: str) -> list[RunStep]:
         with self._conn() as conn:

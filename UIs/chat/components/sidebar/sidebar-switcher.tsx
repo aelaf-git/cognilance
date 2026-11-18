@@ -1,7 +1,8 @@
 import {
   IconMessage,
   IconPlayerPlay,
-  IconPlugConnected
+  IconPlugConnected,
+  IconUser
 } from "@tabler/icons-react"
 import { FC } from "react"
 import { ThemeSwitcher } from "../utility/theme-switcher"
@@ -38,6 +39,13 @@ export const SidebarSwitcher: FC<SidebarSwitcherProps> = ({
           icon={<IconPlugConnected size={SIDEBAR_ICON_SIZE} stroke={1.75} />}
           contentType="integrations"
           label="Integrations"
+          onContentTypeChange={onContentTypeChange}
+        />
+
+        <SidebarSwitchItem
+          icon={<IconUser size={SIDEBAR_ICON_SIZE} stroke={1.75} />}
+          contentType="account"
+          label="Account"
           onContentTypeChange={onContentTypeChange}
         />
       </TabsList>

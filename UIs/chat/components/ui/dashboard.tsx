@@ -27,7 +27,9 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
   const searchParams = useSearchParams()
   const requestedTab = searchParams.get("tab") || "chats"
   const tabValue =
-    requestedTab === "sessions" || requestedTab === "integrations"
+    requestedTab === "sessions" ||
+    requestedTab === "integrations" ||
+    requestedTab === "account"
       ? requestedTab
       : "chats"
 

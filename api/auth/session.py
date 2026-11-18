@@ -68,5 +68,9 @@ def set_user_cookie(response: Response, user_id: str) -> None:
     )
 
 
+def clear_user_cookie(response: Response) -> None:
+    response.delete_cookie(COOKIE_NAME, path="/")
+
+
 def resolve_user_id(request: Request) -> str:
     return get_user_id(request) or str(uuid.uuid4())

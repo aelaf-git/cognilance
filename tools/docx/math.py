@@ -135,6 +135,11 @@ _FROM_SUB = {symbol: base for base, symbol in _SUB.items()}
 _MATH_SYMBOLS = set(_COMMANDS.values()) | {"\u2044", "\u221a"}
 
 
+def command_symbol(name: str) -> str:
+    """Map a LaTeX command name to its character. Unknown names stay escaped."""
+    return _COMMANDS.get(name, "\\" + name)
+
+
 def math_runs(text: str) -> list[dict[str, str]]:
     """Split notation into plain text and sub/super runs.
 

@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils"
 import { IconPlugConnected, IconPlus, IconTrash } from "@tabler/icons-react"
 import { useRouter } from "next/navigation"
-import { FC, useContext, useEffect, useState, useSyncExternalStore } from "react"
+import { FC, FormEvent, useContext, useEffect, useState, useSyncExternalStore } from "react"
 
 type ConversationItem = {
   id: string
@@ -49,6 +49,18 @@ type IntegrationItem = {
   logo?: string
   connected?: boolean
   coming_soon?: boolean
+}
+
+type OrganizationSummary = {
+  id: string
+  name: string
+  role: string
+}
+
+type PendingInvitation = {
+  token: string
+  organization_name: string
+  role: string
 }
 
 function isLongRunningSession(session: SessionItem) {
@@ -133,6 +145,11 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [sessions, setSessions] = useState<SessionItem[]>([])
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([])
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
+  const [invitations, setInvitations] = useState<PendingInvitation[]>([])
+  const [signedIn, setSignedIn] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteNotice, setInviteNotice] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -156,6 +173,29 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
           const payload = await cognilanceJson("integrations/list")
           if (!cancelled) {
             setIntegrations(payload.integrations || payload.apps || [])
+          }
+          return
+        }
+        if (contentType === "account") {
+          try {
+            await cognilanceJson("auth/me")
+            if (cancelled) return
+            setSignedIn(true)
+            const [orgPayload, invitePayload] = await Promise.all([
+              cognilanceJson("organizations"),
+              cognilanceJson("invitations")
+            ])
+            if (cancelled) return
+            const listed = orgPayload as { organizations?: OrganizationSummary[] }
+            const pending = invitePayload as { invitations?: PendingInvitation[] }
+            setOrganizations(listed.organizations || [])
+            setInvitations(pending.invitations || [])
+          } catch {
+            if (!cancelled) {
+              setSignedIn(false)
+              setOrganizations([])
+              setInvitations([])
+            }
           }
           return
         }
@@ -253,6 +293,125 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
         err instanceof Error ? err.message : "Couldn't delete that conversation."
       )
     }
+  }
+
+  const refreshMembership = async () => {
+    const [orgPayload, invitePayload] = await Promise.all([
+      cognilanceJson("organizations"),
+      cognilanceJson("invitations")
+    ])
+    const listed = orgPayload as { organizations?: OrganizationSummary[] }
+    const pending = invitePayload as { invitations?: PendingInvitation[] }
+    setOrganizations(listed.organizations || [])
+    setInvitations(pending.invitations || [])
+  }
+
+  const sendInvite = async (event: FormEvent) => {
+    event.preventDefault()
+    const organization = organizations[0]
+    const email = inviteEmail.trim()
+    if (!organization || !email) return
+    setError("")
+    setInviteNotice("")
+    try {
+      await cognilanceJson(`organizations/${organization.id}/invitations`, {
+        method: "POST",
+        body: JSON.stringify({ email, role: "member" })
+      })
+      setInviteEmail("")
+      setInviteNotice("Invitation sent.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send the invitation.")
+    }
+  }
+
+  const acceptInvite = async (token: string) => {
+    setError("")
+    setInviteNotice("")
+    try {
+      await cognilanceJson(`invitations/${token}/accept`, { method: "POST" })
+      await refreshMembership()
+      setInviteNotice("Invitation accepted.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not accept the invitation.")
+    }
+  }
+
+  if (contentType === "account") {
+    const organization = organizations[0]
+    const canInvite =
+      organization?.role === "owner" || organization?.role === "admin"
+    return (
+      <Panel title="Account" loading={loading} error={error}>
+        {!signedIn && !loading ? (
+          <p className="text-muted-foreground px-2 py-2 text-xs">
+            <button
+              type="button"
+              className="text-foreground underline underline-offset-2"
+              onClick={() => router.push("/local/login")}
+            >
+              Sign in
+            </button>{" "}
+            to invite teammates.
+          </p>
+        ) : null}
+        {organization ? (
+          <div className="px-2 py-2">
+            <div className="truncate text-[13.5px] font-medium text-foreground">
+              {organization.name}
+            </div>
+            <div className="text-muted-foreground text-xs capitalize">
+              {organization.role}
+            </div>
+          </div>
+        ) : null}
+        {canInvite ? (
+          <form className="space-y-2 px-2 pb-2" onSubmit={event => void sendInvite(event)}>
+            <label className="block space-y-1">
+              <span className="text-[11px] font-medium text-muted-foreground">Email</span>
+              <input
+                type="email"
+                className="w-full rounded-lg border border-border/80 bg-[hsl(var(--chat-surface))] px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-foreground"
+                value={inviteEmail}
+                onChange={event => setInviteEmail(event.target.value)}
+                placeholder="name@example.com"
+              />
+            </label>
+            <button
+              type="submit"
+              className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-xs font-medium text-background"
+            >
+              Invite
+            </button>
+          </form>
+        ) : null}
+        {invitations.map(invitation => (
+          <div
+            key={invitation.token}
+            className="flex items-center justify-between gap-2 px-2 py-2"
+          >
+            <div className="min-w-0">
+              <div className="truncate text-[13px] text-foreground">
+                {invitation.organization_name}
+              </div>
+              <div className="text-muted-foreground text-xs capitalize">
+                {invitation.role}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-xs font-medium text-background"
+              onClick={() => void acceptInvite(invitation.token)}
+            >
+              Accept
+            </button>
+          </div>
+        ))}
+        {inviteNotice ? (
+          <p className="text-muted-foreground px-2 pb-1 text-xs">{inviteNotice}</p>
+        ) : null}
+      </Panel>
+    )
   }
 
   if (contentType === "integrations") {

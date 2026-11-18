@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
-from tools.docx.store import DOCX_MEDIA, export_file, public_document
+from tools.docx.store import DOCX_MEDIA, export_file, public_document, restore_previous
 
 router = APIRouter()
 
@@ -13,6 +13,15 @@ router = APIRouter()
 @router.get("/docx/{document_id}")
 async def read_docx(document_id: str) -> JSONResponse:
     try:
+        return JSONResponse(public_document(document_id))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/docx/{document_id}/restore")
+async def restore_docx(document_id: str) -> JSONResponse:
+    try:
+        restore_previous(document_id)
         return JSONResponse(public_document(document_id))
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

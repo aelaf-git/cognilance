@@ -21,6 +21,7 @@ class Conversation:
     created_at: datetime
     updated_at: datetime
     user_id: str | None = None
+    organization_id: str | None = None
 
 
 @dataclass
@@ -81,6 +82,15 @@ class ConversationStore:
                     """
                     CREATE INDEX IF NOT EXISTS idx_conversations_user
                     ON conversations(user_id)
+                    """
+                )
+            conv_cols = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+            if "organization_id" not in conv_cols:
+                conn.execute("ALTER TABLE conversations ADD COLUMN organization_id TEXT")
+                conn.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_conversations_org
+                    ON conversations(organization_id)
                     """
                 )
 
@@ -149,12 +159,14 @@ class ConversationStore:
             ).fetchone()
         if not row:
             return None
+        keys = row.keys()
         conv = Conversation(
             id=row["id"],
             title=row["title"],
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
-            user_id=row["user_id"] if "user_id" in row.keys() else None,
+            user_id=row["user_id"] if "user_id" in keys else None,
+            organization_id=row["organization_id"] if "organization_id" in keys else None,
         )
         if user_id and conv.user_id and conv.user_id != user_id:
             return None
@@ -222,23 +234,27 @@ class ConversationStore:
         }
 
     def list_conversations(
-        self, *, limit: int = 30, user_id: str | None = None
+        self,
+        *,
+        limit: int = 30,
+        user_id: str | None = None,
+        organization_id: str | None = None,
     ) -> list[Conversation]:
+        clauses: list[str] = []
+        params: list[str | int] = []
+        if organization_id:
+            clauses.append("organization_id = ?")
+            params.append(organization_id)
+        elif user_id:
+            clauses.append("user_id = ?")
+            params.append(user_id)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(limit)
         with self._conn() as conn:
-            if user_id:
-                rows = conn.execute(
-                    """
-                    SELECT * FROM conversations
-                    WHERE user_id = ?
-                    ORDER BY updated_at DESC LIMIT ?
-                    """,
-                    (user_id, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
+            rows = conn.execute(
+                f"SELECT * FROM conversations{where} ORDER BY updated_at DESC LIMIT ?",
+                params,
+            ).fetchall()
         return [
             Conversation(
                 id=row["id"],
@@ -246,6 +262,7 @@ class ConversationStore:
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
                 user_id=row["user_id"] if "user_id" in row.keys() else None,
+                organization_id=row["organization_id"] if "organization_id" in row.keys() else None,
             )
             for row in rows
         ]

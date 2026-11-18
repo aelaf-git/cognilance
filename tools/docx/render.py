@@ -18,6 +18,7 @@ from docx.shared import Inches, Mm, Pt, RGBColor
 
 from tools.docx.chart import chart_xml
 from tools.docx.math import split_runs
+from tools.docx.omml import is_office_formula, omml_xml
 
 _MATH_FONT = "Cambria Math"
 _CODE_FONT = "Consolas"
@@ -489,7 +490,11 @@ def render_docx(path: Any, record: dict[str, Any]) -> None:
         elif kind == "equation":
             paragraph = document.add_paragraph()
             _paragraph_format(paragraph, style, alignment="center")
-            _write_content(paragraph, block, document, notes, _MATH_FONT, body + 2)
+            notation = str(block.get("notation") or "")
+            if is_office_formula(notation):
+                paragraph._p.append(parse_xml(omml_xml(notation)))
+            else:
+                _write_content(paragraph, block, document, notes, _MATH_FONT, body + 2)
         elif kind == "rule":
             paragraph = document.add_paragraph()
             _paragraph_format(paragraph, style)

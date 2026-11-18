@@ -486,13 +486,19 @@ export function reduceActivityEvent(
   return state
 }
 
+export function messageForSelection(text: string, blockId = ""): string {
+  if (!/^blk_[a-f0-9]{8}$/.test(blockId)) return text
+  return `Change only block ${blockId}. Leave every other block as it is.\n${text}`
+}
+
 export async function streamOrchestratorReply(
   text: string,
   signal: AbortSignal,
   onText: (text: string) => void,
   onActivity?: (steps: ActivityStep[]) => void,
   onDocument?: (document: DocxDocument) => void,
-  regenerate = false
+  regenerate = false,
+  blockId = ""
 ): Promise<void> {
   const conversationId = getConversationId()
   const response = await fetch("/api/chat/cognilance", {
@@ -500,7 +506,7 @@ export async function streamOrchestratorReply(
     headers: { "Content-Type": "application/json" },
     signal,
     body: JSON.stringify({
-      text,
+      text: messageForSelection(text, blockId),
       conversation_id: conversationId || undefined,
       regenerate
     })

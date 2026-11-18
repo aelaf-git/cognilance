@@ -74,7 +74,9 @@ export const useChatHandler = () => {
     isFilePickerOpen,
     isToolPickerOpen,
     setActiveDocument,
-    setDocumentPaneOpen
+    setDocumentPaneOpen,
+    selectedBlockId,
+    setSelectedBlockId
   } = useContext(ChatbotUIContext)
 
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
@@ -267,13 +269,16 @@ export const useChatHandler = () => {
           }
         }
         try {
+          const blockId = selectedBlockId || ""
+          setSelectedBlockId(null)
           await streamOrchestratorReply(
             messageContent,
             newAbortController.signal,
             showReply,
             showActivity,
             showDocument,
-            isRegeneration
+            isRegeneration,
+            blockId
           )
         } catch (error) {
           if (error instanceof Error && error.name === "AbortError") {
