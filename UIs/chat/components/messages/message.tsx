@@ -10,7 +10,6 @@ import {
   IconBolt,
   IconCaretDownFilled,
   IconCaretRightFilled,
-  IconCircleFilled,
   IconFileText,
   IconPencil
 } from "@tabler/icons-react"
@@ -279,7 +278,13 @@ export const Message: FC<MessageProps> = ({
             className={cn(
               "min-w-0 text-[14px] leading-6",
               message.role === "user" &&
-                "max-w-[88%] rounded-[10px] rounded-tr-[4px] border border-[hsl(var(--chat-user-border))] bg-[hsl(var(--chat-user))] px-3 py-2 sm:max-w-[78%]"
+                "max-w-[88%] rounded-[10px] rounded-tr-[4px] border border-[hsl(var(--chat-user-border))] bg-[hsl(var(--chat-user))] px-3 py-2 sm:max-w-[78%]",
+              !firstTokenReceived &&
+                isGenerating &&
+                isLast &&
+                message.role === "assistant" &&
+                toolInUse === "none" &&
+                "hidden"
             )}
           >
             {!firstTokenReceived &&
@@ -289,9 +294,7 @@ export const Message: FC<MessageProps> = ({
               (() => {
                 switch (toolInUse) {
                   case "none":
-                    return (
-                      <IconCircleFilled className="animate-pulse" size={20} />
-                    )
+                    return null
                   case "retrieval":
                     return (
                       <div className="flex animate-pulse items-center space-x-2">

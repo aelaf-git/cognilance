@@ -23,6 +23,17 @@ function allowed(method: string, path: string) {
     /^GET organizations\/[^/]+\/integrations$/.test(`${method} ${path}`) ||
     /^DELETE organizations\/[^/]+$/.test(`${method} ${path}`) ||
     /^POST invitations\/[^/]+\/accept$/.test(`${method} ${path}`) ||
+    ((method === "GET" || method === "POST") && path === "projects") ||
+    /^GET projects\/[^/]+$/.test(`${method} ${path}`) ||
+    /^PATCH projects\/[^/]+$/.test(`${method} ${path}`) ||
+    /^DELETE projects\/[^/]+$/.test(`${method} ${path}`) ||
+    /^GET projects\/[^/]+\/tasks$/.test(`${method} ${path}`) ||
+    /^POST projects\/[^/]+\/tasks$/.test(`${method} ${path}`) ||
+    /^GET projects\/[^/]+\/tasks\/[^/]+$/.test(`${method} ${path}`) ||
+    /^PATCH projects\/[^/]+\/tasks\/[^/]+$/.test(`${method} ${path}`) ||
+    /^DELETE projects\/[^/]+\/tasks\/[^/]+$/.test(`${method} ${path}`) ||
+    /^POST projects\/[^/]+\/tasks\/[^/]+\/comments$/.test(`${method} ${path}`) ||
+    /^GET projects\/[^/]+\/tasks\/[^/]+\/activity$/.test(`${method} ${path}`) ||
     /^GET conversations\/[^/]+$/.test(`${method} ${path}`) ||
     /^DELETE conversations\/[^/]+$/.test(`${method} ${path}`) ||
     /^GET conversations\/[^/]+\/sessions$/.test(`${method} ${path}`) ||

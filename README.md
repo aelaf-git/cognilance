@@ -587,4 +587,6 @@ from cognilance import (
 
 ## License
 
-MIT: see [LICENSE](LICENSE).
+[GNU Affero General Public License v3](LICENSE). This is a published license, so Cognilance does not need to write its own. Anyone may use, change, and share the software. If someone changes it and runs that version as a network service, they must offer the source of that version to its users.
+
+The chat interface includes MIT-licensed work by Mckay Wrigley. See [UIs/chat/license](UIs/chat/license).

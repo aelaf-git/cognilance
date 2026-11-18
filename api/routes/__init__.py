@@ -12,6 +12,7 @@ from api.routes import (
     health,
     integrations,
     organizations,
+    projects,
     runs,
     sessions,
 )
@@ -23,6 +24,7 @@ ALL_ROUTERS: tuple[APIRouter, ...] = (
     integrations.router,
     conversations.router,
     organizations.router,
+    projects.router,
     sessions.router,
     chat.router,
     docx.router,

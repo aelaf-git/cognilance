@@ -60,11 +60,11 @@ class RolePack:
 
 def _read_prompt(agent_dir: Path, rel: str) -> str:
     path = agent_dir / rel
-    return path.read_text().strip() if path.is_file() else ""
+    return path.read_text(encoding="utf-8").strip() if path.is_file() else ""
 
 
 def _parse(agent_dir: Path) -> RolePack:
-    raw = yaml.safe_load((agent_dir / "agent.yaml").read_text()) or {}
+    raw = yaml.safe_load((agent_dir / "agent.yaml").read_text(encoding="utf-8")) or {}
     prompts_raw = raw.get("prompts") or {}
     if isinstance(prompts_raw, str):
         prompts_raw = {"system": prompts_raw}

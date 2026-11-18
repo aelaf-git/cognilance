@@ -17,14 +17,11 @@ import {
 } from "@/lib/cognilance-store"
 import { cn } from "@/lib/utils"
 import {
-  IconApps,
-  IconBook,
-  IconHelp,
-  IconLanguage,
+  IconChevronLeft,
+  IconChevronRight,
   IconLogout,
   IconPlugConnected,
   IconPlus,
-  IconRocket,
   IconTrash
 } from "@tabler/icons-react"
 import { useTheme } from "next-themes"
@@ -81,6 +78,23 @@ type PendingInvitation = {
   token: string
   organization_name: string
   role: string
+}
+
+type SettingsSection = "profile" | "team" | "appearance" | "security" | "timezone"
+
+const settingsRows: { id: SettingsSection; label: string }[] = [
+  { id: "profile", label: "Profile" },
+  { id: "team", label: "Team" },
+  { id: "appearance", label: "Appearance" },
+  { id: "security", label: "Security" },
+  { id: "timezone", label: "Timezone" }
+]
+
+function workspaceTitle(name: string, displayName: string) {
+  if (name.trim().toLowerCase() === displayName.trim().toLowerCase()) {
+    return "Personal workspace"
+  }
+  return name
 }
 
 const fieldClass =
@@ -192,7 +206,7 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
   const [confirmPassword, setConfirmPassword] = useState("")
   const [passwordError, setPasswordError] = useState("")
   const [passwordSaved, setPasswordSaved] = useState(false)
-  const [noticeId, setNoticeId] = useState("")
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
@@ -286,6 +300,10 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
       cancelled = true
     }
   }, [contentType, snapshot.id, snapshot.revision])
+
+  useEffect(() => {
+    if (contentType !== "account") setSettingsSection(null)
+  }, [contentType])
 
   const openConversation = async (item: ConversationItem) => {
     setCognilanceConversation(item.id, item.title)
@@ -485,249 +503,253 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
 
   if (contentType === "account") {
     const initial = (account?.display_name || account?.email || "?").trim().charAt(0).toUpperCase()
-    const menu = [
-      { id: "language", label: "Language", icon: IconLanguage },
-      { id: "help", label: "Help", icon: IconHelp },
-      { id: "upgrade", label: "Upgrade", icon: IconRocket },
-      { id: "apps", label: "Apps and extensions", icon: IconApps },
-      { id: "learn", label: "Learn more", icon: IconBook }
-    ]
     const zones = timezoneChoices()
     const appearance = [
       { id: "light", label: "Light" },
       { id: "dark", label: "Dark" },
       { id: "system", label: "System" }
     ]
+    const organization = organizations[0]
+    const canInvite =
+      organization?.role === "owner" || organization?.role === "admin"
+    const sectionTitle =
+      settingsRows.find(row => row.id === settingsSection)?.label || "Settings"
+    const rowClass =
+      "flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left text-[13.5px] text-foreground transition-colors hover:bg-accent/70"
+
     return (
-      <Panel title="Settings" loading={loading} error={error}>
-        {account ? (
-          <div className="space-y-1 pb-4">
-            <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Profile
-            </p>
-            <div className="flex items-center gap-3 px-2 py-2">
-              <div className="font-[family-name:var(--font-display)] flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-background">
-                {initial}
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-[13.5px] font-medium text-foreground">
-                  {account.display_name}
-                </div>
-                <div className="text-muted-foreground truncate text-xs">{account.email}</div>
-              </div>
-            </div>
-            <form className="space-y-2 px-2 pb-2" onSubmit={event => void saveProfile(event)}>
-              <label className="block space-y-1">
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  Display name
-                </span>
-                <input
-                  className={fieldClass}
-                  value={displayName}
-                  onChange={event => setDisplayName(event.target.value)}
-                />
-              </label>
-              <button type="submit" className={saveButtonClass}>
-                Save
-              </button>
-            </form>
-
-            <p className="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Organization
-            </p>
-            {organizations[0] ? (
-              <div className="px-2 py-2">
-                <div className="truncate text-[13.5px] font-medium text-foreground">
-                  {organizations[0].name}
-                </div>
-                <div className="text-muted-foreground text-xs capitalize">
-                  {organizations[0].role}
-                </div>
-              </div>
-            ) : null}
-            {organizations[0] &&
-            (organizations[0].role === "owner" || organizations[0].role === "admin") ? (
-              <form className="space-y-2 px-2 pb-2" onSubmit={event => void sendInvite(event)}>
-                <label className="block space-y-1">
-                  <span className="text-[11px] font-medium text-muted-foreground">Email</span>
-                  <input
-                    type="email"
-                    className={fieldClass}
-                    value={inviteEmail}
-                    onChange={event => setInviteEmail(event.target.value)}
-                    placeholder="name@example.com"
-                  />
-                </label>
-                <button type="submit" className={saveButtonClass}>
-                  Invite
-                </button>
-              </form>
-            ) : null}
-            {invitations.map(invitation => (
-              <div
-                key={invitation.token}
-                className="flex items-center justify-between gap-2 px-2 py-2"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] text-foreground">
-                    {invitation.organization_name}
-                  </div>
-                  <div className="text-muted-foreground text-xs capitalize">
-                    {invitation.role}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className={saveButtonClass}
-                  onClick={() => void acceptInvite(invitation.token)}
-                >
-                  Accept
-                </button>
-              </div>
-            ))}
-            {inviteNotice ? (
-              <p className="text-muted-foreground px-2 pb-1 text-xs">{inviteNotice}</p>
-            ) : null}
-            {inviteError ? (
-              <p className="px-2 pb-1 text-xs text-red-500">{inviteError}</p>
-            ) : null}
-
-            <p className="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Appearance
-            </p>
-            <div className="grid grid-cols-3 gap-1 px-2 py-2">
-              {appearance.map(choice => {
-                const selected = theme === choice.id
-                return (
-                  <button
-                    key={choice.id}
-                    type="button"
-                    className={cn(
-                      "rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
-                      selected
-                        ? "border-foreground bg-foreground text-background"
-                        : "border-border bg-[hsl(var(--chat-canvas))] text-foreground hover:border-foreground"
-                    )}
-                    onClick={() => setTheme(choice.id)}
-                  >
-                    {choice.label}
-                  </button>
-                )
-              })}
-            </div>
-
-            <p className="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Security
-            </p>
-            <form className="space-y-2 px-2 py-2" onSubmit={event => void savePassword(event)}>
-              <label className="block space-y-1">
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  Current password
-                </span>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  className={fieldClass}
-                  value={currentPassword}
-                  onChange={event => setCurrentPassword(event.target.value)}
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  New password
-                </span>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  className={fieldClass}
-                  value={newPassword}
-                  onChange={event => setNewPassword(event.target.value)}
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  Confirm new password
-                </span>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  className={fieldClass}
-                  value={confirmPassword}
-                  onChange={event => setConfirmPassword(event.target.value)}
-                />
-              </label>
-              {passwordError && (
-                <p className="text-destructive text-xs">{passwordError}</p>
-              )}
-              {passwordSaved && (
-                <p className="text-muted-foreground text-xs">Password updated.</p>
-              )}
-              <button type="submit" className={saveButtonClass}>
-                Update password
-              </button>
-            </form>
-
-            <p className="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              General
-            </p>
-            <label className="block space-y-1 px-2 py-2">
-              <span className="text-[11px] font-medium text-muted-foreground">
-                Timezone
-              </span>
-              <select
-                className={fieldClass}
-                value={zones.includes(timezone) ? timezone : zones[0]}
-                onChange={event => void saveTimezone(event.target.value)}
-              >
-                {zones.map(zone => (
-                  <option key={zone} value={zone}>
-                    {zone}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <p className="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              More
-            </p>
-            <div className="space-y-0.5">
-              {menu.map(item => {
-                const Icon = item.icon
-                const open = noticeId === item.id
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left text-[13.5px] text-foreground transition-colors hover:bg-accent/70"
-                    onClick={() =>
-                      setNoticeId(current => (current === item.id ? "" : item.id))
-                    }
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <Icon size={16} stroke={1.75} className="text-muted-foreground shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </span>
-                    {open && (
-                      <span className="text-muted-foreground shrink-0 text-[11px]">
-                        Under construction
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="my-2 border-t border-border/70" />
-
+      <Panel
+        title={sectionTitle}
+        loading={loading}
+        error={error}
+        action={
+          settingsSection ? (
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-[13.5px] text-foreground transition-colors hover:bg-accent/70"
-              onClick={() => void logout()}
+              className="text-muted-foreground flex size-7 items-center justify-center rounded-md border border-border transition-colors hover:border-foreground hover:text-foreground"
+              aria-label="Back to settings"
+              onClick={() => setSettingsSection(null)}
             >
-              <IconLogout size={16} stroke={1.75} className="text-muted-foreground" />
-              Log out
+              <IconChevronLeft size={16} stroke={1.75} />
             </button>
-          </div>
+          ) : undefined
+        }
+      >
+        {account ? (
+          settingsSection === null ? (
+            <div className="flex h-full min-h-0 flex-col pb-2">
+              <div className="flex items-center gap-3 px-2 py-2">
+                <div className="font-[family-name:var(--font-display)] flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-background">
+                  {initial}
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-[13.5px] font-medium text-foreground">
+                    {account.display_name}
+                  </div>
+                  <div className="text-muted-foreground truncate text-xs">{account.email}</div>
+                </div>
+              </div>
+              <div className="mt-1 space-y-0.5">
+                {settingsRows.map(row => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    className={rowClass}
+                    onClick={() => setSettingsSection(row.id)}
+                  >
+                    <span>{row.label}</span>
+                    <IconChevronRight size={16} stroke={1.75} className="text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+              <div className="mt-auto border-t border-border/70 pt-2">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-[13.5px] text-foreground transition-colors hover:bg-accent/70"
+                  onClick={() => void logout()}
+                >
+                  <IconLogout size={16} stroke={1.75} className="text-muted-foreground" />
+                  Log out
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 px-2 pb-4">
+              {settingsSection === "profile" ? (
+                <form className="space-y-2" onSubmit={event => void saveProfile(event)}>
+                  <label className="block space-y-1">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      Display name
+                    </span>
+                    <input
+                      className={fieldClass}
+                      value={displayName}
+                      onChange={event => setDisplayName(event.target.value)}
+                    />
+                  </label>
+                  <button type="submit" className={saveButtonClass}>
+                    Save
+                  </button>
+                </form>
+              ) : null}
+
+              {settingsSection === "team" ? (
+                <div className="space-y-3">
+                  {organization ? (
+                    <div>
+                      <div className="truncate text-[13.5px] font-medium text-foreground">
+                        {workspaceTitle(organization.name, account.display_name)}
+                      </div>
+                      <div className="text-muted-foreground text-xs capitalize">
+                        {organization.role}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">No workspace yet.</p>
+                  )}
+                  {canInvite ? (
+                    <form className="space-y-2" onSubmit={event => void sendInvite(event)}>
+                      <label className="block space-y-1">
+                        <span className="text-[11px] font-medium text-muted-foreground">
+                          Invite a teammate
+                        </span>
+                        <input
+                          type="email"
+                          className={fieldClass}
+                          value={inviteEmail}
+                          onChange={event => setInviteEmail(event.target.value)}
+                          placeholder="name@example.com"
+                        />
+                      </label>
+                      <button type="submit" className={saveButtonClass}>
+                        Invite
+                      </button>
+                    </form>
+                  ) : null}
+                  {invitations.map(invitation => (
+                    <div
+                      key={invitation.token}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] text-foreground">
+                          {workspaceTitle(invitation.organization_name, account.display_name)}
+                        </div>
+                        <div className="text-muted-foreground text-xs capitalize">
+                          {invitation.role}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className={saveButtonClass}
+                        onClick={() => void acceptInvite(invitation.token)}
+                      >
+                        Accept
+                      </button>
+                    </div>
+                  ))}
+                  {inviteNotice ? (
+                    <p className="text-muted-foreground text-xs">{inviteNotice}</p>
+                  ) : null}
+                  {inviteError ? (
+                    <p className="text-xs text-red-500">{inviteError}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {settingsSection === "appearance" ? (
+                <div className="grid grid-cols-3 gap-1">
+                  {appearance.map(choice => {
+                    const selected = theme === choice.id
+                    return (
+                      <button
+                        key={choice.id}
+                        type="button"
+                        className={cn(
+                          "rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
+                          selected
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border bg-[hsl(var(--chat-canvas))] text-foreground hover:border-foreground"
+                        )}
+                        onClick={() => setTheme(choice.id)}
+                      >
+                        {choice.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : null}
+
+              {settingsSection === "security" ? (
+                <form className="space-y-2" onSubmit={event => void savePassword(event)}>
+                  <label className="block space-y-1">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      Current password
+                    </span>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      className={fieldClass}
+                      value={currentPassword}
+                      onChange={event => setCurrentPassword(event.target.value)}
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      New password
+                    </span>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      className={fieldClass}
+                      value={newPassword}
+                      onChange={event => setNewPassword(event.target.value)}
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      Confirm new password
+                    </span>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      className={fieldClass}
+                      value={confirmPassword}
+                      onChange={event => setConfirmPassword(event.target.value)}
+                    />
+                  </label>
+                  {passwordError && (
+                    <p className="text-destructive text-xs">{passwordError}</p>
+                  )}
+                  {passwordSaved && (
+                    <p className="text-muted-foreground text-xs">Password updated.</p>
+                  )}
+                  <button type="submit" className={saveButtonClass}>
+                    Update password
+                  </button>
+                </form>
+              ) : null}
+
+              {settingsSection === "timezone" ? (
+                <label className="block space-y-1">
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    Timezone
+                  </span>
+                  <select
+                    className={fieldClass}
+                    value={zones.includes(timezone) ? timezone : zones[0]}
+                    onChange={event => void saveTimezone(event.target.value)}
+                  >
+                    {zones.map(zone => (
+                      <option key={zone} value={zone}>
+                        {zone}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+          )
         ) : (
           <div className="space-y-3 px-2">
             <p className="text-muted-foreground text-xs leading-5">

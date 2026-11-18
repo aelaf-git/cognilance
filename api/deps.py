@@ -12,6 +12,7 @@ from core.broker.oauth import OAuthService
 from core.context.apps.store import init_all_stores
 from core.context.conversations.store import ConversationStore
 from core.context.orgs.store import ROLE_RANK, Membership, OrgStore
+from core.context.projects.store import ProjectStore
 from core.context.request import current_user_id
 from core.context.subscriptions.store import SubscriptionStore
 from core.context.users.accounts import AccountStore
@@ -29,6 +30,7 @@ board_store = BoardStore()
 oauth_service = OAuthService()
 account_store = AccountStore()
 org_store = OrgStore()
+project_store = ProjectStore()
 
 
 def init_stores() -> None:
@@ -38,6 +40,7 @@ def init_stores() -> None:
     board_store.init_db()
     account_store.init_db()
     org_store.init_db()
+    project_store.init_db()
     init_all_stores()
 
 
@@ -58,22 +61,6 @@ def owner_filter(account_id: str) -> dict[str, str]:
     if org_id:
         return {"organization_id": org_id}
     return {"user_id": account_id}
-
-
-def require_membership(
-    account_id: str,
-    organization_id: str,
-    minimum: str = "member",
-) -> Membership:
-    """Hide a missing organization or membership. A low role is forbidden."""
-    if org_store.get_organization(organization_id) is None:
-        raise HTTPException(status_code=404, detail="Not found")
-    membership = org_store.membership_for(account_id, organization_id)
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Not found")
-    if ROLE_RANK.get(membership.role, 0) < ROLE_RANK[minimum]:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    return membership
 
 
 def require_membership(
