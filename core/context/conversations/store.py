@@ -89,7 +89,7 @@ class ConversationStore:
                 conn.execute("ALTER TABLE conversations ADD COLUMN organization_id TEXT")
                 conn.execute(
                     """
-                    CREATE INDEX IF NOT EXISTS idx_conversations_org
+                    CREATE INDEX IF NOT EXISTS idx_conversations_organization
                     ON conversations(organization_id)
                     """
                 )
@@ -100,25 +100,37 @@ class ConversationStore:
         *,
         title: str = "New conversation",
         user_id: str | None = None,
+        organization_id: str | None = None,
     ) -> Conversation:
         existing = self.get_conversation(conversation_id)
         if existing:
+            updates: list[str] = []
+            params: list[str] = []
             if user_id and not existing.user_id:
+                updates.append("user_id = ?")
+                params.append(user_id)
+                existing.user_id = user_id
+            if organization_id and not existing.organization_id:
+                updates.append("organization_id = ?")
+                params.append(organization_id)
+                existing.organization_id = organization_id
+            if updates:
+                params.append(conversation_id)
                 with self._conn() as conn:
                     conn.execute(
-                        "UPDATE conversations SET user_id = ? WHERE id = ? AND user_id IS NULL",
-                        (user_id, conversation_id),
+                        f"UPDATE conversations SET {', '.join(updates)} WHERE id = ?",
+                        params,
                     )
-                existing.user_id = user_id
             return existing
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
                 """
-                INSERT INTO conversations (id, title, created_at, updated_at, user_id)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO conversations (
+                    id, title, created_at, updated_at, user_id, organization_id
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (conversation_id, title[:120], now, now, user_id),
+                (conversation_id, title[:120], now, now, user_id, organization_id),
             )
         return Conversation(
             id=conversation_id,
@@ -126,20 +138,26 @@ class ConversationStore:
             created_at=datetime.fromisoformat(now),
             updated_at=datetime.fromisoformat(now),
             user_id=user_id,
+            organization_id=organization_id,
         )
 
     def create_conversation(
-        self, *, title: str = "New conversation", user_id: str | None = None
+        self,
+        *,
+        title: str = "New conversation",
+        user_id: str | None = None,
+        organization_id: str | None = None,
     ) -> Conversation:
         conversation_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
             conn.execute(
                 """
-                INSERT INTO conversations (id, title, created_at, updated_at, user_id)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO conversations (
+                    id, title, created_at, updated_at, user_id, organization_id
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (conversation_id, title[:120], now, now, user_id),
+                (conversation_id, title[:120], now, now, user_id, organization_id),
             )
         return Conversation(
             id=conversation_id,
@@ -147,10 +165,15 @@ class ConversationStore:
             created_at=datetime.fromisoformat(now),
             updated_at=datetime.fromisoformat(now),
             user_id=user_id,
+            organization_id=organization_id,
         )
 
     def get_conversation(
-        self, conversation_id: str, *, user_id: str | None = None
+        self,
+        conversation_id: str,
+        *,
+        user_id: str | None = None,
+        organization_id: str | None = None,
     ) -> Conversation | None:
         with self._conn() as conn:
             row = conn.execute(
@@ -159,16 +182,10 @@ class ConversationStore:
             ).fetchone()
         if not row:
             return None
-        keys = row.keys()
-        conv = Conversation(
-            id=row["id"],
-            title=row["title"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
-            user_id=row["user_id"] if "user_id" in keys else None,
-            organization_id=row["organization_id"] if "organization_id" in keys else None,
-        )
+        conv = _conversation_from_row(row)
         if user_id and conv.user_id and conv.user_id != user_id:
+            return None
+        if organization_id and conv.organization_id and conv.organization_id != organization_id:
             return None
         return conv
 
@@ -255,17 +272,7 @@ class ConversationStore:
                 f"SELECT * FROM conversations{where} ORDER BY updated_at DESC LIMIT ?",
                 params,
             ).fetchall()
-        return [
-            Conversation(
-                id=row["id"],
-                title=row["title"],
-                created_at=datetime.fromisoformat(row["created_at"]),
-                updated_at=datetime.fromisoformat(row["updated_at"]),
-                user_id=row["user_id"] if "user_id" in row.keys() else None,
-                organization_id=row["organization_id"] if "organization_id" in row.keys() else None,
-            )
-            for row in rows
-        ]
+        return [_conversation_from_row(row) for row in rows]
 
     def touch_conversation(self, conversation_id: str, *, title: str | None = None) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -365,3 +372,15 @@ class ConversationStore:
             elif msg.role == "assistant":
                 result.append(AIMessage(content=msg.content))
         return result
+
+
+def _conversation_from_row(row: sqlite3.Row) -> Conversation:
+    keys = row.keys()
+    return Conversation(
+        id=row["id"],
+        title=row["title"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+        user_id=row["user_id"] if "user_id" in keys else None,
+        organization_id=row["organization_id"] if "organization_id" in keys else None,
+    )

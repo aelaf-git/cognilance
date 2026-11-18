@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from core.context.request import current_conversation_id, current_mission_id, current_user_id
-from core.broker.executor import IntegrationExecutor
 from core.broker.catalog import INTEGRATIONS, list_integrations
+from core.broker.executor import IntegrationExecutor
 from core.broker.token_manager import TokenManager
 from core.context.datetime_util import time_context_for_planner
 from core.context.drafts.store import DraftStore
+from core.context.request import current_conversation_id, current_mission_id
+from core.context.users.identity import signed_in_display_name
 from pipelines.shared.streaming import emit
 
 
@@ -37,6 +38,15 @@ class IntegrationClient:
             "=== Orchestrator capabilities ===",
             "",
             time_context_for_planner(user_id=user_id),
+        ]
+        display_name = signed_in_display_name(user_id)
+        if display_name:
+            lines.append(
+                f"Signed-in user: {display_name}. "
+                "This is their name from account settings."
+            )
+        lines.extend(
+            [
             draft_block,
             "Always available:",
             "- thinking: reason and answer directly (no external APIs)",
@@ -52,7 +62,8 @@ class IntegrationClient:
             "  (coordinator plans a shared task board; specialists claim structured tasks)",
             "",
             "OAuth integrations (only usable when CONNECTED):",
-        ]
+            ]
+        )
         for spec in list_integrations():
             integration_id = spec["id"]
             if spec.get("coming_soon"):

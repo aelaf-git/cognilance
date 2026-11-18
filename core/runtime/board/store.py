@@ -98,12 +98,41 @@ class BoardStore:
             )
         return task
 
-    def list_for_run(self, run_id: str) -> list[BoardTask]:
+    def list_for_run(
+        self,
+        run_id: str,
+        *,
+        user_id: str | None = None,
+        organization_id: str | None = None,
+    ) -> list[BoardTask]:
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT * FROM board_tasks WHERE run_id = ? ORDER BY created_at",
-                (run_id,),
-            ).fetchall()
+            if organization_id:
+                rows = conn.execute(
+                    """
+                    SELECT board_tasks.* FROM board_tasks
+                    JOIN runs ON runs.id = board_tasks.run_id
+                    WHERE board_tasks.run_id = ?
+                      AND (runs.organization_id IS NULL OR runs.organization_id = ?)
+                    ORDER BY board_tasks.created_at
+                    """,
+                    (run_id, organization_id),
+                ).fetchall()
+            elif user_id:
+                rows = conn.execute(
+                    """
+                    SELECT board_tasks.* FROM board_tasks
+                    JOIN runs ON runs.id = board_tasks.run_id
+                    WHERE board_tasks.run_id = ?
+                      AND (runs.user_id IS NULL OR runs.user_id = ?)
+                    ORDER BY board_tasks.created_at
+                    """,
+                    (run_id, user_id),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM board_tasks WHERE run_id = ? ORDER BY created_at",
+                    (run_id,),
+                ).fetchall()
         return [self._row_to_task(r) for r in rows]
 
     def get_task(self, task_id: str) -> BoardTask | None:

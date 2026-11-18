@@ -28,10 +28,13 @@ def enqueue_watcher_inbox_alert(
     if not emails:
         return None
     try:
+        from core.context.orgs.store import OrgStore
+
         runs = RunStore()
         runs.init_db()
         board = BoardStore()
         board.init_db()
+        organization_id = OrgStore().active_for_account(user_id)
 
         run_id = str(uuid.uuid4())
         instruction = (
@@ -45,6 +48,7 @@ def enqueue_watcher_inbox_alert(
             trigger=RunTrigger.EVENT,
             conversation_id=conversation_id,
             user_id=user_id,
+            organization_id=organization_id,
             run_id=run_id,
         )
         board.create_task(

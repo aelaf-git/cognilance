@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from core.context.users.identity import signed_in_display_name
 from core.models.gateway import last_user_text, to_chat_messages
 from pipelines.coordinator_board import llm_call
 from pipelines.coordinator_board.evidence import evidence_text
@@ -128,9 +129,24 @@ def _thread(state: State) -> str:
 
 def _think_prompt(state: State) -> str:
     feedback = str(state.get("retry_feedback") or "").strip()
+    name = signed_in_display_name()
     parts = [
         _POLICY,
         "",
+    ]
+    if name:
+        parts.extend(
+            [
+                (
+                    f"The signed-in user's name is {name}. "
+                    "That name comes from their account settings. "
+                    "Use it when they ask who they are, and when a reply should address them."
+                ),
+                "",
+            ]
+        )
+    parts.extend(
+        [
         "Roster:",
         _roster_text(dict(state.get("roster") or {})),
         "",
@@ -141,7 +157,8 @@ def _think_prompt(state: State) -> str:
         _thread(state),
         "",
         f"Latest user message:\n{last_user_text(list(state.get('messages') or []))}",
-    ]
+        ]
+    )
     if feedback:
         parts.extend(
             [
@@ -443,10 +460,8 @@ def _can_revise(state: State) -> bool:
 
 
 def _quality_miss(obs: dict[str, Any]) -> bool:
-    if obs.get("status") != "error":
-        return True
-    error = str((obs.get("payload") or {}).get("error") or "")
-    return error not in _HARD_ERRORS
+    """A real draft the judge rejected. Empty, partial, and error results are not drafts."""
+    return obs.get("status") == "ok"
 
 
 def _as_revision(obs: dict[str, Any], verdict: Verdict, *, can_revise: bool) -> Verdict:
@@ -611,6 +626,14 @@ async def evaluate(state: State) -> dict[str, Any]:
         if obs.get("id") in seen:
             continue
         code = _code_verdict(obs, decision)
+        if (
+            code is not None
+            and code.verdict == "retry"
+            and not _quality_miss(obs)
+            and int((retries.get(str(obs.get("source") or "")) or 0)) >= 1
+        ):
+            note = (code.reason or code.feedback or "The result still does not meet the goal.").strip()
+            code = code.model_copy(update={"verdict": "fail_honestly", "reason": note, "feedback": note})
         if code is None:
             try:
                 raw = await llm_call.call_structured(Verdict, _judge_prompt(obs, decision), 0)
@@ -626,9 +649,12 @@ async def evaluate(state: State) -> dict[str, Any]:
         if code.verdict == "retry":
             key = str(obs.get("source") or "")
             retries[key] = int(retries.get(key) or 0) + 1
-            record = _revision_record(obs, decision, code)
-            if record and not revision:
-                revision = record
+            # A real draft goes straight back to the same agent. An empty or
+            # broken result goes back to the model once, with the notes in the prompt.
+            if _quality_miss(obs):
+                record = _revision_record(obs, decision, code)
+                if record and not revision:
+                    revision = record
         if code.verdict == "accept" and obs.get("source") not in {"", "orchestrator"}:
             accepted.append(str(obs.get("id")))
         fresh.append(code)

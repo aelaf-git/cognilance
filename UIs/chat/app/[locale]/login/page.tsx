@@ -41,6 +41,15 @@ export default function LoginPage() {
             "radial-gradient(ellipse 80% 55% at 12% 18%, hsl(0 0% 0% / 0.05), transparent 55%), radial-gradient(ellipse 70% 50% at 88% 78%, hsl(0 0% 0% / 0.04), transparent 50%), linear-gradient(165deg, hsl(var(--chat-canvas)) 0%, hsl(var(--chat-surface)) 48%, hsl(var(--chat-canvas)) 100%)"
         }}
       />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.35]"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.28'/%3E%3C/svg%3E\")"
+        }}
+      />
+
       <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-12">
         <div className="mb-10 flex flex-col items-start gap-4">
           <img

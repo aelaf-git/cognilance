@@ -5,7 +5,11 @@ export async function cognilanceJson(path: string, init?: RequestInit) {
   const response = await fetch(`/api/cognilance/${path}`, init)
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(String(payload.error || payload.detail || "Request failed"))
+    const detail = String(payload.error || payload.detail || "Request failed")
+    if (response.status === 401) {
+      throw new Error("Sign in to continue.")
+    }
+    throw new Error(detail)
   }
   return payload
 }

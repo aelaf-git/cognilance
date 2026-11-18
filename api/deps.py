@@ -42,7 +42,38 @@ def init_stores() -> None:
 
 
 def user_from(request: Request) -> str:
-    return getattr(request.state, "user_id", current_user_id.get())
+    user_id = getattr(request.state, "user_id", None) or current_user_id.get()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return str(user_id)
+
+
+def active_organization_id(account_id: str) -> str | None:
+    return org_store.active_for_account(account_id)
+
+
+def owner_filter(account_id: str) -> dict[str, str]:
+    """Org membership scopes reads. Accounts without one stay on user_id."""
+    org_id = active_organization_id(account_id)
+    if org_id:
+        return {"organization_id": org_id}
+    return {"user_id": account_id}
+
+
+def require_membership(
+    account_id: str,
+    organization_id: str,
+    minimum: str = "member",
+) -> Membership:
+    """Hide a missing organization or membership. A low role is forbidden."""
+    if org_store.get_organization(organization_id) is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    membership = org_store.membership_for(account_id, organization_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    if ROLE_RANK.get(membership.role, 0) < ROLE_RANK[minimum]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return membership
 
 
 def require_membership(

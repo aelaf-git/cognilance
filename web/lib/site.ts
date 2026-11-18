@@ -9,7 +9,7 @@ export const OFFICE_LAT = 9.0185433;
 export const OFFICE_LNG = 38.7516055;
 export const OFFICE_MAP_EMBED = `https://www.google.com/maps?q=${OFFICE_LAT},${OFFICE_LNG}&z=17&output=embed`;
 
-export const EMAIL = "cognilance@gmail.com";
+export const EMAIL = "info@cognilanceai.com";
 export const PHONE = "+251 964 336 078";
 export const PHONE_TEL = "+251964336078";
 

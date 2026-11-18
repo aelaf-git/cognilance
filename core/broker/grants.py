@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import os
 import time
 import uuid
 from base64 import urlsafe_b64decode, urlsafe_b64encode
@@ -13,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.broker.oauth import public_base_url
+from core.config import tool_proxy_signing_key_bytes
 
 DEFAULT_TTL_SECONDS = 900  # 15 minutes
 
@@ -26,24 +26,8 @@ SCOPE_BY_SKILL: dict[str, list[str]] = {
 }
 
 
-def _demo_mode() -> bool:
-    return os.getenv("COGNILANCE_DEMO", "").strip() in {"1", "true", "yes"}
-
-
 def _secret() -> bytes:
-    explicit = os.getenv("TOOL_PROXY_SIGNING_KEY")
-    if explicit:
-        return explicit.encode()
-    if _demo_mode():
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "TOOL_PROXY_SIGNING_KEY unset; using insecure demo default (COGNILANCE_DEMO=1)"
-        )
-        return b"cognilance-dev-insecure-tool-proxy"
-    raise RuntimeError(
-        "TOOL_PROXY_SIGNING_KEY is required (or set COGNILANCE_DEMO=1 for local demo)"
-    )
+    return tool_proxy_signing_key_bytes()
 
 
 def _sign(payload_b64: str) -> str:

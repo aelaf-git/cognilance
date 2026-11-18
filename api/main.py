@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import core.context.env  # noqa: F401
+import logging
 
 import uvicorn
 
+import core.context.env  # noqa: F401
 from core.config import get_settings
 
 
 def cli() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     settings = get_settings()
     base = f"http://127.0.0.1:{settings.port}"
     banner = (

@@ -9,7 +9,14 @@ from typing import Any, AsyncIterator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.deps import conv_store, mission_store, sub_store, user_from
+from api.deps import (
+    active_organization_id,
+    conv_store,
+    mission_store,
+    owner_filter,
+    sub_store,
+    user_from,
+)
 from api.sse import sse_line, sse_response
 from core.context.drafts.store import DraftStore
 from tools.docx.store import active_document_id
@@ -29,23 +36,27 @@ def _parse_message_ui(raw: str | None) -> dict[str, Any] | None:
 
 
 def _require_conversation(conversation_id: str, request: Request):
-    conversation = conv_store.get_conversation(conversation_id, user_id=user_from(request))
+    conversation = conv_store.get_conversation(
+        conversation_id, **owner_filter(user_from(request))
+    )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
 
-def _sessions_for(conversation_id: str) -> list[dict[str, Any]]:
+def _sessions_for(conversation_id: str, request: Request) -> list[dict[str, Any]]:
     return [
         enrich_session_dict(m, sub_store=sub_store)
-        for m in mission_store.list_missions_for_conversation(conversation_id, limit=50)
+        for m in mission_store.list_missions_for_conversation(
+            conversation_id, limit=50, **owner_filter(user_from(request))
+        )
     ]
 
 
 @router.get("/conversations")
 async def list_conversations(request: Request) -> JSONResponse:
     conversations = []
-    for c in conv_store.list_conversations(limit=50, user_id=user_from(request)):
+    for c in conv_store.list_conversations(limit=50, **owner_filter(user_from(request))):
         stats = conv_store.session_stats(c.id)
         conversations.append(
             {
@@ -65,7 +76,11 @@ async def list_conversations(request: Request) -> JSONResponse:
 
 @router.post("/conversations")
 async def create_conversation(request: Request) -> JSONResponse:
-    conversation = conv_store.create_conversation(user_id=user_from(request))
+    user_id = user_from(request)
+    conversation = conv_store.create_conversation(
+        user_id=user_id,
+        organization_id=active_organization_id(user_id),
+    )
     return JSONResponse(
         content={
             "id": conversation.id,
@@ -98,7 +113,7 @@ async def get_conversation(conversation_id: str, request: Request) -> JSONRespon
             "created_at": conversation.created_at.isoformat(),
             "updated_at": conversation.updated_at.isoformat(),
             "messages": messages,
-            "sessions": _sessions_for(conversation_id),
+            "sessions": _sessions_for(conversation_id, request),
             "active_listeners": [
                 s.to_dict() for s in sub_store.list_active_for_conversation(conversation_id)
             ],
@@ -123,7 +138,10 @@ async def get_conversation_active_doc(conversation_id: str, request: Request) ->
 async def list_conversation_sessions(conversation_id: str, request: Request) -> JSONResponse:
     _require_conversation(conversation_id, request)
     return JSONResponse(
-        content={"sessions": _sessions_for(conversation_id), "conversation_id": conversation_id}
+        content={
+            "sessions": _sessions_for(conversation_id, request),
+            "conversation_id": conversation_id,
+        }
     )
 
 
@@ -166,12 +184,10 @@ async def conversation_notifications(conversation_id: str, request: Request) -> 
 async def stop_subscription(subscription_id: str, request: Request) -> JSONResponse:
     from core.context.subscriptions.service import SubscriptionService
 
-    sub = sub_store.get_subscription(subscription_id)
+    user_id = user_from(request)
+    sub = sub_store.get_subscription(subscription_id, **owner_filter(user_id))
     if not sub:
         raise HTTPException(status_code=404, detail="Subscription not found")
-    user_id = user_from(request)
-    if sub.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
     service = SubscriptionService(sub_store=sub_store, conv_store=conv_store)
     result = await service.unsubscribe_gmail_inbox(
         user_id, conversation_id=sub.conversation_id, subscription_id=subscription_id

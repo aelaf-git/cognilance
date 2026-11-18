@@ -8,6 +8,7 @@ import {
   withActiveDocument
 } from "@/lib/cognilance-client"
 import {
+  clearOrchestratorConversation,
   getCognilanceServerSnapshot,
   getCognilanceSnapshot,
   getConversationId,
@@ -15,7 +16,19 @@ import {
   subscribeCognilance
 } from "@/lib/cognilance-store"
 import { cn } from "@/lib/utils"
-import { IconPlugConnected, IconPlus, IconTrash } from "@tabler/icons-react"
+import {
+  IconApps,
+  IconBook,
+  IconHelp,
+  IconLanguage,
+  IconLogout,
+  IconPlugConnected,
+  IconPlus,
+  IconRocket,
+  IconTrash
+} from "@tabler/icons-react"
+import { useTheme } from "next-themes"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { FC, FormEvent, useContext, useEffect, useState, useSyncExternalStore } from "react"
 
@@ -51,6 +64,13 @@ type IntegrationItem = {
   coming_soon?: boolean
 }
 
+type AccountProfile = {
+  id: string
+  email: string
+  display_name: string
+  timezone?: string | null
+}
+
 type OrganizationSummary = {
   id: string
   name: string
@@ -61,6 +81,24 @@ type PendingInvitation = {
   token: string
   organization_name: string
   role: string
+}
+
+const fieldClass =
+  "w-full rounded-md border border-border bg-[hsl(var(--chat-canvas))] px-2.5 py-1.5 text-[13px] text-foreground outline-none focus:border-foreground"
+
+const saveButtonClass =
+  "rounded-md border border-border bg-[hsl(var(--chat-canvas))] px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-foreground hover:bg-foreground hover:text-background"
+
+function timezoneChoices() {
+  const supported =
+    typeof Intl !== "undefined" && "supportedValuesOf" in Intl
+      ? Intl.supportedValuesOf("timeZone")
+      : []
+  return supported.length > 0 ? supported : ["UTC"]
+}
+
+function publishDisplayName(name: string) {
+  window.dispatchEvent(new CustomEvent("cognilance-profile", { detail: name }))
 }
 
 function isLongRunningSession(session: SessionItem) {
@@ -145,13 +183,23 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [sessions, setSessions] = useState<SessionItem[]>([])
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([])
-  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
-  const [invitations, setInvitations] = useState<PendingInvitation[]>([])
-  const [signedIn, setSignedIn] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteNotice, setInviteNotice] = useState("")
+  const { theme, setTheme } = useTheme()
+  const [account, setAccount] = useState<AccountProfile | null>(null)
+  const [displayName, setDisplayName] = useState("")
+  const [timezone, setTimezone] = useState("")
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [passwordError, setPasswordError] = useState("")
+  const [passwordSaved, setPasswordSaved] = useState(false)
+  const [noticeId, setNoticeId] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
+  const [invitations, setInvitations] = useState<PendingInvitation[]>([])
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteNotice, setInviteNotice] = useState("")
+  const [inviteError, setInviteError] = useState("")
 
   useEffect(() => {
     let cancelled = false
@@ -159,6 +207,46 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
       setLoading(true)
       setError("")
       try {
+        if (contentType === "account") {
+          try {
+            const payload = await cognilanceJson("auth/me")
+            if (!cancelled) {
+              const profile = payload as AccountProfile
+              setAccount(profile)
+              setDisplayName(String(profile.display_name || ""))
+              setTimezone(
+                profile.timezone ||
+                  Intl.DateTimeFormat().resolvedOptions().timeZone ||
+                  "UTC"
+              )
+            }
+          } catch {
+            if (!cancelled) {
+              setAccount(null)
+              setOrganizations([])
+              setInvitations([])
+            }
+            return
+          }
+          try {
+            const [orgPayload, invitePayload] = await Promise.all([
+              cognilanceJson("organizations"),
+              cognilanceJson("invitations")
+            ])
+            if (!cancelled) {
+              const listed = orgPayload as { organizations?: OrganizationSummary[] }
+              const pending = invitePayload as { invitations?: PendingInvitation[] }
+              setOrganizations(listed.organizations || [])
+              setInvitations(pending.invitations || [])
+            }
+          } catch {
+            if (!cancelled) {
+              setOrganizations([])
+              setInvitations([])
+            }
+          }
+          return
+        }
         if (contentType === "sessions") {
           const id = snapshot.id
           if (!id) {
@@ -173,29 +261,6 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
           const payload = await cognilanceJson("integrations/list")
           if (!cancelled) {
             setIntegrations(payload.integrations || payload.apps || [])
-          }
-          return
-        }
-        if (contentType === "account") {
-          try {
-            await cognilanceJson("auth/me")
-            if (cancelled) return
-            setSignedIn(true)
-            const [orgPayload, invitePayload] = await Promise.all([
-              cognilanceJson("organizations"),
-              cognilanceJson("invitations")
-            ])
-            if (cancelled) return
-            const listed = orgPayload as { organizations?: OrganizationSummary[] }
-            const pending = invitePayload as { invitations?: PendingInvitation[] }
-            setOrganizations(listed.organizations || [])
-            setInvitations(pending.invitations || [])
-          } catch {
-            if (!cancelled) {
-              setSignedIn(false)
-              setOrganizations([])
-              setInvitations([])
-            }
           }
           return
         }
@@ -295,6 +360,66 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
     }
   }
 
+  const saveProfile = async (event: FormEvent) => {
+    event.preventDefault()
+    setError("")
+    try {
+      const payload = (await cognilanceJson("auth/me", {
+        method: "PATCH",
+        body: JSON.stringify({ display_name: displayName })
+      })) as AccountProfile
+      setAccount(payload)
+      publishDisplayName(payload.display_name)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't update profile.")
+    }
+  }
+
+  const saveTimezone = async (nextZone: string) => {
+    setTimezone(nextZone)
+    setError("")
+    try {
+      const payload = (await cognilanceJson("auth/me", {
+        method: "PATCH",
+        body: JSON.stringify({ timezone: nextZone })
+      })) as AccountProfile
+      setAccount(payload)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't update timezone.")
+    }
+  }
+
+  const savePassword = async (event: FormEvent) => {
+    event.preventDefault()
+    setPasswordError("")
+    setPasswordSaved(false)
+    if (newPassword.length < 8) {
+      setPasswordError("Password must be at least 8 characters.")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match.")
+      return
+    }
+    try {
+      await cognilanceJson("auth/password", {
+        method: "POST",
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword
+        })
+      })
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+      setPasswordSaved(true)
+    } catch (err) {
+      setPasswordError(
+        err instanceof Error ? err.message : "Couldn't update password."
+      )
+    }
+  }
+
   const refreshMembership = async () => {
     const [orgPayload, invitePayload] = await Promise.all([
       cognilanceJson("organizations"),
@@ -311,7 +436,7 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
     const organization = organizations[0]
     const email = inviteEmail.trim()
     if (!organization || !email) return
-    setError("")
+    setInviteError("")
     setInviteNotice("")
     try {
       await cognilanceJson(`organizations/${organization.id}/invitations`, {
@@ -321,95 +446,301 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
       setInviteEmail("")
       setInviteNotice("Invitation sent.")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send the invitation.")
+      setInviteError(err instanceof Error ? err.message : "Could not send the invitation.")
     }
   }
 
   const acceptInvite = async (token: string) => {
-    setError("")
+    setInviteError("")
     setInviteNotice("")
     try {
       await cognilanceJson(`invitations/${token}/accept`, { method: "POST" })
       await refreshMembership()
       setInviteNotice("Invitation accepted.")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not accept the invitation.")
+      setInviteError(err instanceof Error ? err.message : "Could not accept the invitation.")
+    }
+  }
+
+  const logout = async () => {
+    setError("")
+    setLoading(true)
+    try {
+      await cognilanceJson("auth/logout", { method: "POST" })
+      setAccount(null)
+      setConversations([])
+      setSessions([])
+      clearOrchestratorConversation()
+      setChatMessages([])
+      setActiveDocument(null)
+      setDocumentPaneOpen(false)
+      setUserInput("")
+      router.replace("/login")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't sign out.")
+    } finally {
+      setLoading(false)
     }
   }
 
   if (contentType === "account") {
-    const organization = organizations[0]
-    const canInvite =
-      organization?.role === "owner" || organization?.role === "admin"
+    const initial = (account?.display_name || account?.email || "?").trim().charAt(0).toUpperCase()
+    const menu = [
+      { id: "language", label: "Language", icon: IconLanguage },
+      { id: "help", label: "Help", icon: IconHelp },
+      { id: "upgrade", label: "Upgrade", icon: IconRocket },
+      { id: "apps", label: "Apps and extensions", icon: IconApps },
+      { id: "learn", label: "Learn more", icon: IconBook }
+    ]
+    const zones = timezoneChoices()
+    const appearance = [
+      { id: "light", label: "Light" },
+      { id: "dark", label: "Dark" },
+      { id: "system", label: "System" }
+    ]
     return (
-      <Panel title="Account" loading={loading} error={error}>
-        {!signedIn && !loading ? (
-          <p className="text-muted-foreground px-2 py-2 text-xs">
-            <button
-              type="button"
-              className="text-foreground underline underline-offset-2"
-              onClick={() => router.push("/local/login")}
-            >
-              Sign in
-            </button>{" "}
-            to invite teammates.
-          </p>
-        ) : null}
-        {organization ? (
-          <div className="px-2 py-2">
-            <div className="truncate text-[13.5px] font-medium text-foreground">
-              {organization.name}
+      <Panel title="Settings" loading={loading} error={error}>
+        {account ? (
+          <div className="space-y-1 pb-4">
+            <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Profile
+            </p>
+            <div className="flex items-center gap-3 px-2 py-2">
+              <div className="font-[family-name:var(--font-display)] flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-background">
+                {initial}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[13.5px] font-medium text-foreground">
+                  {account.display_name}
+                </div>
+                <div className="text-muted-foreground truncate text-xs">{account.email}</div>
+              </div>
             </div>
-            <div className="text-muted-foreground text-xs capitalize">
-              {organization.role}
+            <form className="space-y-2 px-2 pb-2" onSubmit={event => void saveProfile(event)}>
+              <label className="block space-y-1">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  Display name
+                </span>
+                <input
+                  className={fieldClass}
+                  value={displayName}
+                  onChange={event => setDisplayName(event.target.value)}
+                />
+              </label>
+              <button type="submit" className={saveButtonClass}>
+                Save
+              </button>
+            </form>
+
+            <p className="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Organization
+            </p>
+            {organizations[0] ? (
+              <div className="px-2 py-2">
+                <div className="truncate text-[13.5px] font-medium text-foreground">
+                  {organizations[0].name}
+                </div>
+                <div className="text-muted-foreground text-xs capitalize">
+                  {organizations[0].role}
+                </div>
+              </div>
+            ) : null}
+            {organizations[0] &&
+            (organizations[0].role === "owner" || organizations[0].role === "admin") ? (
+              <form className="space-y-2 px-2 pb-2" onSubmit={event => void sendInvite(event)}>
+                <label className="block space-y-1">
+                  <span className="text-[11px] font-medium text-muted-foreground">Email</span>
+                  <input
+                    type="email"
+                    className={fieldClass}
+                    value={inviteEmail}
+                    onChange={event => setInviteEmail(event.target.value)}
+                    placeholder="name@example.com"
+                  />
+                </label>
+                <button type="submit" className={saveButtonClass}>
+                  Invite
+                </button>
+              </form>
+            ) : null}
+            {invitations.map(invitation => (
+              <div
+                key={invitation.token}
+                className="flex items-center justify-between gap-2 px-2 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] text-foreground">
+                    {invitation.organization_name}
+                  </div>
+                  <div className="text-muted-foreground text-xs capitalize">
+                    {invitation.role}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={saveButtonClass}
+                  onClick={() => void acceptInvite(invitation.token)}
+                >
+                  Accept
+                </button>
+              </div>
+            ))}
+            {inviteNotice ? (
+              <p className="text-muted-foreground px-2 pb-1 text-xs">{inviteNotice}</p>
+            ) : null}
+            {inviteError ? (
+              <p className="px-2 pb-1 text-xs text-red-500">{inviteError}</p>
+            ) : null}
+
+            <p className="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Appearance
+            </p>
+            <div className="grid grid-cols-3 gap-1 px-2 py-2">
+              {appearance.map(choice => {
+                const selected = theme === choice.id
+                return (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    className={cn(
+                      "rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
+                      selected
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-[hsl(var(--chat-canvas))] text-foreground hover:border-foreground"
+                    )}
+                    onClick={() => setTheme(choice.id)}
+                  >
+                    {choice.label}
+                  </button>
+                )
+              })}
             </div>
-          </div>
-        ) : null}
-        {canInvite ? (
-          <form className="space-y-2 px-2 pb-2" onSubmit={event => void sendInvite(event)}>
-            <label className="block space-y-1">
-              <span className="text-[11px] font-medium text-muted-foreground">Email</span>
-              <input
-                type="email"
-                className="w-full rounded-lg border border-border/80 bg-[hsl(var(--chat-surface))] px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-foreground"
-                value={inviteEmail}
-                onChange={event => setInviteEmail(event.target.value)}
-                placeholder="name@example.com"
-              />
+
+            <p className="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Security
+            </p>
+            <form className="space-y-2 px-2 py-2" onSubmit={event => void savePassword(event)}>
+              <label className="block space-y-1">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  Current password
+                </span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  className={fieldClass}
+                  value={currentPassword}
+                  onChange={event => setCurrentPassword(event.target.value)}
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  New password
+                </span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  className={fieldClass}
+                  value={newPassword}
+                  onChange={event => setNewPassword(event.target.value)}
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  Confirm new password
+                </span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  className={fieldClass}
+                  value={confirmPassword}
+                  onChange={event => setConfirmPassword(event.target.value)}
+                />
+              </label>
+              {passwordError && (
+                <p className="text-destructive text-xs">{passwordError}</p>
+              )}
+              {passwordSaved && (
+                <p className="text-muted-foreground text-xs">Password updated.</p>
+              )}
+              <button type="submit" className={saveButtonClass}>
+                Update password
+              </button>
+            </form>
+
+            <p className="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              General
+            </p>
+            <label className="block space-y-1 px-2 py-2">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                Timezone
+              </span>
+              <select
+                className={fieldClass}
+                value={zones.includes(timezone) ? timezone : zones[0]}
+                onChange={event => void saveTimezone(event.target.value)}
+              >
+                {zones.map(zone => (
+                  <option key={zone} value={zone}>
+                    {zone}
+                  </option>
+                ))}
+              </select>
             </label>
-            <button
-              type="submit"
-              className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-xs font-medium text-background"
-            >
-              Invite
-            </button>
-          </form>
-        ) : null}
-        {invitations.map(invitation => (
-          <div
-            key={invitation.token}
-            className="flex items-center justify-between gap-2 px-2 py-2"
-          >
-            <div className="min-w-0">
-              <div className="truncate text-[13px] text-foreground">
-                {invitation.organization_name}
-              </div>
-              <div className="text-muted-foreground text-xs capitalize">
-                {invitation.role}
-              </div>
+
+            <p className="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              More
+            </p>
+            <div className="space-y-0.5">
+              {menu.map(item => {
+                const Icon = item.icon
+                const open = noticeId === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left text-[13.5px] text-foreground transition-colors hover:bg-accent/70"
+                    onClick={() =>
+                      setNoticeId(current => (current === item.id ? "" : item.id))
+                    }
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <Icon size={16} stroke={1.75} className="text-muted-foreground shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </span>
+                    {open && (
+                      <span className="text-muted-foreground shrink-0 text-[11px]">
+                        Under construction
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
+
+            <div className="my-2 border-t border-border/70" />
+
             <button
               type="button"
-              className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-xs font-medium text-background"
-              onClick={() => void acceptInvite(invitation.token)}
+              className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-[13.5px] text-foreground transition-colors hover:bg-accent/70"
+              onClick={() => void logout()}
             >
-              Accept
+              <IconLogout size={16} stroke={1.75} className="text-muted-foreground" />
+              Log out
             </button>
           </div>
-        ))}
-        {inviteNotice ? (
-          <p className="text-muted-foreground px-2 pb-1 text-xs">{inviteNotice}</p>
-        ) : null}
+        ) : (
+          <div className="space-y-3 px-2">
+            <p className="text-muted-foreground text-xs leading-5">
+              Sign in to keep conversations tied to your account.
+            </p>
+            <Link
+              href="/login"
+              className="inline-flex rounded-md border border-border bg-[hsl(var(--chat-canvas))] px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-foreground hover:bg-foreground hover:text-background"
+            >
+              Go to login
+            </Link>
+          </div>
+        )}
       </Panel>
     )
   }

@@ -3,6 +3,7 @@
 import { Sidebar } from "@/components/sidebar/sidebar"
 import { SidebarSwitcher } from "@/components/sidebar/sidebar-switcher"
 import { Tabs } from "@/components/ui/tabs"
+import { cognilanceJson } from "@/lib/cognilance-client"
 import { cn } from "@/lib/utils"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { FC, useCallback, useEffect, useState } from "react"
@@ -34,6 +35,7 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
       : "chats"
 
   const [contentType, setContentType] = useState(tabValue)
+  const [authReady, setAuthReady] = useState(false)
   const [showSidebar, setShowSidebar] = useState(
     localStorage.getItem("showSidebar") !== "false"
   )
@@ -46,6 +48,20 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
   const [isResizing, setIsResizing] = useState(false)
 
   const leftWidth = ICON_RAIL_WIDTH + (showSidebar ? panelWidth : 0)
+
+  useEffect(() => {
+    let cancelled = false
+    cognilanceJson("auth/me")
+      .then(() => {
+        if (!cancelled) setAuthReady(true)
+      })
+      .catch(() => {
+        if (!cancelled) router.replace("/login")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [router])
 
   const setSidebarOpen = (open: boolean) => {
     setShowSidebar(open)
@@ -99,6 +115,14 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
 
   const handleBrandClick = () => {
     setSidebarOpen(!showSidebar)
+  }
+
+  if (!authReady) {
+    return (
+      <div className="flex size-full items-center justify-center bg-[hsl(var(--chat-canvas))] text-muted-foreground">
+        <p className="font-[family-name:var(--font-display)] text-sm">Loading…</p>
+      </div>
+    )
   }
 
   return (
@@ -155,7 +179,10 @@ export const Dashboard: FC<DashboardProps> = ({ children }) => {
               width: `${ICON_RAIL_WIDTH}px`
             }}
           >
-            <SidebarSwitcher onContentTypeChange={handleRailSelect} />
+            <SidebarSwitcher
+              contentType={contentType}
+              onContentTypeChange={handleRailSelect}
+            />
           </div>
 
           <div
