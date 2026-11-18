@@ -69,6 +69,26 @@ describe("activity trace reducer", () => {
     expect(state.steps.map(step => step.label)).toEqual(["Thinking…"])
   })
 
+  it("keeps the model thought when a plan event arrives", () => {
+    let state = createActivityState(1_000)
+    state = reduceActivityEvent(state, { event: "thinking", delta: "The user wants a file." })
+    state = reduceActivityEvent(state, {
+      event: "plan",
+      text: "Write a short rationale the user should not see.",
+      data: { reasoning: "Write a short rationale the user should not see." },
+      tasks: [{ title: "Draft the file", role: "docx_agent" }]
+    })
+
+    expect(state.thinking).toBe("The user wants a file.")
+    expect(state.steps.find(step => step.id === "thinking")).toMatchObject({
+      detail: "The user wants a file."
+    })
+    expect(state.steps.find(step => step.id === "plan")).toMatchObject({
+      label: "Sketched a plan",
+      detail: "Draft the file"
+    })
+  })
+
   it("folds the header to Thought Ns when the answer arrives", () => {
     const started = reduceActivityEvent(createActivityState(1_000), {
       event: "thinking",

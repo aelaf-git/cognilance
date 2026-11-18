@@ -179,6 +179,15 @@ export const Message: FC<MessageProps> = ({
     }
   > = {}
 
+  const awaitingReply =
+    message.role === "assistant" && isLast && isGenerating && !firstTokenReceived
+  const thinkingSteps: ActivityStep[] =
+    activity && activity.length > 0
+      ? activity
+      : awaitingReply
+        ? [{ id: "thinking", label: "Thinking…", detail: "Working through the request.", status: "running" }]
+        : []
+
   const fileSummary = fileItems.reduce((acc, fileItem) => {
     const parentFile = files.find(file => file.id === fileItem.file_id)
     if (parentFile) {
@@ -223,7 +232,7 @@ export const Message: FC<MessageProps> = ({
 
               <div className="text-lg font-semibold">Prompt</div>
             </div>
-          ) : message.role === "assistant" ? (
+          ) : message.role === "assistant" && !awaitingReply ? (
             <div className="flex items-center gap-2">
               {!profile ? (
                 <img
@@ -271,8 +280,8 @@ export const Message: FC<MessageProps> = ({
               </div>
             </div>
           ) : null}
-          {message.role === "assistant" && activity && activity.length > 0 && (
-            <ActivityTrace steps={activity} />
+          {message.role === "assistant" && thinkingSteps.length > 0 && (
+            <ActivityTrace steps={thinkingSteps} />
           )}
           <div
             className={cn(

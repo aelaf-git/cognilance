@@ -107,38 +107,15 @@ function withThinking(state: ActivityState, thinking: string): ActivityState {
   }
 }
 
-function formatPlanThinking(
-  data: Record<string, unknown> | undefined,
-  fallbackThinking: string
-): string {
-  if (!data) {
-    return fallbackThinking || "Lined up the steps before answering."
-  }
-  const parts: string[] = []
-  const reasoning = String(data.reasoning || data.thinking || "").trim()
-  if (reasoning) parts.push(reasoning)
-  const planSteps = Array.isArray(data.steps) ? data.steps : []
-  for (const raw of planSteps) {
-    if (raw && typeof raw === "object") {
-      const item = raw as Record<string, unknown>
-      const title = String(item.title || "").trim()
-      const detail = String(item.detail || "").trim()
-      if (title && detail) parts.push(`${title}: ${detail}`)
-      else if (title || detail) parts.push(title || detail)
-    }
-  }
-  const subtasks = Array.isArray(data.subtasks) ? data.subtasks : []
-  for (const raw of subtasks) {
-    if (raw && typeof raw === "object") {
-      const sub = raw as Record<string, unknown>
-      const title = String(sub.title || "").trim()
-      const instruction = String(sub.instruction || "").trim()
-      if (title && instruction && title !== instruction) {
-        parts.push(`${title}: ${instruction}`)
-      } else if (title || instruction) parts.push(title || instruction)
-    }
-  }
-  return parts.join("\n") || fallbackThinking || "Lined up the steps before answering."
+function planDetail(event: Record<string, unknown>): string {
+  const tasks = Array.isArray(event.tasks) ? event.tasks : []
+  const titles = tasks
+    .map(raw => {
+      if (!raw || typeof raw !== "object") return ""
+      return String((raw as Record<string, unknown>).title || "").trim()
+    })
+    .filter(Boolean)
+  return titles.join("\n") || "Lined up the steps before answering."
 }
 
 function formatCapabilitiesThinking(
@@ -359,20 +336,12 @@ export function reduceActivityEvent(
   }
 
   if (name === "plan") {
-    const planData =
-      event.data && typeof event.data === "object"
-        ? (event.data as Record<string, unknown>)
-        : undefined
-    const reasoning = String(
-      planData?.reasoning || planData?.thinking || event.text || ""
-    ).trim()
-    const next = reasoning ? withThinking(state, appendParagraph(state.thinking, reasoning)) : state
     return {
-      ...next,
-      steps: upsertStep(next.steps, {
+      ...state,
+      steps: upsertStep(state.steps, {
         id: "plan",
         label: "Sketched a plan",
-        detail: formatPlanThinking(planData, next.thinking),
+        detail: planDetail(event),
         status: "done"
       })
     }

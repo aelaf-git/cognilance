@@ -774,11 +774,11 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
           {integrations.map((item, index) => {
             const logoKey = item.logo || item.id
             const isGithub = logoKey === "github" || item.id === "github"
-            const isMonochromeSvg =
-              isGithub ||
-              logoKey === "x" ||
-              logoKey === "reddit" ||
-              logoKey === "linkedin"
+            const localLogo =
+              isGithub || logoKey === "x" || logoKey === "reddit" || logoKey === "linkedin"
+                ? `/integrations/${isGithub ? "github" : logoKey}.svg`
+                : ""
+            const isMonochromeSvg = isGithub || logoKey === "x"
             return (
               <div
                 key={item.id}
@@ -789,9 +789,8 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
                   <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/80 bg-[hsl(var(--chat-canvas))]">
                     <img
                       src={
-                        isGithub
-                          ? "/integrations/github.svg"
-                          : `/api/cognilance/integrations/logos/${encodeURIComponent(logoKey)}`
+                        localLogo ||
+                        `/api/cognilance/integrations/logos/${encodeURIComponent(logoKey)}`
                       }
                       alt=""
                       className={cn(

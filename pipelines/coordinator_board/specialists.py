@@ -15,7 +15,7 @@ from core.runtime.runs.store import RunStore
 from pipelines.coordinator_board.schema import DocxAction, SpecialistAction
 from pipelines.coordinator_board.verify import verify_task_output
 from pipelines.shared.state import State, SubtaskResult
-from pipelines.shared.streaming import emit, emit_status, reveal_text
+from pipelines.shared.streaming import emit, emit_status
 from tools.registry import ApprovalRequired, is_allowed, load_manifests, run_role_tool
 
 MAX_LOOP_STEPS = 5
@@ -314,9 +314,6 @@ async def _run_task_loop(
                 "tool": _pick_tool(pack.id, instruction, pack.tools),
                 "risk": out.get("risk"),
             }
-
-        if action.reasoning:
-            reveal_text(action.reasoning, event="thinking")
 
         if action.status == "done":
             answer = (action.answer or "").strip()

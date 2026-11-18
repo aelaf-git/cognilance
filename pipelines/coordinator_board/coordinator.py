@@ -117,9 +117,6 @@ async def coordinator_plan(state: State) -> dict[str, Any]:
             suggested_ui=plan.suggested_ui or "text",
         )
 
-    if plan.reasoning:
-        reveal_text(plan.reasoning, event="thinking")
-
     run_id = _run_id(state)
     board = BoardStore()
     board.init_db()
@@ -164,7 +161,7 @@ async def coordinator_plan(state: State) -> dict[str, Any]:
 
     emit(
         "plan",
-        text=plan.reasoning or "Board tasks created",
+        text="Board tasks created",
         tasks=[{"title": t["title"], "role": t["assignee_role"]} for t in board_tasks],
     )
     return {

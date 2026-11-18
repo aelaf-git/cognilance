@@ -14,6 +14,24 @@
 
 ---
 
+## See it
+
+The chat app is the product. Open a conversation, connect the tools the team already uses, and manage the account from the same sidebar.
+
+<p align="center">
+  <img src="docs/screenshots/chat.png" alt="Cognilance chat, with an empty conversation list and the prompt What can we accomplish?" width="840">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/integrations.png" alt="Integrations panel listing Google Drive, Gmail, Calendar, Notion, Slack, GitHub, X, Reddit, and LinkedIn" width="840">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/settings.png" alt="Settings index with Profile, Team, Appearance, Security, and Timezone" width="840">
+</p>
+
+---
+
 ## Cognilance SDK
 
 **Deferred.** The runtime no longer dispatches via `CognilanceManager` / A2A hire.
@@ -24,6 +42,7 @@ in-process agents under [`agents/`](agents/) and graphs under [`pipelines/`](pip
 
 ## Table of contents
 
+- [See it](#see-it)
 - [Website](#website)
 - [Pick your role](#pick-your-role)
 - [Quick start](#quick-start)
@@ -535,6 +554,7 @@ Demo shortcut (sets `COGNILANCE_DEMO=1`): `./scripts/start_demo.sh`.
 |----------|----------|---------|-------------|
 | `GEMINI_API_KEY` | For coordinator | - | Gemini API key for the coordinator / specialists (`GOOGLE_API_KEY` also works) |
 | `GEMINI_MODEL` | No | `gemini-3.5-flash-lite` | Gemini model id |
+| `GEMINI_THINKING_LEVEL` | No | `medium` | Gemini 3 reasoning depth: `minimal`, `low`, `medium`, or `high` |
 | `COORDINATOR_SESSION_SECRET` | Outside demo | - | HMAC secret for the `coordinator_uid` cookie (`ORCHESTRATOR_SESSION_SECRET` still works) |
 | `TOOL_PROXY_SIGNING_KEY` | Outside demo | - | HMAC secret for short-lived tool proxy grants |
 | `COGNILANCE_DEMO` | No | unset | `1`/`true`/`yes` allows insecure demo defaults when secrets are unset |
