@@ -269,6 +269,14 @@ class ProjectStore:
             )
         task = self.get_task(task_id, organization_id=organization_id)
         assert task is not None
+        _record_org_event(
+            self._path,
+            organization_id,
+            "task.created",
+            source_id=task_id,
+            payload={"title": task.title, "project_id": project_id, "status": task.status},
+            idempotency_key=f"task:{task_id}:created",
+        )
         return task
 
     def list_tasks(self, project_id: str, *, organization_id: str) -> list[WorkTask]:
@@ -316,6 +324,34 @@ class ProjectStore:
             moment = now or datetime.now(timezone.utc)
             tasks = [item for item in tasks if is_overdue(item, moment)]
         return tasks
+
+    def list_all_tasks(self) -> list[WorkTask]:
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM work_tasks ORDER BY created_at ASC").fetchall()
+        return [_task_from_row(row) for row in rows]
+
+    def note_deadline_crossings(self, now: datetime | None = None) -> int:
+        """Record one event the first time a task is overdue for its current deadline."""
+        self.init_db()
+        moment = now or datetime.now(timezone.utc)
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM work_tasks").fetchall()
+        written = 0
+        for row in rows:
+            task = _task_from_row(row)
+            if not task.organization_id or not is_overdue(task, moment):
+                continue
+            if _record_org_event(
+                self._path,
+                task.organization_id,
+                "task.deadline_crossed",
+                source_id=task.id,
+                payload={"deadline": task.deadline, "title": task.title},
+                idempotency_key=f"task:{task.id}:deadline:{task.deadline}",
+            ):
+                written += 1
+        return written
 
     def get_task(self, task_id: str, *, organization_id: str | None = None) -> WorkTask | None:
         with self._conn() as conn:
@@ -411,6 +447,14 @@ class ProjectStore:
                 ),
             )
             _insert_activity(conn, task_id, actor_id, "updated", changes, now)
+        _record_org_event(
+            self._path,
+            organization_id,
+            "task.updated",
+            source_id=task_id,
+            payload=changes,
+            idempotency_key=f"task:{task_id}:updated:{now}",
+        )
         return self.get_task(task_id, organization_id=organization_id)
 
     def delete_task(self, task_id: str, *, organization_id: str) -> bool:
@@ -517,6 +561,26 @@ class ProjectStore:
                 (activity_id, organization_id),
             ).fetchone()
         return _activity_from_row(row) if row else None
+
+
+def _record_org_event(
+    db_path: str,
+    organization_id: str,
+    event_type: str,
+    *,
+    source_id: str,
+    payload: dict[str, Any],
+    idempotency_key: str,
+) -> bool:
+    from core.context.orgs.store import OrgStore
+
+    return OrgStore(db_path).record_event(
+        organization_id,
+        event_type,
+        source_id=source_id,
+        payload=payload,
+        idempotency_key=idempotency_key,
+    )
 
 
 def _now() -> str:

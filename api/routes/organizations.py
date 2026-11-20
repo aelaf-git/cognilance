@@ -155,10 +155,10 @@ async def create_organization_schedule(
     account_id = deps.user_from(request)
     deps.require_membership(account_id, organization_id, "admin")
     payload: dict[str, Any] = await request.json()
-    from core.context.subscriptions.schedule import create_weekly_schedule
+    from core.context.subscriptions.schedule import create_schedule
 
     try:
-        created = create_weekly_schedule(
+        created = create_schedule(
             organization_id=organization_id,
             user_id=account_id,
             payload=payload,
@@ -169,6 +169,86 @@ async def create_organization_schedule(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return JSONResponse(created)
+
+
+def _proposal_payload(proposal) -> dict[str, Any]:
+    return {
+        "id": proposal.id,
+        "organization_id": proposal.organization_id,
+        "agent_id": proposal.agent_id,
+        "current_text": proposal.current_text,
+        "proposed_text": proposal.proposed_text,
+        "previous_text": proposal.previous_text,
+        "evidence_run_ids": proposal.evidence_run_ids,
+        "status": proposal.status,
+        "created_at": proposal.created_at.isoformat(),
+        "decided_at": proposal.decided_at.isoformat() if proposal.decided_at else None,
+    }
+
+
+def _proposal_error(exc: ValueError) -> None:
+    message = str(exc)
+    if message == "Proposal not found":
+        raise HTTPException(status_code=404, detail="Not found") from exc
+    raise HTTPException(status_code=400, detail=message) from exc
+
+
+@router.post("/organizations/{organization_id}/prompt-proposals")
+async def create_prompt_proposal(organization_id: str, request: Request) -> JSONResponse:
+    deps.require_membership(deps.user_from(request), organization_id, "admin")
+    payload: dict[str, Any] = await request.json()
+    evidence = payload.get("evidence_run_ids") or []
+    if not isinstance(evidence, list):
+        raise HTTPException(status_code=400, detail="evidence_run_ids must be a list")
+    try:
+        proposal = deps.org_store.create_prompt_proposal(
+            organization_id,
+            str(payload.get("agent_id") or ""),
+            str(payload.get("proposed_text") or ""),
+            [str(item) for item in evidence],
+        )
+    except ValueError as exc:
+        _proposal_error(exc)
+    return JSONResponse(_proposal_payload(proposal))
+
+
+@router.post("/organizations/{organization_id}/prompt-proposals/{proposal_id}/decision")
+async def decide_prompt_proposal(
+    organization_id: str, proposal_id: str, request: Request
+) -> JSONResponse:
+    deps.require_membership(deps.user_from(request), organization_id, "admin")
+    proposal = deps.org_store.get_prompt_proposal(proposal_id)
+    if proposal is None or proposal.organization_id != organization_id:
+        raise HTTPException(status_code=404, detail="Not found")
+    payload: dict[str, Any] = await request.json()
+    if not isinstance(payload.get("approved"), bool):
+        raise HTTPException(status_code=400, detail="approved must be true or false")
+    try:
+        decided = deps.org_store.decide_prompt_proposal(
+            proposal_id,
+            approved=payload["approved"],
+            actor_account_id=deps.user_from(request),
+        )
+    except ValueError as exc:
+        _proposal_error(exc)
+    return JSONResponse(_proposal_payload(decided))
+
+
+@router.post("/organizations/{organization_id}/prompt-proposals/{proposal_id}/restore")
+async def restore_prompt_proposal(
+    organization_id: str, proposal_id: str, request: Request
+) -> JSONResponse:
+    deps.require_membership(deps.user_from(request), organization_id, "admin")
+    proposal = deps.org_store.get_prompt_proposal(proposal_id)
+    if proposal is None or proposal.organization_id != organization_id:
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        restored = deps.org_store.restore_prompt_proposal(
+            proposal_id, actor_account_id=deps.user_from(request)
+        )
+    except ValueError as exc:
+        _proposal_error(exc)
+    return JSONResponse(_proposal_payload(restored))
 
 
 @router.delete("/organizations/{organization_id}")

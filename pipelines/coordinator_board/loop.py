@@ -31,6 +31,28 @@ from pipelines.coordinator_board.validate import (
 from pipelines.shared.state import State
 from pipelines.shared.streaming import emit, emit_status
 
+def _record_approval_rejected(state: State) -> None:
+    from core.context.request import current_mission_id
+
+    run_id = str(state.get("run_id") or current_mission_id.get() or "").strip()
+    if not run_id:
+        return
+    from core.runtime.runs.store import RunStore
+
+    run = RunStore().get_run(run_id)
+    if run is None or not run.organization_id:
+        return
+    from core.context.orgs.store import OrgStore
+
+    OrgStore().record_event(
+        run.organization_id,
+        "approval.rejected",
+        source_id=run_id,
+        payload={"run_id": run_id},
+        idempotency_key=f"approval:{run_id}:rejected",
+    )
+
+
 MAX_ITERATIONS = 8
 MAX_DELEGATIONS = 4
 TIME_BUDGET_S = 90.0
@@ -438,6 +460,7 @@ async def act(state: State) -> dict[str, Any]:
             update["loop_status"] = "finish"
             update["proposed_answer"] = "Not sent."
             update["waiting_approval"] = False
+            _record_approval_rejected(state)
             return update
         from tools.registry import run_role_tool
 

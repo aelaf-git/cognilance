@@ -30,6 +30,15 @@ def mark_github_manage(
     return items
 
 
+def _audit_disconnect(
+    account_id: str, integration_id: str, organization_id: str | None
+) -> None:
+    org_id = organization_id or deps.active_organization_id(account_id) or ""
+    deps.org_store.record_audit(
+        account_id, org_id, "integration.disconnected", integration_id
+    )
+
+
 def _active_org(account_id: str, organization_id: str = "") -> str:
     org_id = organization_id.strip() or deps.active_organization_id(account_id) or ""
     if not org_id:
@@ -123,11 +132,15 @@ async def oauth_callback(
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing OAuth code or state")
     try:
-        _user_id, integration_id = await deps.oauth_service.handle_callback(code, state)
+        user_id, integration_id, organization_id = await deps.oauth_service.handle_callback(
+            code, state
+        )
     except ValueError:
         return JSONResponse(status_code=400, content={"error": "invalid_state"})
     except Exception as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)[:120]})
+    org_id = organization_id or deps.active_organization_id(user_id) or ""
+    deps.org_store.record_audit(user_id, org_id, "integration.connected", integration_id)
     return JSONResponse(content={"connected": integration_id})
 
 
@@ -141,6 +154,7 @@ async def disconnect_integration(
         org_id = _active_org(account_id, organization_id)
         deps.require_membership(account_id, org_id, "admin")
     deps.oauth_service.disconnect(account_id, integration_id, organization_id=org_id)
+    _audit_disconnect(account_id, integration_id, org_id)
     return JSONResponse(content={"integration_id": integration_id, "connected": False})
 
 
@@ -154,4 +168,5 @@ async def disconnect_app_compat(
         org_id = _active_org(account_id, organization_id)
         deps.require_membership(account_id, org_id, "admin")
     deps.oauth_service.disconnect(account_id, app_id, organization_id=org_id)
+    _audit_disconnect(account_id, app_id, org_id)
     return JSONResponse(content={"app_id": app_id, "connected": False})

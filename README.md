@@ -546,6 +546,37 @@ cognilance-coordinator-worker
 
 Demo shortcut (sets `COGNILANCE_DEMO=1`): `./scripts/start_demo.sh`.
 
+The demo image and `docker-compose.yml` set `COGNILANCE_DEMO=1`. For a coordinator that supplies its own secrets, copy [`.env.production.example`](.env.production.example). That file sets `COORDINATOR_SESSION_SECRET`, `TOOL_PROXY_SIGNING_KEY`, and `INTEGRATION_ENCRYPTION_KEY`, and it leaves `COGNILANCE_DEMO` unset.
+
+### Keep the compose data
+
+`docker compose up` uses the `coordinator_data` volume at `/data`. Restarting the stack keeps `coordinator.db` (conversations and runs) and `checkpoints.db`.
+
+Copy both files out of the volume:
+
+```bash
+docker compose cp coordinator:/data/coordinator.db backups/coordinator.db
+docker compose cp coordinator:/data/checkpoints.db backups/checkpoints.db
+```
+
+Restore them with the script, or copy them back into the container:
+
+```bash
+python scripts/backup_coordinator.py restore --source backups --dest /data
+docker compose cp backups/coordinator.db coordinator:/data/coordinator.db
+docker compose cp backups/checkpoints.db coordinator:/data/checkpoints.db
+```
+
+### First organization
+
+On the running stack (chat at <http://localhost:3001>, coordinator at <http://localhost:8200>):
+
+1. Register an account with `POST /auth/register`. That creates the owner organization.
+2. Create a project with `POST /projects` and `{"title": "Launch"}`.
+3. Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, then connect GitHub from the chat Integrations tab. The callback is `{COORDINATOR_PUBLIC_URL}/integrations/oauth/callback`.
+4. Schedule the weekly report with `POST /organizations/{id}/schedules` and `{"pipeline": "weekly_report", "weekday": "monday", "hour": 9}`. The coordinator ticker runs it when it is due.
+5. Ask for an irreversible send (`gmail.send`). When the run is waiting, approve it with `POST /runs/{id}/resume` and `{"approved": true}`.
+
 ---
 
 ## Environment variables

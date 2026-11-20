@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import secrets
 import sqlite3
 import uuid
@@ -10,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Any
 
 from core.context.db import ensure_db_dir
 from core.context.users.accounts import normalize_email
@@ -52,6 +54,51 @@ class OrganizationAlert:
     summary: str
     severity: str
     created_at: datetime
+    source_key: str | None = None
+    fingerprint: str | None = None
+    payload: dict[str, Any] | None = None
+    event_ids: list[str] | None = None
+    dismissed_at: datetime | None = None
+    priority: str = "normal"
+    assignee_account_id: str | None = None
+    acknowledged_at: datetime | None = None
+    suggested_next_step: str | None = None
+    link: dict[str, Any] | None = None
+
+
+@dataclass
+class PromptProposal:
+    id: str
+    organization_id: str
+    agent_id: str
+    current_text: str
+    proposed_text: str
+    previous_text: str
+    evidence_run_ids: list[str]
+    status: str
+    created_at: datetime
+    decided_at: datetime | None = None
+
+
+@dataclass
+class AuditEvent:
+    id: str
+    actor_account_id: str
+    organization_id: str
+    action: str
+    target_id: str | None
+    created_at: datetime
+
+
+@dataclass
+class OrganizationEvent:
+    id: str
+    organization_id: str
+    type: str
+    source_id: str | None
+    payload: dict[str, Any]
+    created_at: datetime
+    idempotency_key: str
 
 
 @dataclass
@@ -133,15 +180,75 @@ class OrgStore:
                     kind TEXT NOT NULL,
                     summary TEXT NOT NULL,
                     severity TEXT NOT NULL,
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    source_key TEXT,
+                    fingerprint TEXT,
+                    payload TEXT,
+                    event_ids TEXT,
+                    dismissed_at TEXT,
+                    priority TEXT,
+                    assignee_account_id TEXT,
+                    acknowledged_at TEXT,
+                    suggested_next_step TEXT,
+                    link TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_organization_alerts_org
                     ON organization_alerts(organization_id);
+                CREATE TABLE IF NOT EXISTS organization_events (
+                    id TEXT PRIMARY KEY,
+                    organization_id TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    source_id TEXT,
+                    payload TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL UNIQUE
+                );
+                CREATE INDEX IF NOT EXISTS idx_organization_events_org
+                    ON organization_events(organization_id, created_at);
+                CREATE TABLE IF NOT EXISTS prompt_proposals (
+                    id TEXT PRIMARY KEY,
+                    organization_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    current_text TEXT NOT NULL,
+                    proposed_text TEXT NOT NULL,
+                    previous_text TEXT NOT NULL DEFAULT '',
+                    evidence_run_ids TEXT NOT NULL DEFAULT '[]',
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    decided_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_prompt_proposals_org
+                    ON prompt_proposals(organization_id, created_at);
+                CREATE TABLE IF NOT EXISTS audit_events (
+                    id TEXT PRIMARY KEY,
+                    actor_account_id TEXT NOT NULL,
+                    organization_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    target_id TEXT,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_audit_events_org
+                    ON audit_events(organization_id, created_at);
                 """
             )
             cols = {row[1] for row in conn.execute("PRAGMA table_info(organizations)")}
             if "timezone" not in cols:
                 conn.execute("ALTER TABLE organizations ADD COLUMN timezone TEXT")
+            alert_cols = {row[1] for row in conn.execute("PRAGMA table_info(organization_alerts)")}
+            for name in (
+                "source_key",
+                "fingerprint",
+                "payload",
+                "event_ids",
+                "dismissed_at",
+                "priority",
+                "assignee_account_id",
+                "acknowledged_at",
+                "suggested_next_step",
+                "link",
+            ):
+                if name not in alert_cols:
+                    conn.execute(f"ALTER TABLE organization_alerts ADD COLUMN {name} TEXT")
 
     def provision_personal(self, account) -> str:
         """Create one owner membership. A second call for the same account does nothing."""
@@ -333,7 +440,9 @@ class OrgStore:
                 "SELECT * FROM invitations WHERE id = ?",
                 (invitation_id,),
             ).fetchone()
-        return _invitation_from_row(row)
+        invitation = _invitation_from_row(row)
+        self.record_audit(created_by, organization_id, "membership.invited", invitation.id)
+        return invitation
 
     def pending_invitations_for_email(self, email: str) -> list[Invitation]:
         cleaned = normalize_email(email)
@@ -357,6 +466,9 @@ class OrgStore:
         account_id = str(getattr(account, "id", "") or "")
         email = normalize_email(getattr(account, "email", ""))
         now = datetime.now(timezone.utc).isoformat()
+        accepted_now = False
+        invitation_id = ""
+        organization_id = ""
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT * FROM invitations WHERE token = ?",
@@ -375,13 +487,15 @@ class OrgStore:
             ).fetchone()
             if row["accepted_at"]:
                 return _membership_from_row(existing) if existing else None
+            invitation_id = str(row["id"])
+            organization_id = str(row["organization_id"])
             if existing is None:
                 conn.execute(
                     """
                     INSERT INTO memberships (organization_id, account_id, role, created_at)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (row["organization_id"], account_id, row["role"], now),
+                    (organization_id, account_id, row["role"], now),
                 )
             conn.execute(
                 """
@@ -389,15 +503,20 @@ class OrgStore:
                 SET accepted_at = ?
                 WHERE id = ? AND accepted_at IS NULL
                 """,
-                (now, row["id"]),
+                (now, invitation_id),
             )
             saved = conn.execute(
                 """
                 SELECT * FROM memberships
                 WHERE organization_id = ? AND account_id = ?
                 """,
-                (row["organization_id"], account_id),
+                (organization_id, account_id),
             ).fetchone()
+            accepted_now = True
+        if accepted_now:
+            self.record_audit(
+                account_id, organization_id, "membership.accepted", invitation_id
+            )
         return _membership_from_row(saved) if saved else None
 
     def delete_organization(self, organization_id: str) -> None:
@@ -420,6 +539,20 @@ class OrgStore:
                 "DELETE FROM organization_alerts WHERE organization_id = ?",
                 (organization_id,),
             )
+            conn.execute(
+                "DELETE FROM organization_events WHERE organization_id = ?",
+                (organization_id,),
+            )
+            if _table_exists(conn, "audit_events"):
+                conn.execute(
+                    "DELETE FROM audit_events WHERE organization_id = ?",
+                    (organization_id,),
+                )
+            if _table_exists(conn, "prompt_proposals"):
+                conn.execute(
+                    "DELETE FROM prompt_proposals WHERE organization_id = ?",
+                    (organization_id,),
+                )
             conn.execute(
                 "DELETE FROM organizations WHERE id = ?",
                 (organization_id,),
@@ -463,6 +596,7 @@ class OrgStore:
         *,
         enabled: bool = True,
         extra_instruction: str | None = None,
+        actor_account_id: str | None = None,
     ) -> None:
         """Store one organization's agent flag. Unknown agent ids are ignored."""
         from agents.loader import get_role
@@ -485,6 +619,10 @@ class OrgStore:
                     updated_at = excluded.updated_at
                 """,
                 (organization_id, pack.id, 1 if enabled else 0, instruction, now),
+            )
+        if actor_account_id:
+            self.record_audit(
+                actor_account_id, organization_id, "agent_setting.updated", pack.id
             )
 
     def disabled_agent_ids(self, organization_id: str) -> set[str]:
@@ -524,6 +662,171 @@ class OrgStore:
             if text and get_role(agent_id):
                 extras[agent_id] = text
         return extras
+
+    def set_extra_instruction(
+        self,
+        organization_id: str,
+        agent_id: str,
+        extra_instruction: str | None,
+        *,
+        actor_account_id: str | None = None,
+    ) -> None:
+        """Replace one agent's extra instruction and leave its enabled flag as it is."""
+        from agents.loader import get_role
+
+        pack = get_role(agent_id)
+        if pack is None or not organization_id:
+            return
+        instruction = str(extra_instruction or "").strip() or None
+        now = datetime.now(timezone.utc).isoformat()
+        self.init_db()
+        with self._conn() as conn:
+            existing = conn.execute(
+                """
+                SELECT enabled FROM organization_agent_settings
+                WHERE organization_id = ? AND agent_id = ?
+                """,
+                (organization_id, pack.id),
+            ).fetchone()
+            enabled = int(existing["enabled"]) if existing else 1
+            conn.execute(
+                """
+                INSERT INTO organization_agent_settings (
+                    organization_id, agent_id, enabled, extra_instruction, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(organization_id, agent_id) DO UPDATE SET
+                    extra_instruction = excluded.extra_instruction,
+                    updated_at = excluded.updated_at
+                """,
+                (organization_id, pack.id, enabled, instruction, now),
+            )
+        if actor_account_id:
+            self.record_audit(
+                actor_account_id, organization_id, "agent_setting.updated", pack.id
+            )
+
+    def create_prompt_proposal(
+        self,
+        organization_id: str,
+        agent_id: str,
+        proposed_text: str,
+        evidence_run_ids: list[str] | None = None,
+    ) -> PromptProposal:
+        from agents.loader import get_role
+
+        pack = get_role(agent_id)
+        proposed = str(proposed_text or "").strip()
+        if pack is None or not organization_id or not proposed:
+            raise ValueError("A proposal needs an organization, a known agent, and proposed text")
+        current = self.extra_instructions(organization_id).get(pack.id) or pack.prompt("system")
+        proposal_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        evidence = [str(item) for item in (evidence_run_ids or []) if str(item).strip()]
+        self.init_db()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO prompt_proposals (
+                    id, organization_id, agent_id, current_text, proposed_text,
+                    previous_text, evidence_run_ids, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, '', ?, 'pending', ?)
+                """,
+                (
+                    proposal_id,
+                    organization_id,
+                    pack.id,
+                    current,
+                    proposed,
+                    json.dumps(evidence),
+                    now,
+                ),
+            )
+        saved = self.get_prompt_proposal(proposal_id)
+        assert saved is not None
+        return saved
+
+    def get_prompt_proposal(self, proposal_id: str) -> PromptProposal | None:
+        if not proposal_id:
+            return None
+        self.init_db()
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM prompt_proposals WHERE id = ?",
+                (proposal_id,),
+            ).fetchone()
+        return _proposal_from_row(row) if row else None
+
+    def decide_prompt_proposal(
+        self,
+        proposal_id: str,
+        *,
+        approved: bool,
+        actor_account_id: str | None = None,
+    ) -> PromptProposal:
+        proposal = self.get_prompt_proposal(proposal_id)
+        if proposal is None:
+            raise ValueError("Proposal not found")
+        if proposal.status != "pending":
+            raise ValueError("Proposal is not pending")
+        now = datetime.now(timezone.utc).isoformat()
+        if not approved:
+            self._set_proposal_status(proposal_id, "rejected", "", now)
+        else:
+            previous = self.extra_instructions(proposal.organization_id).get(proposal.agent_id, "")
+            self.set_extra_instruction(
+                proposal.organization_id,
+                proposal.agent_id,
+                proposal.proposed_text,
+                actor_account_id=actor_account_id,
+            )
+            self._set_proposal_status(proposal_id, "approved", previous, now)
+        saved = self.get_prompt_proposal(proposal_id)
+        assert saved is not None
+        return saved
+
+    def restore_prompt_proposal(
+        self, proposal_id: str, *, actor_account_id: str | None = None
+    ) -> PromptProposal:
+        proposal = self.get_prompt_proposal(proposal_id)
+        if proposal is None:
+            raise ValueError("Proposal not found")
+        if proposal.status != "approved":
+            raise ValueError("Only an approved proposal can be restored")
+        self.set_extra_instruction(
+            proposal.organization_id,
+            proposal.agent_id,
+            proposal.previous_text or None,
+            actor_account_id=actor_account_id,
+        )
+        self.record_event(
+            proposal.organization_id,
+            "prompt.restored",
+            source_id=proposal.id,
+            payload={
+                "agent_id": proposal.agent_id,
+                "proposal_id": proposal.id,
+                "text": proposal.previous_text,
+            },
+            idempotency_key=f"prompt:{proposal.id}:restored",
+        )
+        return proposal
+
+    def _set_proposal_status(
+        self,
+        proposal_id: str,
+        status: str,
+        previous_text: str,
+        decided_at: str,
+    ) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                """
+                UPDATE prompt_proposals
+                SET status = ?, previous_text = ?, decided_at = ?
+                WHERE id = ?
+                """,
+                (status, previous_text, decided_at, proposal_id),
+            )
 
     def add_note(self, organization_id: str, body: str) -> OrganizationNote:
         cleaned = str(body or "").strip()
@@ -612,6 +915,125 @@ class OrgStore:
             created_at=datetime.fromisoformat(now),
         )
 
+    def open_alert(
+        self,
+        organization_id: str,
+        summary: str,
+        *,
+        kind: str,
+        source_key: str,
+        fingerprint: str,
+        payload: dict[str, Any] | None = None,
+        event_ids: list[str] | None = None,
+        severity: str = "warning",
+        priority: str = "normal",
+        assignee_account_id: str | None = None,
+        suggested_next_step: str | None = None,
+        link: dict[str, Any] | None = None,
+    ) -> OrganizationAlert | None:
+        """Open one alert for a source. A dismissal holds until the fingerprint changes."""
+        if not organization_id or not source_key or not str(summary or "").strip():
+            return None
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM organization_alerts
+                WHERE organization_id = ? AND source_key = ?
+                """,
+                (organization_id, source_key),
+            ).fetchall()
+        for row in rows:
+            existing = _alert_from_row(row)
+            if existing.dismissed_at is None:
+                return None
+            if existing.fingerprint == fingerprint:
+                return None
+        alert_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        saved = str(summary).strip()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO organization_alerts (
+                    id, organization_id, kind, summary, severity, created_at,
+                    source_key, fingerprint, payload, event_ids,
+                    priority, assignee_account_id, suggested_next_step, link
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    alert_id,
+                    organization_id,
+                    kind,
+                    saved,
+                    severity,
+                    now,
+                    source_key,
+                    fingerprint,
+                    json.dumps(payload or {}),
+                    json.dumps(event_ids or []),
+                    _priority(priority),
+                    str(assignee_account_id).strip() or None if assignee_account_id else None,
+                    str(suggested_next_step).strip() or None if suggested_next_step else None,
+                    json.dumps(link or {}),
+                ),
+            )
+        opened = self._alert_by_id(alert_id)
+        assert opened is not None
+        return opened
+
+    def dismiss_alert(self, alert_id: str) -> bool:
+        if not alert_id:
+            return False
+        self.init_db()
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE organization_alerts
+                SET dismissed_at = ?
+                WHERE id = ? AND dismissed_at IS NULL
+                """,
+                (now, alert_id),
+            )
+            return cursor.rowcount > 0
+
+    def acknowledge_alert(self, alert_id: str) -> bool:
+        if not alert_id:
+            return False
+        self.init_db()
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE organization_alerts
+                SET acknowledged_at = ?
+                WHERE id = ? AND acknowledged_at IS NULL
+                """,
+                (now, alert_id),
+            )
+            if cursor.rowcount > 0:
+                return True
+            row = conn.execute(
+                "SELECT id FROM organization_alerts WHERE id = ?",
+                (alert_id,),
+            ).fetchone()
+        return row is not None
+
+    def get_alert(self, alert_id: str) -> OrganizationAlert | None:
+        if not alert_id:
+            return None
+        self.init_db()
+        return self._alert_by_id(alert_id)
+
+    def _alert_by_id(self, alert_id: str) -> OrganizationAlert | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM organization_alerts WHERE id = ?",
+                (alert_id,),
+            ).fetchone()
+        return _alert_from_row(row) if row else None
+
     def list_alerts(self, organization_id: str) -> list[OrganizationAlert]:
         if not organization_id:
             return []
@@ -627,8 +1049,219 @@ class OrgStore:
             ).fetchall()
         return [_alert_from_row(row) for row in rows]
 
+    def list_open_alerts(self, organization_id: str) -> list[OrganizationAlert]:
+        if not organization_id:
+            return []
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM organization_alerts
+                WHERE organization_id = ? AND dismissed_at IS NULL
+                ORDER BY created_at ASC
+                """,
+                (organization_id,),
+            ).fetchall()
+        return [_alert_from_row(row) for row in rows]
+
+
+    def record_event(
+        self,
+        organization_id: str,
+        event_type: str,
+        *,
+        source_id: str | None = None,
+        payload: dict[str, Any] | None = None,
+        idempotency_key: str,
+    ) -> bool:
+        """Insert one event. A repeated idempotency key leaves the existing row."""
+        if not organization_id or not str(event_type or "").strip() or not idempotency_key:
+            return False
+        self.init_db()
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO organization_events (
+                    id, organization_id, type, source_id, payload, created_at, idempotency_key
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    organization_id,
+                    str(event_type).strip(),
+                    source_id,
+                    json.dumps(payload or {}),
+                    now,
+                    idempotency_key,
+                ),
+            )
+            return cursor.rowcount > 0
+
+    def record_audit(
+        self,
+        actor_account_id: str,
+        organization_id: str,
+        action: str,
+        target_id: str | None = None,
+    ) -> AuditEvent | None:
+        """Insert one audit row. A missing actor, organization, or action inserts nothing."""
+        actor = str(actor_account_id or "").strip()
+        organization = str(organization_id or "").strip()
+        name = str(action or "").strip()
+        if not actor or not organization or not name:
+            return None
+        event_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        target = str(target_id).strip() if target_id else None
+        self.init_db()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO audit_events (
+                    id, actor_account_id, organization_id, action, target_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (event_id, actor, organization, name, target or None, now),
+            )
+            row = conn.execute(
+                "SELECT * FROM audit_events WHERE id = ?",
+                (event_id,),
+            ).fetchone()
+        return _audit_from_row(row)
+
+    def list_audit(self, organization_id: str, action: str = "") -> list[AuditEvent]:
+        if not organization_id:
+            return []
+        name = str(action or "").strip()
+        self.init_db()
+        with self._conn() as conn:
+            if name:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM audit_events
+                    WHERE organization_id = ? AND action = ?
+                    ORDER BY created_at ASC, rowid ASC
+                    """,
+                    (organization_id, name),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM audit_events
+                    WHERE organization_id = ?
+                    ORDER BY created_at ASC, rowid ASC
+                    """,
+                    (organization_id,),
+                ).fetchall()
+        return [_audit_from_row(row) for row in rows]
+
+    def list_events(self, organization_id: str) -> list[OrganizationEvent]:
+        if not organization_id:
+            return []
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM organization_events
+                WHERE organization_id = ?
+                ORDER BY created_at ASC
+                """,
+                (organization_id,),
+            ).fetchall()
+        return [_event_from_row(row) for row in rows]
+
+    def list_all_events(self) -> list[OrganizationEvent]:
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM organization_events ORDER BY created_at ASC"
+            ).fetchall()
+        return [_event_from_row(row) for row in rows]
+
+
+def _audit_from_row(row: sqlite3.Row) -> AuditEvent:
+    target = row["target_id"]
+    return AuditEvent(
+        id=row["id"],
+        actor_account_id=row["actor_account_id"],
+        organization_id=row["organization_id"],
+        action=row["action"],
+        target_id=str(target) if target else None,
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
+
+
+def _proposal_from_row(row: sqlite3.Row) -> PromptProposal:
+    try:
+        evidence = json.loads(row["evidence_run_ids"] or "[]")
+    except (TypeError, json.JSONDecodeError):
+        evidence = []
+    if not isinstance(evidence, list):
+        evidence = []
+    decided = row["decided_at"]
+    return PromptProposal(
+        id=row["id"],
+        organization_id=row["organization_id"],
+        agent_id=row["agent_id"],
+        current_text=row["current_text"],
+        proposed_text=row["proposed_text"],
+        previous_text=row["previous_text"] or "",
+        evidence_run_ids=[str(item) for item in evidence],
+        status=row["status"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        decided_at=datetime.fromisoformat(decided) if decided else None,
+    )
+
+
+def _event_from_row(row: sqlite3.Row) -> OrganizationEvent:
+    raw = row["payload"]
+    try:
+        payload = json.loads(raw) if raw else {}
+    except (TypeError, json.JSONDecodeError):
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    return OrganizationEvent(
+        id=row["id"],
+        organization_id=row["organization_id"],
+        type=row["type"],
+        source_id=row["source_id"],
+        payload=payload,
+        created_at=datetime.fromisoformat(row["created_at"]),
+        idempotency_key=row["idempotency_key"],
+    )
+
+
+def _json_object(raw: str | None) -> dict[str, Any]:
+    try:
+        parsed = json.loads(raw) if raw else {}
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _json_list(raw: str | None) -> list[str]:
+    try:
+        parsed = json.loads(raw) if raw else []
+    except (TypeError, json.JSONDecodeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item) for item in parsed]
+
+
+def _priority(value: str | None) -> str:
+    cleaned = str(value or "normal").strip().lower()
+    if cleaned in {"low", "normal", "high"}:
+        return cleaned
+    return "normal"
+
 
 def _alert_from_row(row: sqlite3.Row) -> OrganizationAlert:
+    keys = row.keys()
+    dismissed = row["dismissed_at"] if "dismissed_at" in keys else None
+    acknowledged = row["acknowledged_at"] if "acknowledged_at" in keys else None
     return OrganizationAlert(
         id=row["id"],
         organization_id=row["organization_id"],
@@ -636,6 +1269,16 @@ def _alert_from_row(row: sqlite3.Row) -> OrganizationAlert:
         summary=row["summary"],
         severity=row["severity"],
         created_at=datetime.fromisoformat(row["created_at"]),
+        source_key=row["source_key"] if "source_key" in keys else None,
+        fingerprint=row["fingerprint"] if "fingerprint" in keys else None,
+        payload=_json_object(row["payload"]) if "payload" in keys else {},
+        event_ids=_json_list(row["event_ids"]) if "event_ids" in keys else [],
+        dismissed_at=datetime.fromisoformat(dismissed) if dismissed else None,
+        priority=_priority(row["priority"]) if "priority" in keys else "normal",
+        assignee_account_id=row["assignee_account_id"] if "assignee_account_id" in keys else None,
+        acknowledged_at=datetime.fromisoformat(acknowledged) if acknowledged else None,
+        suggested_next_step=row["suggested_next_step"] if "suggested_next_step" in keys else None,
+        link=_json_object(row["link"]) if "link" in keys else {},
     )
 
 

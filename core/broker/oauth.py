@@ -74,7 +74,7 @@ class OAuthService:
             return self._linkedin_auth_url(spec["scopes"], state)
         raise ValueError(f"Unsupported provider: {provider}")
 
-    async def handle_callback(self, code: str, state: str) -> tuple[str, str]:
+    async def handle_callback(self, code: str, state: str) -> tuple[str, str, str | None]:
         resolved = self._store.pop_oauth_state(state)
         if not resolved:
             raise ValueError("Invalid or expired OAuth state")
@@ -102,8 +102,9 @@ class OAuthService:
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
+        organization_id: str | None = None
         if provider == "github":
-            organization_id = str(payload or "").strip()
+            organization_id = str(payload or "").strip() or None
             if not organization_id:
                 raise ValueError("Missing organization for GitHub OAuth")
             self._store.save_org_grant(
@@ -121,7 +122,7 @@ class OAuthService:
                 refresh_token=tokens.get("refresh_token"),
                 expires_at=tokens.get("expires_at"),
             )
-        return user_id, integration_id
+        return user_id, integration_id, organization_id
 
     def disconnect(
         self,

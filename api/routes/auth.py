@@ -9,12 +9,23 @@ from fastapi.responses import JSONResponse
 
 from api.auth.session import clear_user_cookie, set_user_cookie
 from api.deps import account_store, user_from
+from core.context.orgs.store import OrgStore
 from core.context.users.timezone import (
     get_stored_user_timezone,
     persist_user_timezone,
 )
 
 router = APIRouter(prefix="/auth")
+
+
+def _audit_auth(account_id: str, action: str) -> None:
+    store = OrgStore(account_store._path)
+    store.record_audit(
+        account_id,
+        store.active_for_account(account_id) or "",
+        action,
+        account_id,
+    )
 
 
 def _profile(account_id: str) -> dict[str, Any]:
@@ -43,6 +54,7 @@ async def register(request: Request) -> JSONResponse:
         message = str(exc)
         status = 409 if "already exists" in message.lower() else 400
         raise HTTPException(status_code=status, detail=message) from exc
+    _audit_auth(account.id, "auth.registered")
     out = JSONResponse(content=_profile(account.id))
     set_user_cookie(out, account.id)
     return out
@@ -56,13 +68,17 @@ async def login(request: Request) -> JSONResponse:
     account = account_store.authenticate(email, password)
     if not account:
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    _audit_auth(account.id, "auth.login")
     out = JSONResponse(content=_profile(account.id))
     set_user_cookie(out, account.id)
     return out
 
 
 @router.post("/logout")
-async def logout() -> JSONResponse:
+async def logout(request: Request) -> JSONResponse:
+    account_id = getattr(request.state, "user_id", None)
+    if account_id:
+        _audit_auth(str(account_id), "auth.logout")
     out = JSONResponse(content={"logged_out": True})
     clear_user_cookie(out)
     return out
@@ -103,4 +119,5 @@ async def change_password(request: Request) -> JSONResponse:
         message = str(exc)
         status = 401 if message == "Authentication required" else 400
         raise HTTPException(status_code=status, detail=message) from exc
+    _audit_auth(account_id, "auth.password_changed")
     return JSONResponse(content={"updated": True})

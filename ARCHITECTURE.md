@@ -73,3 +73,5 @@ Old ids (`docs.*`, `link.validate`) and old role ids (`reporter`, `follow_up`) a
 # API:     http://127.0.0.1:8200/health
 # Agents:  http://127.0.0.1:8200/skills/online
 ```
+
+Compose keeps conversations, runs, and checkpoints on the `coordinator_data` volume. The production env file, the backup commands, and the first-organization path (account, project, GitHub, weekly report, approval) are in the README.

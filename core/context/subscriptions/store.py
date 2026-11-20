@@ -191,7 +191,7 @@ class SubscriptionStore:
         if sub.status == SubscriptionStatus.ACTIVE:
             return True
         now = datetime.now(timezone.utc)
-        if sub.kind == "weekly_report":
+        if sub.integration == "schedule" or sub.kind in {"schedule", "weekly_report"}:
             next_check = sub.next_check_at
             if next_check.tzinfo is None:
                 next_check = next_check.replace(tzinfo=timezone.utc)

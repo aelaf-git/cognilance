@@ -120,17 +120,20 @@ def test_admin_schedule_stores_config_and_falls_back_to_the_creator_timezone(wor
     assert created.status_code == 200, created.text
     body = created.json()
     assert body["config"] == {
-        "pipeline": "weekly_report",
-        "weekday": 0,
-        "hour": 9,
-        "timezone": "Africa/Nairobi",
-        "project_id": "proj-1",
+        "cadence": {"type": "weekly", "weekday": 0, "hour": 9, "timezone": "Africa/Nairobi"},
+        "action": {
+            "type": "pipeline",
+            "pipeline": "weekly_report",
+            "project_id": "proj-1",
+            "instruction": None,
+        },
     }
     assert world["orgs"].get_timezone(org_id) == "Africa/Nairobi"
     sub = world["subs"].get_subscription(body["subscription_id"])
     assert sub is not None
     assert sub.conversation_id == ""
-    assert sub.kind == "weekly_report"
+    assert sub.kind == "schedule"
+    assert sub.integration == "schedule"
     assert sub.organization_id == org_id
     local = sub.next_check_at.astimezone(ZoneInfo("Africa/Nairobi"))
     assert local.weekday() == 0
@@ -150,7 +153,47 @@ def test_admin_schedule_stores_config_and_falls_back_to_the_creator_timezone(wor
     )
     assert replaced.status_code == 200, replaced.text
     assert world["orgs"].get_timezone(org_id) == "America/New_York"
-    assert replaced.json()["config"]["timezone"] == "America/New_York"
+    assert replaced.json()["config"]["cadence"]["timezone"] == "America/New_York"
+
+    unknown = client.post(
+        f"/organizations/{org_id}/schedules",
+        json={"pipeline": "coordinator_board", "weekday": "monday", "hour": 9},
+        cookies=ada,
+    )
+    assert unknown.status_code == 400
+
+    concept = client.post(
+        f"/organizations/{org_id}/schedules",
+        json={"pipeline": "concept_note", "weekday": "monday", "hour": 9, "timezone": "UTC"},
+        cookies=ada,
+    )
+    assert concept.status_code == 200, concept.text
+    assert concept.json()["config"]["action"]["pipeline"] == "concept_note"
+
+    daily = client.post(
+        f"/organizations/{org_id}/schedules",
+        json={
+            "cadence": {"type": "daily", "hour": 9},
+            "action": {"type": "pipeline", "pipeline": "email_followup"},
+            "timezone": "UTC",
+        },
+        cookies=ada,
+    )
+    assert daily.status_code == 200, daily.text
+    assert daily.json()["config"]["cadence"]["type"] == "daily"
+    daily_local = world["subs"].get_subscription(daily.json()["subscription_id"]).next_check_at
+    assert daily_local.astimezone(ZoneInfo("UTC")).hour == 9
+
+    short = client.post(
+        f"/organizations/{org_id}/schedules",
+        json={
+            "cadence": {"type": "interval", "every_seconds": 60},
+            "action": {"type": "instruction", "instruction": "Check tasks"},
+            "timezone": "UTC",
+        },
+        cookies=ada,
+    )
+    assert short.status_code == 400
 
 
 def test_pause_and_cancel_from_the_session_listener(world):
