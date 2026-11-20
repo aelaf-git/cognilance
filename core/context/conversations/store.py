@@ -32,6 +32,7 @@ class ConversationMessage:
     content: str
     created_at: datetime
     ui: str | None = None  # JSON-encoded rich UI payload ({name, props})
+    author_id: str | None = None
 
 
 class ConversationStore:
@@ -75,6 +76,8 @@ class ConversationStore:
             }
             if "ui" not in columns:
                 conn.execute("ALTER TABLE conversation_messages ADD COLUMN ui TEXT")
+            if "author_id" not in columns:
+                conn.execute("ALTER TABLE conversation_messages ADD COLUMN author_id TEXT")
             conv_cols = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
             if "user_id" not in conv_cols:
                 conn.execute("ALTER TABLE conversations ADD COLUMN user_id TEXT")
@@ -256,10 +259,18 @@ class ConversationStore:
         limit: int = 30,
         user_id: str | None = None,
         organization_id: str | None = None,
+        organization_ids: list[str] | None = None,
     ) -> list[Conversation]:
         clauses: list[str] = []
         params: list[str | int] = []
-        if organization_id:
+        if organization_ids:
+            ids = [item for item in organization_ids if item]
+            if not ids:
+                return []
+            placeholders = ", ".join("?" for _ in ids)
+            clauses.append(f"organization_id IN ({placeholders})")
+            params.extend(ids)
+        elif organization_id:
             clauses.append("organization_id = ?")
             params.append(organization_id)
         elif user_id:
@@ -299,66 +310,75 @@ class ConversationStore:
         role: str,
         content: str,
         ui: str | None = None,
-    ) -> None:
+        author_id: str | None = None,
+    ) -> int:
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """
-                INSERT INTO conversation_messages (conversation_id, role, content, created_at, ui)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO conversation_messages (
+                    conversation_id, role, content, created_at, ui, author_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (conversation_id, role, content, now, ui),
+                (conversation_id, role, content, now, ui, author_id),
             )
+            message_id = int(cursor.lastrowid)
             conn.execute(
                 "UPDATE conversations SET updated_at = ? WHERE id = ?",
                 (now, conversation_id),
             )
+        return message_id
 
-    def delete_last_assistant_message(self, conversation_id: str) -> bool:
+    def delete_last_assistant_message(self, conversation_id: str) -> int | None:
         """Delete the latest message only when it is an assistant response."""
         with self._conn() as conn:
-            cursor = conn.execute(
+            row = conn.execute(
                 """
-                DELETE FROM conversation_messages
-                WHERE id = (
-                    SELECT id FROM conversation_messages
-                    WHERE conversation_id = ?
-                    ORDER BY id DESC
-                    LIMIT 1
-                )
-                AND role = 'assistant'
+                SELECT id, role FROM conversation_messages
+                WHERE conversation_id = ?
+                ORDER BY id DESC
+                LIMIT 1
                 """,
                 (conversation_id,),
+            ).fetchone()
+            if not row or row["role"] != "assistant":
+                return None
+            message_id = int(row["id"])
+            conn.execute(
+                "DELETE FROM conversation_messages WHERE id = ?",
+                (message_id,),
             )
-        return cursor.rowcount > 0
+        return message_id
 
     def list_messages(
         self,
         conversation_id: str,
         *,
         limit: int = SHORT_TERM_MESSAGE_LIMIT,
+        before: int | None = None,
+        after: int | None = None,
     ) -> list[ConversationMessage]:
+        clauses = ["conversation_id = ?"]
+        params: list[str | int] = [conversation_id]
+        if before is not None:
+            clauses.append("id < ?")
+            params.append(before)
+        if after is not None:
+            clauses.append("id > ?")
+            params.append(after)
+        params.append(limit)
         with self._conn() as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT * FROM conversation_messages
-                WHERE conversation_id = ?
+                WHERE {" AND ".join(clauses)}
                 ORDER BY id DESC
                 LIMIT ?
                 """,
-                (conversation_id, limit),
+                params,
             ).fetchall()
-        messages = [
-            ConversationMessage(
-                id=row["id"],
-                conversation_id=row["conversation_id"],
-                role=row["role"],
-                content=row["content"],
-                created_at=datetime.fromisoformat(row["created_at"]),
-                ui=row["ui"] if "ui" in row.keys() else None,
-            )
-            for row in reversed(rows)
-        ]
+        messages = [_message_from_row(row) for row in reversed(rows)]
         return messages
 
     def to_langchain_messages(self, conversation_id: str) -> list:
@@ -372,6 +392,19 @@ class ConversationStore:
             elif msg.role == "assistant":
                 result.append(AIMessage(content=msg.content))
         return result
+
+
+def _message_from_row(row: sqlite3.Row) -> ConversationMessage:
+    keys = row.keys()
+    return ConversationMessage(
+        id=row["id"],
+        conversation_id=row["conversation_id"],
+        role=row["role"],
+        content=row["content"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        ui=row["ui"] if "ui" in keys else None,
+        author_id=row["author_id"] if "author_id" in keys else None,
+    )
 
 
 def _conversation_from_row(row: sqlite3.Row) -> Conversation:

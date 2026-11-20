@@ -7,20 +7,22 @@ import json
 import uuid
 from typing import Any, AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import HumanMessage
 
 from api.deps import (
+    account_display_name,
     active_organization_id,
+    can_read_conversation,
     conv_store,
     mission_store,
-    owner_filter,
     register_mission_task,
+    sub_store,
     thread_config,
     user_from,
 )
-from api.sse import sse_line, sse_response
+from api.sse import replay_then_live, sse_line, sse_response
 from core.context.conversations.title import (
     fallback_conversation_title,
     paraphrase_conversation_title,
@@ -35,6 +37,44 @@ from core.runtime.runs.models import RunTrigger
 from pipelines.coordinator_board.graph import ensure_graph
 
 router = APIRouter()
+
+
+def _message_event(
+    *,
+    message_id: int,
+    role: str,
+    content: str,
+    author_id: str | None,
+    conversation_id: str,
+    created_at: str | None = None,
+) -> dict[str, Any]:
+    if role == "assistant":
+        author_name = "Cognilance"
+    else:
+        author_name = account_display_name(author_id) if author_id else None
+    event: dict[str, Any] = {
+        "event": "message",
+        "id": message_id,
+        "role": role,
+        "content": content,
+        "author_id": author_id,
+        "author_name": author_name,
+        "conversation_id": conversation_id,
+    }
+    if created_at:
+        event["created_at"] = created_at
+    return event
+
+
+async def _publish_turn(mission_id: str, conversation_id: str, event: dict[str, Any]) -> None:
+    """Send one event to the sender's mission stream and to every conversation listener."""
+    stamped = dict(event)
+    stamped["mission_id"] = mission_id
+    stamped["conversation_id"] = conversation_id
+    event_id = mission_store.append_event(mission_id, stamped)
+    stamped["_event_id"] = event_id
+    await event_bus.publish(mission_id, stamped)
+    await event_bus.publish(conversation_id, stamped)
 
 
 def _ui_items(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -57,8 +97,8 @@ async def chat_stream(request: Request) -> StreamingResponse:
         str(payload.get("conversation_id") or payload.get("thread_id") or "").strip()
         or str(uuid.uuid4())
     )
-    existing = conv_store.get_conversation(conversation_id, **owner_filter(user_id))
-    if existing is None and conv_store.get_conversation(conversation_id) is not None:
+    existing = conv_store.get_conversation(conversation_id)
+    if existing is not None and not can_read_conversation(user_id, existing):
         raise HTTPException(status_code=404, detail="Conversation not found")
     provisional_title = fallback_conversation_title(text)
     conv_store.ensure_conversation(
@@ -68,8 +108,19 @@ async def chat_stream(request: Request) -> StreamingResponse:
         organization_id=org_id,
     )
     regenerating = bool(payload.get("regenerate")) and existing is not None
+    removed_id: int | None = None
     if regenerating:
-        regenerating = conv_store.delete_last_assistant_message(conversation_id)
+        removed_id = conv_store.delete_last_assistant_message(conversation_id)
+        regenerating = removed_id is not None
+    if removed_id is not None:
+        await event_bus.publish(
+            conversation_id,
+            {
+                "event": "message_removed",
+                "id": removed_id,
+                "conversation_id": conversation_id,
+            },
+        )
     prior_history = conv_store.to_langchain_messages(conversation_id)
     if (
         regenerating
@@ -81,7 +132,19 @@ async def chat_stream(request: Request) -> StreamingResponse:
         # user turn, but omit it here so regeneration does not duplicate it.
         prior_history = prior_history[:-1]
     else:
-        conv_store.append_message(conversation_id, role="user", content=text)
+        message_id = conv_store.append_message(
+            conversation_id, role="user", content=text, author_id=user_id
+        )
+        await event_bus.publish(
+            conversation_id,
+            _message_event(
+                message_id=message_id,
+                role="user",
+                content=text,
+                author_id=user_id,
+                conversation_id=conversation_id,
+            ),
+        )
     if len(prior_history) == 0:
         conversation_title = await paraphrase_conversation_title(text)
         conv_store.touch_conversation(conversation_id, title=conversation_title)
@@ -125,14 +188,14 @@ async def chat_stream(request: Request) -> StreamingResponse:
                         for item in final_ui
                         if isinstance(item, dict) and item.get("name") != "text-card"
                     ]
-                    conv_store.append_message(
+                    message_id = conv_store.append_message(
                         conversation_id,
                         role="assistant",
                         content=str(final_text),
                         ui=json.dumps(rich_ui[-1]) if rich_ui else None,
                     )
-            mission_store.append_event(mission_id, event)
-            await event_bus.publish(mission_id, event)
+                    event = {**event, "message_id": message_id}
+            await _publish_turn(mission_id, conversation_id, event)
 
         try:
             async for _line in stream_mission_graph(
@@ -171,16 +234,14 @@ async def chat_stream(request: Request) -> StreamingResponse:
                     mission_id, MissionStatus.CANCELLED, error="Aborted by user"
                 )
                 abort_evt = {"event": "session_aborted", "reason": "user"}
-                mission_store.append_event(mission_id, abort_evt)
-                await event_bus.publish(mission_id, abort_evt)
+                await _publish_turn(mission_id, conversation_id, abort_evt)
             raise
         except Exception as exc:
             current = mission_store.get_mission(mission_id)
             if current and current.status != MissionStatus.CANCELLED:
                 mission_store.update_status(mission_id, MissionStatus.FAILED, error=str(exc))
                 err_evt = {"event": "error", "message": str(exc)}
-                mission_store.append_event(mission_id, err_evt)
-                await event_bus.publish(mission_id, err_evt)
+                await _publish_turn(mission_id, conversation_id, err_evt)
         finally:
             await event_bus.close(mission_id)
             current_conversation_id.reset(conv_token)
@@ -225,6 +286,54 @@ async def chat_stream(request: Request) -> StreamingResponse:
     return sse_response(
         stream(), extra_headers={"X-Session-Id": mission_id, "X-Mission-Id": mission_id}
     )
+
+
+@router.get("/chat/stream")
+async def chat_stream_subscribe(
+    request: Request,
+    conversation_id: str = Query(..., min_length=1),
+    after: int = Query(default=0),
+    after_notification: int = Query(default=0),
+) -> StreamingResponse:
+    user_id = user_from(request)
+    conversation = conv_store.get_conversation(conversation_id)
+    if conversation is None or not can_read_conversation(user_id, conversation):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    # Attach before the replay so a message saved while we read still arrives live.
+    queue = event_bus.attach(conversation_id)
+
+    async def live() -> AsyncIterator[dict[str, Any]]:
+        async for event in event_bus.drain(queue):
+            yield event
+
+    async def stream() -> AsyncIterator[str]:
+        try:
+            replay: list[dict[str, Any]] = []
+            for message in conv_store.list_messages(conversation_id, limit=200, after=after):
+                replay.append(
+                    _message_event(
+                        message_id=message.id,
+                        role=message.role,
+                        content=message.content,
+                        author_id=message.author_id,
+                        conversation_id=conversation_id,
+                        created_at=message.created_at.isoformat(),
+                    )
+                )
+            for note in sub_store.list_notifications(
+                conversation_id, after_id=after_notification, limit=50
+            ):
+                replay.append({**note, "event": "notification"})
+            for mission in mission_store.list_missions_for_conversation(conversation_id, limit=20):
+                if mission.status not in {MissionStatus.RUNNING, MissionStatus.QUEUED}:
+                    continue
+                replay.extend(mission_store.list_events(mission.id))
+            async for line in replay_then_live(replay, live()):
+                yield line
+        finally:
+            event_bus.detach(conversation_id, queue)
+
+    return sse_response(stream())
 
 
 @router.post("/chat")

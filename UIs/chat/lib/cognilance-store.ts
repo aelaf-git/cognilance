@@ -2,9 +2,10 @@ export type CognilanceSnapshot = {
   id: string
   title: string
   revision: number
+  hasEarlier: boolean
 }
 
-const EMPTY: CognilanceSnapshot = { id: "", title: "", revision: 0 }
+const EMPTY: CognilanceSnapshot = { id: "", title: "", revision: 0, hasEarlier: false }
 const CONVERSATION_KEY = "cognilance_chat_conversation"
 
 let current: CognilanceSnapshot = EMPTY
@@ -45,12 +46,19 @@ export function setCognilanceConversation(id: string, title = "") {
     /* storage can be unavailable */
   }
   const nextTitle = title || (id && id === current.id ? current.title : "")
-  if (current.id === id && current.title === nextTitle) return
+  const sameConversation = current.id === id
+  if (sameConversation && current.title === nextTitle) return
   emit({
     id,
     title: nextTitle,
-    revision: current.revision + 1
+    revision: current.revision + 1,
+    hasEarlier: sameConversation ? current.hasEarlier : false
   })
+}
+
+export function setHasEarlier(hasEarlier: boolean) {
+  if (current.hasEarlier === hasEarlier) return
+  emit({ ...current, hasEarlier })
 }
 
 export function touchCognilance() {

@@ -1,9 +1,11 @@
 "use client"
 
 import { ChatbotUIContext } from "@/context/context"
+import { watchSharedConversation, stopSharedConversation } from "@/lib/coordinator-chat"
 import {
   cognilanceJson,
   fetchDocxDocument,
+  MESSAGE_PAGE,
   toChatMessages,
   withActiveDocument
 } from "@/lib/cognilance-client"
@@ -13,6 +15,7 @@ import {
   getCognilanceSnapshot,
   getConversationId,
   setCognilanceConversation,
+  setHasEarlier,
   subscribeCognilance
 } from "@/lib/cognilance-store"
 import { cn } from "@/lib/utils"
@@ -27,7 +30,7 @@ import {
 import { useTheme } from "next-themes"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { FC, FormEvent, useContext, useEffect, useState, useSyncExternalStore } from "react"
+import { FC, FormEvent, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react"
 
 type ConversationItem = {
   id: string
@@ -153,9 +156,18 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
     setChatMessages,
     setUserInput,
     chatMessages,
+    isGenerating,
     setActiveDocument,
     setDocumentPaneOpen
   } = useContext(ChatbotUIContext)
+  const generatingRef = useRef(isGenerating)
+  generatingRef.current = isGenerating
+  const shareMessages = (
+    conversationId: string,
+    messages: Parameters<typeof watchSharedConversation>[1]
+  ) => {
+    watchSharedConversation(conversationId, messages, setChatMessages, () => generatingRef.current)
+  }
 
   const showSavedDocument = async (
     messages: ReturnType<typeof toChatMessages>,
@@ -175,6 +187,10 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
   }, [])
 
   useEffect(() => {
+    return () => stopSharedConversation()
+  }, [snapshot.id])
+
+  useEffect(() => {
     const id = snapshot.id
     if (!id || chatMessages.length > 0) return
     let cancelled = false
@@ -187,6 +203,8 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
         )
         if (cancelled) return
         setChatMessages(current => (current.length > 0 ? current : loaded))
+        setHasEarlier((payload.messages || []).length >= MESSAGE_PAGE)
+        shareMessages(id, loaded)
         if (payload.title) setCognilanceConversation(id, payload.title)
       })
       .catch(() => {})
@@ -316,6 +334,8 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
           payload.active_docx
         )
       )
+      setHasEarlier((payload.messages || []).length >= MESSAGE_PAGE)
+      shareMessages(item.id, toChatMessages(payload.messages || [], item.id))
       if (payload.title) setCognilanceConversation(item.id, payload.title)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't open that conversation.")

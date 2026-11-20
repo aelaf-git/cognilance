@@ -1,3 +1,4 @@
+import { toChatMessages } from "@/lib/cognilance-client"
 import {
   clearOrchestratorConversation,
   getConversationId,
@@ -5,6 +6,7 @@ import {
   touchCognilance
 } from "@/lib/cognilance-store"
 import { DocxDocument, parseDocumentEvent } from "@/lib/docx-document"
+import { ChatMessage, LLMID } from "@/types"
 
 const ANSWER_EVENTS = new Set(["direct_reply", "answer_done", "final"])
 const THINKING_PLACEHOLDER = "Working through the request."
@@ -590,4 +592,257 @@ export async function streamOrchestratorReply(
   if (!answer) {
     throw new Error("Cognilance returned an empty reply.")
   }
+}
+
+const LIVE_PREFIX = "live-"
+let watchController: AbortController | null = null
+
+function serverMessageId(id: string): number {
+  return /^\d+$/.test(id) ? Number(id) : 0
+}
+
+export function latestServerMessageId(messages: ChatMessage[]): number {
+  return messages.reduce((max, item) => Math.max(max, serverMessageId(item.message.id)), 0)
+}
+
+function noticeKey(conversationId: string) {
+  return `cognilance_notice:${conversationId}`
+}
+
+export function notificationCursor(conversationId: string): number {
+  try {
+    const value = Number(sessionStorage.getItem(noticeKey(conversationId)))
+    return Number.isInteger(value) && value > 0 ? value : 0
+  } catch {
+    return 0
+  }
+}
+
+export function rememberNotificationCursor(conversationId: string, id: number) {
+  try {
+    sessionStorage.setItem(noticeKey(conversationId), String(id))
+  } catch {
+    /* storage can be unavailable */
+  }
+}
+
+function liveAssistantId(event: Record<string, unknown>): string {
+  return `${LIVE_PREFIX}${String(event.mission_id || "turn")}`
+}
+
+export function applySharedEvent(
+  messages: ChatMessage[],
+  event: Record<string, unknown>,
+  isGenerating: boolean,
+  steps: ActivityStep[],
+  conversationId: string
+): ChatMessage[] {
+  const name = String(event.event || "")
+  if (name === "notification" || name === "session_created" || name === "done") {
+    return messages
+  }
+  if (name === "message_removed") {
+    if (isGenerating) return messages
+    const id = String(event.id ?? "")
+    return messages.filter(item => item.message.id !== id)
+  }
+  if (name === "message") {
+    const id = String(event.id ?? "")
+    if (!id || messages.some(item => item.message.id === id)) return messages
+    const role = String(event.role || "user")
+    if (isGenerating && role !== "user") return messages
+    if (role === "user") {
+      const optimistic = [...messages]
+        .reverse()
+        .find(
+          item =>
+            item.message.role === "user" &&
+            !serverMessageId(item.message.id) &&
+            item.message.content === String(event.content || "")
+        )
+      if (optimistic) {
+        return messages.map(item =>
+          item.message.id === optimistic.message.id
+            ? {
+                ...item,
+                authorName: event.author_name
+                  ? String(event.author_name)
+                  : item.authorName,
+                message: {
+                  ...item.message,
+                  id,
+                  user_id: event.author_id
+                    ? String(event.author_id)
+                    : item.message.user_id
+                }
+              }
+            : item
+        )
+      }
+    }
+    const [added] = toChatMessages(
+      [
+        {
+          id,
+          role,
+          content: String(event.content || ""),
+          created_at: String(event.created_at || new Date().toISOString()),
+          author_id: event.author_id ? String(event.author_id) : null,
+          author_name: event.author_name ? String(event.author_name) : null
+        }
+      ],
+      conversationId
+    )
+    const sequence =
+      messages.reduce((max, item) => Math.max(max, item.message.sequence_number), -1) +
+      1
+    return [
+      ...messages,
+      { ...added, message: { ...added.message, sequence_number: sequence } }
+    ]
+  }
+
+  if (isGenerating) return messages
+
+  const placeholderId = liveAssistantId(event)
+  const existing = messages.find(
+    item => item.message.id === placeholderId || item.message.id === String(event.message_id || "")
+  )
+  let content = existing?.message.content || ""
+  if (name === "answer" && typeof event.delta === "string") content += event.delta
+  if (ANSWER_EVENTS.has(name) && typeof event.text === "string" && event.text) {
+    content = event.text
+  }
+  if (name === "error" && typeof event.message === "string" && event.message) {
+    content = event.message
+  }
+  const snapshot = name === "document" ? parseDocumentEvent(event) : null
+  const nextId = event.message_id ? String(event.message_id) : existing?.message.id || placeholderId
+  const sequence =
+    existing?.message.sequence_number ??
+    messages.reduce((max, item) => Math.max(max, item.message.sequence_number), -1) + 1
+  const bubble: ChatMessage = {
+    message: {
+      chat_id: conversationId,
+      assistant_id: null,
+      content,
+      created_at: existing?.message.created_at || new Date().toISOString(),
+      id: nextId,
+      image_paths: [],
+      model: "gpt-4-turbo-preview" as LLMID,
+      role: "assistant",
+      sequence_number: sequence,
+      updated_at: new Date().toISOString(),
+      user_id: ""
+    },
+    fileItems: [],
+    activity: steps.map(step => ({ ...step })),
+    document: snapshot || existing?.document
+  }
+  if (!existing) return [...messages, bubble]
+  return messages.map(item => (item.message.id === existing.message.id ? bubble : item))
+}
+
+function parseSseBlock(chunk: string): Record<string, unknown> | null {
+  const dataLine = chunk
+    .split("\n")
+    .filter(line => line.startsWith("data:"))
+    .map(line => line.slice(5).trim())
+    .join("")
+  if (!dataLine) return null
+  try {
+    return JSON.parse(dataLine) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+export function stopSharedConversation() {
+  watchController?.abort()
+  watchController = null
+}
+
+export function watchSharedConversation(
+  conversationId: string,
+  messages: ChatMessage[],
+  setMessages: (update: (current: ChatMessage[]) => ChatMessage[]) => void,
+  isGenerating: () => boolean
+) {
+  stopSharedConversation()
+  const controller = new AbortController()
+  watchController = controller
+  const cursors = {
+    after: latestServerMessageId(messages),
+    afterNotification: notificationCursor(conversationId)
+  }
+  let activity = createActivityState()
+  let missionId = ""
+
+  void (async () => {
+    while (!controller.signal.aborted) {
+      try {
+        const response = await fetch(
+          `/api/chat/cognilance?conversation_id=${encodeURIComponent(conversationId)}&after=${cursors.after}&after_notification=${cursors.afterNotification}`,
+          { signal: controller.signal, headers: { Accept: "text/event-stream" } }
+        )
+        if (response.status === 404 || response.status === 401) return
+        if (!response.ok || !response.body) throw new Error("Cognilance stream failed.")
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+        while (!controller.signal.aborted) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const chunks = buffer.split("\n\n")
+          buffer = chunks.pop() ?? ""
+          for (const chunk of chunks) {
+            const event = parseSseBlock(chunk)
+            if (!event) continue
+            const name = String(event.event || "")
+            if (name === "notification") {
+              const id = Number(event.id)
+              if (Number.isInteger(id) && id > cursors.afterNotification) {
+                cursors.afterNotification = id
+                rememberNotificationCursor(conversationId, id)
+              }
+              continue
+            }
+            if (name === "message") {
+              const id = Number(event.id)
+              if (Number.isInteger(id) && id > cursors.after) cursors.after = id
+            }
+            const nextMission = String(event.mission_id || "")
+            if (
+              nextMission &&
+              nextMission !== missionId &&
+              name !== "message" &&
+              name !== "message_removed"
+            ) {
+              missionId = nextMission
+              activity = createActivityState()
+            }
+            if (!isGenerating() && name !== "message" && name !== "message_removed") {
+              activity = reduceActivityEvent(activity, event)
+              if (ANSWER_EVENTS.has(name)) activity = settleActivity(activity)
+            }
+            setMessages(current =>
+              applySharedEvent(
+                current,
+                event,
+                isGenerating(),
+                activity.steps,
+                conversationId
+              )
+            )
+          }
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return
+        if (error instanceof Error && error.name === "AbortError") return
+      }
+      if (controller.signal.aborted) return
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+  })()
 }

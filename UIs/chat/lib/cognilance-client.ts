@@ -1,6 +1,8 @@
 import { DocxDocument, parseDocumentEvent } from "@/lib/docx-document"
 import { ChatMessage, LLMID } from "@/types"
 
+export const MESSAGE_PAGE = 200
+
 export async function cognilanceJson(path: string, init?: RequestInit) {
   const response = await fetch(`/api/cognilance/${path}`, init)
   const payload = await response.json().catch(() => ({}))
@@ -20,6 +22,8 @@ export function toChatMessages(
     role: string
     content: string
     created_at: string
+    author_id?: string | null
+    author_name?: string | null
   }[],
   conversationId: string
 ): ChatMessage[] {
@@ -35,9 +39,11 @@ export function toChatMessages(
       role: item.role === "assistant" ? "assistant" : "user",
       sequence_number: index,
       updated_at: item.created_at,
-      user_id: ""
+      user_id: item.author_id || ""
     },
-    fileItems: []
+    fileItems: [],
+    authorName:
+      item.role === "assistant" ? undefined : item.author_name || undefined
   }))
 }
 

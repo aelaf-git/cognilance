@@ -374,16 +374,17 @@ class MissionStore:
                 ),
             )
 
-    def append_event(self, mission_id: str, payload: dict[str, Any]) -> None:
+    def append_event(self, mission_id: str, payload: dict[str, Any]) -> int:
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO mission_events (mission_id, payload, created_at)
                 VALUES (?, ?, ?)
                 """,
                 (mission_id, json.dumps(payload), now),
             )
+            return int(cursor.lastrowid)
 
     def list_events(self, mission_id: str, *, after_id: int = 0) -> list[dict[str, Any]]:
         with self._conn() as conn:
