@@ -70,6 +70,15 @@ class RunStore:
                     ON runs(organization_id)
                     """
                 )
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(runs)")}
+            if "client_message_id" not in cols:
+                conn.execute("ALTER TABLE runs ADD COLUMN client_message_id TEXT")
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_runs_client_message
+                ON runs(conversation_id, client_message_id)
+                """
+            )
 
     def create_run(
         self,
@@ -80,6 +89,7 @@ class RunStore:
         conversation_id: str | None = None,
         user_id: str | None = None,
         organization_id: str | None = None,
+        client_message_id: str | None = None,
         mission_id: str | None = None,
         run_id: str | None = None,
     ) -> Run:
@@ -94,6 +104,7 @@ class RunStore:
             conversation_id=conversation_id or thread_id,
             user_id=user_id,
             organization_id=organization_id,
+            client_message_id=client_message_id,
             mission_id=mission_id or rid,
             created_at=now,
             updated_at=now,
@@ -103,9 +114,9 @@ class RunStore:
                 """
                 INSERT INTO runs (
                     id, instruction, status, trigger, thread_id, conversation_id,
-                    user_id, organization_id, mission_id, created_at, updated_at,
-                    result_text, result_ui, error, pending_approval
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)
+                    user_id, organization_id, client_message_id, mission_id,
+                    created_at, updated_at, result_text, result_ui, error, pending_approval
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)
                 """,
                 (
                     run.id,
@@ -116,6 +127,7 @@ class RunStore:
                     run.conversation_id,
                     run.user_id,
                     run.organization_id,
+                    run.client_message_id,
                     run.mission_id,
                     run.created_at.isoformat(),
                     run.updated_at.isoformat(),
@@ -155,6 +167,57 @@ class RunStore:
                 (organization_id, limit),
             ).fetchall()
         return [self._row_to_run(row) for row in rows]
+
+    def requeue_running(self) -> list[Run]:
+        """Put runs left in running back to queued. Leave waiting_approval rows alone."""
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM runs WHERE status = ?",
+                (RunStatus.RUNNING.value,),
+            ).fetchall()
+            now = datetime.now(timezone.utc).isoformat()
+            conn.execute(
+                """
+                UPDATE runs SET status = ?, updated_at = ?
+                WHERE status = ?
+                """,
+                (RunStatus.QUEUED.value, now, RunStatus.RUNNING.value),
+            )
+        requeued: list[Run] = []
+        for row in rows:
+            run = self._row_to_run(row)
+            run.status = RunStatus.QUEUED
+            requeued.append(run)
+        return requeued
+
+    def list_by_status(self, status: RunStatus) -> list[Run]:
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM runs WHERE status = ?",
+                (status.value,),
+            ).fetchall()
+        return [self._row_to_run(row) for row in rows]
+
+    def find_inflight_client_message(
+        self, conversation_id: str, client_message_id: str
+    ) -> Run | None:
+        if not conversation_id or not client_message_id:
+            return None
+        self.init_db()
+        with self._conn() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM runs
+                WHERE conversation_id = ? AND client_message_id = ?
+                  AND status IN ('queued', 'running', 'waiting_approval')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (conversation_id, client_message_id),
+            ).fetchone()
+        return self._row_to_run(row) if row else None
 
     def update_status(
         self,
@@ -268,6 +331,7 @@ class RunStore:
             conversation_id=row["conversation_id"],
             user_id=row["user_id"],
             organization_id=row["organization_id"] if "organization_id" in row.keys() else None,
+            client_message_id=row["client_message_id"] if "client_message_id" in row.keys() else None,
             mission_id=row["mission_id"],
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),

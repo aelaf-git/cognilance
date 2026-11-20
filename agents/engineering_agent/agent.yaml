@@ -1,0 +1,17 @@
+id: engineering_agent
+name: Engineering Agent
+model: default
+description: "Reads commits, issues, and pull requests from a connected GitHub account, including a matching work task."
+tools:
+  - github.list_commits
+  - github.list_pull_requests
+  - github.list_issues
+  - github.get_repo
+  - projects.search_tasks
+  - thinking
+skills:
+  - github_summary
+  - matching_tasks
+prompts:
+  system: prompts/system.md
+schema: schema.py

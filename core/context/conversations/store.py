@@ -351,6 +351,14 @@ class ConversationStore:
             )
         return message_id
 
+    def get_message(self, message_id: int) -> ConversationMessage | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM conversation_messages WHERE id = ?",
+                (int(message_id),),
+            ).fetchone()
+        return _message_from_row(row) if row else None
+
     def list_messages(
         self,
         conversation_id: str,

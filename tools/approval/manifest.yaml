@@ -1,0 +1,7 @@
+id: approval
+name: Approval
+description: Pause a run so a person can approve the next step.
+actions:
+  request:
+    risk: read
+    description: Pause the run. This does not write an organization row.

@@ -29,6 +29,8 @@ def enrich_session_dict(
 
     if listener_active:
         data["display_status"] = "processing"
+    elif sub and sub.status == SubscriptionStatus.PAUSED:
+        data["display_status"] = "paused"
     elif mission.session_type == SessionType.ONCE and mission.status == MissionStatus.COMPLETED:
         data["display_status"] = "done"
     elif mission.status == MissionStatus.CANCELLED:
@@ -75,6 +77,22 @@ def stop_listener_for_mission(
         missions.append_event(mission_id, {"event": "session_aborted"})
         return True
     return stopped
+
+
+def pause_listener_for_mission(
+    mission_id: str,
+    *,
+    sub_store: SubscriptionStore | None = None,
+    mission_store: MissionStore | None = None,
+) -> bool:
+    """Pause a listener. The mission stays in place so Start can resume it."""
+    del mission_store
+    subs = sub_store or SubscriptionStore()
+    sub = subs.get_by_mission_id(mission_id)
+    if not sub or sub.status != SubscriptionStatus.ACTIVE:
+        return False
+    subs.set_status(sub.id, SubscriptionStatus.PAUSED)
+    return True
 
 
 def start_listener_for_mission(

@@ -37,6 +37,24 @@ class Membership:
 
 
 @dataclass
+class OrganizationNote:
+    id: str
+    organization_id: str
+    body: str
+    created_at: datetime
+
+
+@dataclass
+class OrganizationAlert:
+    id: str
+    organization_id: str
+    kind: str
+    summary: str
+    severity: str
+    created_at: datetime
+
+
+@dataclass
 class Invitation:
     id: str
     organization_id: str
@@ -93,8 +111,37 @@ class OrgStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_invitations_email
                     ON invitations(email);
+                CREATE TABLE IF NOT EXISTS organization_agent_settings (
+                    organization_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    extra_instruction TEXT,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (organization_id, agent_id)
+                );
+                CREATE TABLE IF NOT EXISTS organization_notes (
+                    id TEXT PRIMARY KEY,
+                    organization_id TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_organization_notes_org
+                    ON organization_notes(organization_id);
+                CREATE TABLE IF NOT EXISTS organization_alerts (
+                    id TEXT PRIMARY KEY,
+                    organization_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_organization_alerts_org
+                    ON organization_alerts(organization_id);
                 """
             )
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(organizations)")}
+            if "timezone" not in cols:
+                conn.execute("ALTER TABLE organizations ADD COLUMN timezone TEXT")
 
     def provision_personal(self, account) -> str:
         """Create one owner membership. A second call for the same account does nothing."""
@@ -156,6 +203,36 @@ class OrgStore:
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
+
+    def get_timezone(self, organization_id: str) -> str | None:
+        if not organization_id:
+            return None
+        self.init_db()
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT timezone FROM organizations WHERE id = ?",
+                (organization_id,),
+            ).fetchone()
+        if not row or not row["timezone"]:
+            return None
+        return str(row["timezone"])
+
+    def set_timezone(self, organization_id: str, timezone_name: str) -> None:
+        if not organization_id or not timezone_name:
+            raise ValueError("Organization not found")
+        self.init_db()
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            updated = conn.execute(
+                """
+                UPDATE organizations
+                SET timezone = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (timezone_name, now, organization_id),
+            ).rowcount
+        if not updated:
+            raise ValueError("Organization not found")
 
     def membership_for(self, account_id: str, organization_id: str) -> Membership | None:
         if not account_id or not organization_id:
@@ -324,7 +401,7 @@ class OrgStore:
         return _membership_from_row(saved) if saved else None
 
     def delete_organization(self, organization_id: str) -> None:
-        """Remove the organization, its memberships, and its invitations."""
+        """Remove the organization, its memberships, invitations, and agent settings."""
         self.init_db()
         with self._conn() as conn:
             conn.execute(
@@ -333,6 +410,14 @@ class OrgStore:
             )
             conn.execute(
                 "DELETE FROM memberships WHERE organization_id = ?",
+                (organization_id,),
+            )
+            conn.execute(
+                "DELETE FROM organization_notes WHERE organization_id = ?",
+                (organization_id,),
+            )
+            conn.execute(
+                "DELETE FROM organization_alerts WHERE organization_id = ?",
                 (organization_id,),
             )
             conn.execute(
@@ -370,6 +455,197 @@ class OrgStore:
                     """,
                     (organization_id, account_id),
                 )
+
+    def set_agent_setting(
+        self,
+        organization_id: str,
+        agent_id: str,
+        *,
+        enabled: bool = True,
+        extra_instruction: str | None = None,
+    ) -> None:
+        """Store one organization's agent flag. Unknown agent ids are ignored."""
+        from agents.loader import get_role
+
+        pack = get_role(agent_id)
+        if pack is None or not organization_id:
+            return
+        instruction = str(extra_instruction or "").strip() or None
+        now = datetime.now(timezone.utc).isoformat()
+        self.init_db()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO organization_agent_settings (
+                    organization_id, agent_id, enabled, extra_instruction, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(organization_id, agent_id) DO UPDATE SET
+                    enabled = excluded.enabled,
+                    extra_instruction = excluded.extra_instruction,
+                    updated_at = excluded.updated_at
+                """,
+                (organization_id, pack.id, 1 if enabled else 0, instruction, now),
+            )
+
+    def disabled_agent_ids(self, organization_id: str) -> set[str]:
+        if not organization_id:
+            return set()
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT agent_id FROM organization_agent_settings
+                WHERE organization_id = ? AND enabled = 0
+                """,
+                (organization_id,),
+            ).fetchall()
+        from agents.loader import get_role
+
+        return {str(row["agent_id"]) for row in rows if get_role(str(row["agent_id"]))}
+
+    def extra_instructions(self, organization_id: str) -> dict[str, str]:
+        if not organization_id:
+            return {}
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT agent_id, extra_instruction FROM organization_agent_settings
+                WHERE organization_id = ? AND extra_instruction IS NOT NULL
+                """,
+                (organization_id,),
+            ).fetchall()
+        from agents.loader import get_role
+
+        extras: dict[str, str] = {}
+        for row in rows:
+            agent_id = str(row["agent_id"])
+            text = str(row["extra_instruction"] or "").strip()
+            if text and get_role(agent_id):
+                extras[agent_id] = text
+        return extras
+
+    def add_note(self, organization_id: str, body: str) -> OrganizationNote:
+        cleaned = str(body or "").strip()
+        if not organization_id or not cleaned:
+            raise ValueError("A note needs an organization and a body")
+        note_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        self.init_db()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO organization_notes (id, organization_id, body, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (note_id, organization_id, cleaned, now),
+            )
+        return OrganizationNote(
+            id=note_id,
+            organization_id=organization_id,
+            body=cleaned,
+            created_at=datetime.fromisoformat(now),
+        )
+
+    def list_notes(self, organization_id: str, *, limit: int = 3) -> list[OrganizationNote]:
+        if not organization_id:
+            return []
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM organization_notes
+                WHERE organization_id = ?
+                ORDER BY created_at DESC, rowid DESC
+                LIMIT ?
+                """,
+                (organization_id, max(0, int(limit))),
+            ).fetchall()
+        return [_note_from_row(row) for row in rows]
+
+    def get_note(self, note_id: str, *, organization_id: str) -> OrganizationNote | None:
+        if not organization_id or not note_id:
+            return None
+        self.init_db()
+        with self._conn() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM organization_notes
+                WHERE id = ? AND organization_id = ?
+                """,
+                (note_id, organization_id),
+            ).fetchone()
+        return _note_from_row(row) if row else None
+
+
+    def add_alert(
+        self,
+        organization_id: str,
+        summary: str,
+        *,
+        kind: str = "info",
+        severity: str = "info",
+    ) -> OrganizationAlert:
+        cleaned = str(summary or "").strip()
+        if not organization_id or not cleaned:
+            raise ValueError("An alert needs an organization and a summary")
+        alert_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        saved_kind = str(kind or "info").strip() or "info"
+        saved_severity = str(severity or "info").strip().lower() or "info"
+        self.init_db()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO organization_alerts (
+                    id, organization_id, kind, summary, severity, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (alert_id, organization_id, saved_kind, cleaned, saved_severity, now),
+            )
+        return OrganizationAlert(
+            id=alert_id,
+            organization_id=organization_id,
+            kind=saved_kind,
+            summary=cleaned,
+            severity=saved_severity,
+            created_at=datetime.fromisoformat(now),
+        )
+
+    def list_alerts(self, organization_id: str) -> list[OrganizationAlert]:
+        if not organization_id:
+            return []
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM organization_alerts
+                WHERE organization_id = ?
+                ORDER BY created_at ASC
+                """,
+                (organization_id,),
+            ).fetchall()
+        return [_alert_from_row(row) for row in rows]
+
+
+def _alert_from_row(row: sqlite3.Row) -> OrganizationAlert:
+    return OrganizationAlert(
+        id=row["id"],
+        organization_id=row["organization_id"],
+        kind=row["kind"],
+        summary=row["summary"],
+        severity=row["severity"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
+
+
+def _note_from_row(row: sqlite3.Row) -> OrganizationNote:
+    return OrganizationNote(
+        id=row["id"],
+        organization_id=row["organization_id"],
+        body=row["body"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
 
 
 def _membership_from_row(row: sqlite3.Row) -> Membership:

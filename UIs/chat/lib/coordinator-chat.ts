@@ -469,7 +469,8 @@ async function openChatStream(
   regenerate: boolean,
   blockId: string,
   conversationId: string,
-  allowStaleRetry: boolean
+  allowStaleRetry: boolean,
+  clientMessageId = ""
 ): Promise<Response> {
   const response = await fetch("/api/chat/cognilance", {
     method: "POST",
@@ -478,7 +479,8 @@ async function openChatStream(
     body: JSON.stringify({
       text: messageForSelection(text, blockId),
       conversation_id: conversationId || undefined,
-      regenerate: conversationId ? regenerate : false
+      regenerate: conversationId ? regenerate : false,
+      client_message_id: clientMessageId || undefined
     })
   })
 
@@ -503,7 +505,7 @@ async function openChatStream(
 
   if (allowStaleRetry && missingConversation) {
     clearOrchestratorConversation()
-    return openChatStream(text, signal, false, blockId, "", false)
+    return openChatStream(text, signal, false, blockId, "", false, clientMessageId)
   }
 
   throw new Error(detail || "Cognilance didn't accept that message.")
@@ -516,7 +518,8 @@ export async function streamOrchestratorReply(
   onActivity?: (steps: ActivityStep[]) => void,
   onDocument?: (document: DocxDocument) => void,
   regenerate = false,
-  blockId = ""
+  blockId = "",
+  clientMessageId = ""
 ): Promise<void> {
   const response = await openChatStream(
     text,
@@ -524,7 +527,8 @@ export async function streamOrchestratorReply(
     regenerate,
     blockId,
     getConversationId(),
-    true
+    true,
+    clientMessageId
   )
 
   let activity = createActivityState()

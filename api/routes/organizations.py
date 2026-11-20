@@ -140,7 +140,35 @@ async def list_organization_integrations(
 ) -> JSONResponse:
     account_id = deps.user_from(request)
     deps.require_membership(account_id, organization_id, "member")
-    return JSONResponse({"integrations": deps.oauth_service.list_for_user(account_id)})
+    from api.routes.integrations import mark_github_manage
+
+    items = deps.oauth_service.list_for_user(account_id, organization_id=organization_id)
+    return JSONResponse(
+        {"integrations": mark_github_manage(account_id, organization_id, items)}
+    )
+
+
+@router.post("/organizations/{organization_id}/schedules")
+async def create_organization_schedule(
+    organization_id: str, request: Request
+) -> JSONResponse:
+    account_id = deps.user_from(request)
+    deps.require_membership(account_id, organization_id, "admin")
+    payload: dict[str, Any] = await request.json()
+    from core.context.subscriptions.schedule import create_weekly_schedule
+
+    try:
+        created = create_weekly_schedule(
+            organization_id=organization_id,
+            user_id=account_id,
+            payload=payload,
+            org_store=deps.org_store,
+            sub_store=deps.sub_store,
+            mission_store=deps.mission_store,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse(created)
 
 
 @router.delete("/organizations/{organization_id}")

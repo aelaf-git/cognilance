@@ -6,35 +6,67 @@ import json
 import uuid
 from typing import Any
 
-from langchain_core.messages import BaseMessage
-
 from agents.coordinator.schema import CoordinatorPlan, PlannedTask
-from agents.loader import SPECIALISTS, coordinator, normalize_role_id, specialist_ids
+from agents.loader import SPECIALISTS, RolePack, coordinator, normalize_role_id, specialist_ids
 from core.context.request import current_mission_id
-from core.models.gateway import get_llm, get_structured_llm, last_user_text, to_chat_messages
+from core.models.gateway import get_llm, get_structured_llm, last_user_text
 from core.runtime.board.store import BoardStore
 from core.runtime.runs.store import RunStore
+from pipelines.coordinator_board.org_context import organization_context
 from pipelines.coordinator_board.verify import format_clarification_message
 from pipelines.shared.state import BoardTaskState, State
 from pipelines.shared.streaming import emit, emit_status, reveal_text
-
-MAX_PLAN_THREAD_MESSAGES = 8
-
 
 def _run_id(state: State) -> str:
     return str(state.get("run_id") or current_mission_id.get() or "").strip()
 
 
-def _thread_snippet(messages: list[BaseMessage] | None, *, limit: int = MAX_PLAN_THREAD_MESSAGES) -> str:
-    rows = to_chat_messages(messages or [])[-limit:]
-    if not rows:
-        return ""
-    return "\n".join(f"{r['role']}: {r['content']}" for r in rows)
+def _organization_id(state: State) -> str | None:
+    run_id = _run_id(state)
+    if not run_id:
+        return None
+    from core.runtime.missions.store import MissionStore
+
+    mission = MissionStore().get_mission(run_id)
+    if mission and mission.organization_id:
+        return mission.organization_id
+    run = RunStore().get_run(run_id)
+    if run and run.organization_id:
+        return run.organization_id
+    return None
 
 
-def _plan_prompt(query: str, *, thread: str = "") -> str:
+def _roster(organization_id: str | None) -> list[tuple[RolePack, str]]:
+    disabled: set[str] = set()
+    extras: dict[str, str] = {}
+    if organization_id:
+        from core.context.orgs.store import OrgStore
+
+        store = OrgStore()
+        disabled = store.disabled_agent_ids(organization_id)
+        extras = store.extra_instructions(organization_id)
+    return [
+        (role, extras.get(role.id, ""))
+        for role in SPECIALISTS
+        if role.id not in disabled
+    ]
+
+
+def _plan_prompt(
+    query: str,
+    *,
+    thread: str = "",
+    roles: list[tuple[RolePack, str]] | None = None,
+) -> str:
     pack = coordinator()
-    roles_blurb = "\n".join(f"- {r.id}: {r.description or r.instructions}" for r in SPECIALISTS)
+    chosen = roles if roles is not None else [(role, "") for role in SPECIALISTS]
+    lines = []
+    for role, extra in chosen:
+        text = role.description or role.instructions
+        if extra.strip():
+            text = f"{text} {extra.strip()}"
+        lines.append(f"- {role.id}: {text}")
+    roles_blurb = "\n".join(lines)
     header = pack.prompts.get("plan") or pack.instructions
     parts = [
         header.strip(),
@@ -49,9 +81,13 @@ def _plan_prompt(query: str, *, thread: str = "") -> str:
     return "\n".join(parts) + "\n"
 
 
-def _validate_assignees(plan: CoordinatorPlan) -> CoordinatorPlan:
-    """Normalise legacy ids and drop tasks for unknown specialists."""
-    valid = set(specialist_ids())
+def _validate_assignees(
+    plan: CoordinatorPlan,
+    *,
+    allowed: set[str] | None = None,
+) -> CoordinatorPlan:
+    """Normalise legacy ids and drop tasks for unknown or disabled specialists."""
+    valid = set(specialist_ids()) if allowed is None else allowed
     kept: list[PlannedTask] = []
     for task in plan.tasks:
         role = normalize_role_id(task.assignee_role)
@@ -85,13 +121,16 @@ async def coordinator_plan(state: State) -> dict[str, Any]:
     emit_status("Coordinator planning…")
     messages = state.get("messages") or []
     query = last_user_text(messages)
-    thread = _thread_snippet(messages)
 
+    roster = _roster(_organization_id(state))
+    allowed = {role.id for role, _extra in roster}
     plan = _plan_from_preset(state)
     if plan is None:
         llm = get_structured_llm(CoordinatorPlan, temperature=0.1)
         try:
-            plan = await llm.ainvoke(_plan_prompt(query, thread=thread))
+            plan = await llm.ainvoke(
+                _plan_prompt(query, thread=organization_context(state, query), roles=roster)
+            )
         except Exception as exc:
             emit("plan", text=f"Planner fallback: {exc}")
             plan = CoordinatorPlan(
@@ -99,7 +138,7 @@ async def coordinator_plan(state: State) -> dict[str, Any]:
                 tasks=[],
                 suggested_ui="text",
             )
-    plan = _validate_assignees(plan)
+    plan = _validate_assignees(plan, allowed=allowed)
 
     if not plan.tasks:
         plan = CoordinatorPlan(

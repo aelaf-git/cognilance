@@ -43,6 +43,70 @@ def _thread_config(thread_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": thread_id}}
 
 
+def _interrupt_payload(snapshot: Any) -> dict[str, Any] | None:
+    interrupts = getattr(snapshot, "interrupts", None) or ()
+    if not interrupts:
+        return None
+    value = getattr(interrupts[0], "value", None)
+    if isinstance(value, dict):
+        return value
+    return {"value": value}
+
+
+def _is_interrupt_chunk(chunk: Any) -> bool:
+    return isinstance(chunk, dict) and "__interrupt__" in chunk and "messages" not in chunk
+
+
+async def _graph_input(
+    graph: Any,
+    config: dict[str, Any],
+    *,
+    fresh: dict[str, Any],
+    resume: dict[str, Any] | None,
+    use_checkpointer: bool,
+) -> Any:
+    """Continue a checkpoint, resume an approval, or start from the new messages."""
+    if resume is not None:
+        from langgraph.types import Command
+
+        return Command(resume=resume)
+    if not use_checkpointer:
+        return fresh
+    try:
+        snapshot = await graph.aget_state(config)
+    except Exception:
+        return fresh
+    if getattr(snapshot, "next", None) and not getattr(snapshot, "interrupts", None):
+        return None
+    return fresh
+
+
+def recover_interrupted_runs() -> tuple[int, int]:
+    """Requeue runs left running, and keep approval pauses where they are.
+
+    Missions tied to a requeued run go back to queued. Missions still running
+    with no run are marked failed by the existing stale recovery. A run in
+    waiting_approval is not changed.
+    """
+    runs = RunStore()
+    missions = MissionStore()
+    runs.init_db()
+    missions.init_db()
+    requeued = runs.requeue_running()
+    for run in requeued:
+        mission_id = run.mission_id or run.id
+        mission = missions.get_mission(mission_id)
+        if mission and mission.status == MissionStatus.RUNNING:
+            missions.update_status(mission_id, MissionStatus.QUEUED)
+    for run in runs.list_by_status(RunStatus.WAITING_APPROVAL):
+        mission_id = run.mission_id or run.id
+        mission = missions.get_mission(mission_id)
+        if mission and mission.status == MissionStatus.RUNNING:
+            missions.update_status(mission_id, MissionStatus.WAITING_APPROVAL)
+    failed = missions.recover_stale_running()
+    return len(requeued), failed
+
+
 async def stream_mission_graph(
     instruction: str,
     thread_id: str,
@@ -53,7 +117,9 @@ async def stream_mission_graph(
     run_id: str | None = None,
     user_id: str | None = None,
     organization_id: str | None = None,
+    client_message_id: str | None = None,
     trigger: RunTrigger = RunTrigger.MESSAGE,
+    resume: dict[str, Any] | None = None,
 ) -> AsyncIterator[str]:
     """Yield SSE lines while running the durable coordinator graph."""
     final: dict[str, Any] | None = None
@@ -79,16 +145,25 @@ async def stream_mission_graph(
             conversation_id=thread_id,
             user_id=user_id,
             organization_id=organization_id,
+            client_message_id=client_message_id,
             mission_id=rid,
             run_id=rid,
         )
     runs.update_status(rid, RunStatus.RUNNING)
     runs.append_step(rid, kind="node_entered", text="graph_start", data={"trigger": trigger.value})
 
+    paused: dict[str, Any] | None = None
     try:
         graph = await ensure_graph(with_checkpointer=use_checkpointer)
+        graph_input = await _graph_input(
+            graph,
+            config,
+            fresh={"messages": input_messages, "run_id": rid},
+            resume=resume,
+            use_checkpointer=use_checkpointer,
+        )
         async for mode, chunk in graph.astream(
-            {"messages": input_messages, "run_id": rid},
+            graph_input,
             config=config,
             stream_mode=["custom", "values"],
         ):
@@ -98,22 +173,43 @@ async def stream_mission_graph(
                     if on_event:
                         await on_event(event)
                     yield f"data: {json.dumps(event)}\n\n"
-            elif mode == "values":
+            elif mode == "values" and not _is_interrupt_chunk(chunk):
                 final = chunk
+        if use_checkpointer:
+            try:
+                paused = _interrupt_payload(await graph.aget_state(config))
+            except Exception:
+                paused = None
     except Exception as exc:
-        runs.update_status(rid, RunStatus.FAILED, error=str(exc))
-        error_event = {"event": "error", "message": str(exc)}
-        if on_event:
-            await on_event(error_event)
-        yield f"data: {json.dumps(error_event)}\n\n"
-        return
+        from langgraph.errors import GraphInterrupt
 
-    if final and final.get("waiting_approval"):
+        if isinstance(exc, GraphInterrupt):
+            paused = {}
+            if exc.args and isinstance(exc.args[0], tuple) and exc.args[0]:
+                value = getattr(exc.args[0][0], "value", None)
+                paused = value if isinstance(value, dict) else {"value": value}
+        else:
+            runs.update_status(rid, RunStatus.FAILED, error=str(exc))
+            error_event = {"event": "error", "message": str(exc)}
+            if on_event:
+                await on_event(error_event)
+            yield f"data: {json.dumps(error_event)}\n\n"
+            return
+
+    if paused is not None:
+        runs.update_status(
+            rid,
+            RunStatus.WAITING_APPROVAL,
+            pending_approval=paused or None,
+        )
+        MissionStore().update_status(rid, MissionStatus.WAITING_APPROVAL)
+    elif final and final.get("waiting_approval"):
         runs.update_status(
             rid,
             RunStatus.WAITING_APPROVAL,
             pending_approval=final.get("pending_approval"),
         )
+        MissionStore().update_status(rid, MissionStatus.WAITING_APPROVAL)
     elif final:
         runs.update_status(
             rid,
@@ -127,7 +223,7 @@ async def stream_mission_graph(
             result_ui=_ui_items(final),
         )
 
-    if final and final.get("messages"):
+    if paused is None and final and final.get("messages"):
         message = final["messages"][-1]
         final_data = final.get("final_data") or {}
         doc_fields: dict[str, str] = {}
@@ -215,14 +311,16 @@ async def run_mission(
             trigger=trigger,
         ):
             pass
-        finalize_session_status(
-            store,
-            mission,
-            had_error=had_error,
-            error_message=error_message,
-            final_text=final_text,
-            final_ui=final_ui,
-        )
+        current = store.get_mission(mission_id) or mission
+        if current.status != MissionStatus.WAITING_APPROVAL:
+            finalize_session_status(
+                store,
+                current,
+                had_error=had_error,
+                error_message=error_message,
+                final_text=final_text,
+                final_ui=final_ui,
+            )
     except Exception as exc:
         store.update_status(mission_id, MissionStatus.FAILED, error=str(exc))
         await persist({"event": "error", "message": str(exc)})

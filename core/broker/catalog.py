@@ -107,10 +107,11 @@ INTEGRATIONS: dict[str, IntegrationSpec] = {
             "list_issues",
             "create_issue",
             "list_pull_requests",
+            "list_commits",
+            "get_repo",
             "read_file",
         ],
         "logo": "github",
-        "coming_soon": True,
     },
     "x": {
         "id": "x",
@@ -155,8 +156,18 @@ def get_integration(integration_id: str) -> IntegrationSpec | None:
     return INTEGRATIONS.get(integration_id)
 
 
+def github_configured() -> bool:
+    """GitHub stays coming soon until both OAuth credentials are in settings."""
+    from core.config import get_settings
+
+    settings = get_settings()
+    return bool(settings.github_client_id and settings.github_client_secret)
+
+
 def integration_for_api(spec: IntegrationSpec, *, connected: bool) -> dict[str, Any]:
     coming_soon = bool(spec.get("coming_soon"))
+    if spec["id"] == "github" and not github_configured():
+        coming_soon = True
     return {
         "id": spec["id"],
         "name": spec["name"],

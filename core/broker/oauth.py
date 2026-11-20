@@ -32,7 +32,13 @@ class OAuthService:
         self._store = store or IntegrationStore()
         self._store.init_db()
 
-    def start_oauth(self, user_id: str, integration_id: str) -> str:
+    def start_oauth(
+        self,
+        user_id: str,
+        integration_id: str,
+        *,
+        organization_id: str | None = None,
+    ) -> str:
         spec = get_integration(integration_id)
         if not spec:
             raise ValueError(f"Unknown integration: {integration_id}")
@@ -46,11 +52,18 @@ class OAuthService:
             payload = code_verifier
             self._store.save_oauth_state(state, user_id, integration_id, payload)
             return self._x_auth_url(spec["scopes"], state, code_verifier)
+        if provider == "github":
+            from core.broker.catalog import github_configured
+
+            if not github_configured():
+                raise ValueError("GitHub is coming soon")
+            if not organization_id:
+                raise ValueError("Organization not found")
+            self._store.save_oauth_state(state, user_id, integration_id, organization_id)
+            return self._github_auth_url(spec["scopes"], state)
         self._store.save_oauth_state(state, user_id, integration_id, payload)
         if provider == "google":
             return self._google_auth_url(integration_id, spec["scopes"], state)
-        if provider == "github":
-            return self._github_auth_url(spec["scopes"], state)
         if provider == "slack":
             return self._slack_auth_url(spec["scopes"], state)
         if provider == "notion":
@@ -89,26 +102,100 @@ class OAuthService:
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
-        self._store.save_tokens(
-            user_id=user_id,
-            integration=integration_id,
-            access_token=tokens["access_token"],
-            refresh_token=tokens.get("refresh_token"),
-            expires_at=tokens.get("expires_at"),
-        )
+        if provider == "github":
+            organization_id = str(payload or "").strip()
+            if not organization_id:
+                raise ValueError("Missing organization for GitHub OAuth")
+            self._store.save_org_grant(
+                organization_id=organization_id,
+                integration=integration_id,
+                access_token=tokens["access_token"],
+                refresh_token=tokens.get("refresh_token"),
+                expires_at=tokens.get("expires_at"),
+            )
+        else:
+            self._store.save_tokens(
+                user_id=user_id,
+                integration=integration_id,
+                access_token=tokens["access_token"],
+                refresh_token=tokens.get("refresh_token"),
+                expires_at=tokens.get("expires_at"),
+            )
         return user_id, integration_id
 
-    def disconnect(self, user_id: str, integration_id: str) -> None:
+    def disconnect(
+        self,
+        user_id: str,
+        integration_id: str,
+        *,
+        organization_id: str | None = None,
+    ) -> None:
+        if integration_id == "github":
+            if organization_id:
+                self._store.disconnect_org(organization_id, integration_id)
+            return
         self._store.disconnect(user_id, integration_id)
 
-    def list_for_user(self, user_id: str) -> list[dict[str, Any]]:
+    def list_for_user(
+        self, user_id: str, *, organization_id: str | None = None
+    ) -> list[dict[str, Any]]:
         connected = set(self._store.list_connected(user_id))
+        connected.discard("github")
+        selected: list[str] = []
+        if organization_id and self._store.is_org_connected(organization_id, "github"):
+            connected.add("github")
+            grant = self._store.get_org_grant(organization_id, "github")
+            if grant is not None:
+                selected = list(grant.selected_repos)
         from core.broker.catalog import integration_for_api, list_integrations
 
-        return [
+        rows = [
             integration_for_api(spec, connected=spec["id"] in connected)
             for spec in list_integrations()
         ]
+        for row in rows:
+            if row["id"] == "github":
+                row["selected_repos"] = selected
+        return rows
+
+    async def list_github_repos(self, organization_id: str) -> list[dict[str, Any]]:
+        grant = self._store.get_org_grant(organization_id, "github")
+        if grant is None:
+            raise ValueError("GitHub is not connected")
+        from core.broker.executor import IntegrationExecutor
+
+        raw = await IntegrationExecutor().execute(
+            "github", grant.access_token, "list_repositories", {}
+        )
+        rows = raw if isinstance(raw, list) else []
+        selected = set(grant.selected_repos)
+        public: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            repo_id = str(row.get("id") or "").strip()
+            if not repo_id:
+                continue
+            public.append(
+                {
+                    "id": repo_id,
+                    "name": row.get("full_name") or row.get("name") or "",
+                    "url": row.get("html_url") or "",
+                    "selected": repo_id in selected,
+                }
+            )
+        return public
+
+    async def set_github_repos(self, organization_id: str, repo_ids: list[str]) -> list[str]:
+        visible = await self.list_github_repos(organization_id)
+        allowed = {item["id"] for item in visible}
+        chosen: list[str] = []
+        for repo_id in repo_ids:
+            cleaned = str(repo_id).strip()
+            if cleaned and cleaned in allowed and cleaned not in chosen:
+                chosen.append(cleaned)
+        self._store.set_selected_repos(organization_id, "github", chosen)
+        return chosen
 
     def _google_client(self) -> tuple[str, str]:
         client_id = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -178,10 +265,16 @@ class OAuthService:
             "expires_at": expires_at,
         }
 
+    def _github_client(self) -> tuple[str, str]:
+        from core.config import get_settings
+
+        settings = get_settings()
+        if not settings.github_client_id or not settings.github_client_secret:
+            raise RuntimeError("GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be set")
+        return settings.github_client_id, settings.github_client_secret
+
     def _github_auth_url(self, scopes: list[str], state: str) -> str:
-        client_id = os.getenv("GITHUB_CLIENT_ID", "")
-        if not client_id:
-            raise RuntimeError("GITHUB_CLIENT_ID must be set")
+        client_id, _ = self._github_client()
         params = {
             "client_id": client_id,
             "redirect_uri": callback_url(),
@@ -191,10 +284,7 @@ class OAuthService:
         return f"https://github.com/login/oauth/authorize?{urlencode(params)}"
 
     async def _exchange_github(self, code: str) -> dict[str, Any]:
-        client_id = os.getenv("GITHUB_CLIENT_ID", "")
-        client_secret = os.getenv("GITHUB_CLIENT_SECRET", "")
-        if not client_id or not client_secret:
-            raise RuntimeError("GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be set")
+        client_id, client_secret = self._github_client()
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 "https://github.com/login/oauth/access_token",

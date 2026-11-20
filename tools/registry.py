@@ -154,6 +154,19 @@ def _summary_line(text: str) -> str:
     return _clip(line, 500)
 
 
+def _record_tool_step(tool_id: str, risk: str, outcome: str) -> None:
+    from core.context.request import current_mission_id
+    from core.signals import record_step
+
+    mission_id = str(current_mission_id.get() or "").strip()
+    record_step(
+        mission_id or None,
+        kind="tool_call",
+        text=tool_id,
+        data={"tool": tool_id, "risk": risk, "outcome": outcome},
+    )
+
+
 async def run_tool(
     role: Any,
     tool: str,
@@ -193,31 +206,36 @@ async def run_tool(
     client = integrations or IntegrationClient()
     user_id = current_user_id.get() or ""
 
-    if base == "thinking":
-        from core.models.thinking import run_thinking
+    try:
+        if base == "thinking":
+            from core.models.thinking import run_thinking
 
-        text, data = await run_thinking(
-            instruction or params.get("query", ""),
-            stream=False,
-            conversation=conversation,
-            capabilities=client.capabilities_context(user_id),
-        )
-        output = ToolOutput(text=text, data=data)
-    else:
-        manifest = load_manifests().get(base)
-        if manifest is None or action not in manifest.actions:
-            raise RuntimeError(f"Unhandled tool: {tool_id}")
-        ctx = ToolContext(
-            role_id=pack.id,
-            user_id=user_id,
-            client=client,
-            tool_id=tool_id,
-            risk=risk.value,
-        )
-        output = await _tool_module(base).run(action, instruction=instruction, params=params, ctx=ctx)
-        if not isinstance(output, ToolOutput):
-            output = ToolOutput(text=str(output.get("text") or ""), data=dict(output.get("data") or {}))
+            text, data = await run_thinking(
+                instruction or params.get("query", ""),
+                stream=False,
+                conversation=conversation,
+                capabilities=client.capabilities_context(user_id),
+            )
+            output = ToolOutput(text=text, data=data)
+        else:
+            manifest = load_manifests().get(base)
+            if manifest is None or action not in manifest.actions:
+                raise RuntimeError(f"Unhandled tool: {tool_id}")
+            ctx = ToolContext(
+                role_id=pack.id,
+                user_id=user_id,
+                client=client,
+                tool_id=tool_id,
+                risk=risk.value,
+            )
+            output = await _tool_module(base).run(action, instruction=instruction, params=params, ctx=ctx)
+            if not isinstance(output, ToolOutput):
+                output = ToolOutput(text=str(output.get("text") or ""), data=dict(output.get("data") or {}))
+    except ApprovalRequired:
+        _record_tool_step(tool_id, risk.value, "paused")
+        raise
 
+    _record_tool_step(tool_id, risk.value, output.status)
     emit(
         "tool_done",
         tool=tool_id,

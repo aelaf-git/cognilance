@@ -120,6 +120,11 @@ def register_mission_task(mission_id: str, task: asyncio.Task[Any]) -> None:
     task.add_done_callback(_cleanup)
 
 
+def mission_task_active(mission_id: str) -> bool:
+    task = _running_mission_tasks.get(mission_id)
+    return task is not None and not task.done()
+
+
 def cancel_mission_task(mission_id: str) -> bool:
     task = _running_mission_tasks.get(mission_id)
     if task is None or task.done():

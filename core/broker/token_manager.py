@@ -9,6 +9,33 @@ from core.broker.catalog import get_integration
 from core.broker.store import IntegrationStore, StoredIntegration
 
 
+def github_organization(user_id: str) -> str:
+    """The run's organization when a mission is set, otherwise the caller's active one."""
+    from core.context.request import current_mission_id
+
+    mission_id = current_mission_id.get() or ""
+    if mission_id:
+        try:
+            from core.runtime.runs.store import RunStore
+
+            run = RunStore().get_run(mission_id)
+            if run and run.organization_id:
+                return run.organization_id
+        except Exception:
+            pass
+        try:
+            from core.runtime.missions.store import MissionStore
+
+            mission = MissionStore().get_mission(mission_id)
+            if mission and mission.organization_id:
+                return mission.organization_id
+        except Exception:
+            pass
+    from core.context.orgs.store import OrgStore
+
+    return OrgStore().active_for_account(user_id) or ""
+
+
 class TokenManager:
     def __init__(
         self,
@@ -19,10 +46,14 @@ class TokenManager:
         self._oauth = oauth or OAuthService(self._store)
 
     def list_connected(self, user_id: str) -> list[str]:
-        return self._store.list_connected(user_id)
+        names = [name for name in self._store.list_connected(user_id) if name != "github"]
+        organization_id = github_organization(user_id)
+        if organization_id and self._store.is_org_connected(organization_id, "github"):
+            names.append("github")
+        return names
 
     async def get_access_token(self, user_id: str, integration_id: str) -> str:
-        record = self._store.get_tokens(user_id, integration_id)
+        record = self._record(user_id, integration_id)
         if not record:
             raise RuntimeError(f"{integration_id} is not connected for this user")
         if self._is_expired(record):
@@ -31,7 +62,20 @@ class TokenManager:
         return record.access_token
 
     def is_connected(self, user_id: str, integration_id: str) -> bool:
+        if integration_id == "github":
+            organization_id = github_organization(user_id)
+            return bool(
+                organization_id and self._store.is_org_connected(organization_id, "github")
+            )
         return self._store.is_connected(user_id, integration_id)
+
+    def _record(self, user_id: str, integration_id: str) -> StoredIntegration | None:
+        if integration_id == "github":
+            organization_id = github_organization(user_id)
+            if not organization_id:
+                return None
+            return self._store.get_org_grant(organization_id, integration_id)
+        return self._store.get_tokens(user_id, integration_id)
 
     def _is_expired(self, record: StoredIntegration) -> bool:
         if not record.expires_at:

@@ -55,12 +55,21 @@ def _author_name(role: str, author_id: str | None) -> str | None:
 
 
 def _sessions_for(conversation_id: str, request: Request) -> list[dict[str, Any]]:
-    return [
-        enrich_session_dict(m, sub_store=sub_store)
-        for m in mission_store.list_missions_for_conversation(
-            conversation_id, limit=50, **owner_filter(user_from(request))
-        )
-    ]
+    scope = owner_filter(user_from(request))
+    missions = mission_store.list_missions_for_conversation(
+        conversation_id, limit=50, **scope
+    )
+    seen = {mission.id for mission in missions}
+    organization_id = scope.get("organization_id")
+    if organization_id:
+        for mission in mission_store.list_missions(limit=50, organization_id=organization_id):
+            if mission.id in seen:
+                continue
+            sub = sub_store.get_by_mission_id(mission.id)
+            if sub and sub.kind == "weekly_report" and not sub.conversation_id:
+                missions.append(mission)
+                seen.add(mission.id)
+    return [enrich_session_dict(mission, sub_store=sub_store) for mission in missions]
 
 
 @router.get("/conversations")

@@ -17,7 +17,9 @@ from api.deps import (
     can_read_conversation,
     conv_store,
     mission_store,
+    mission_task_active,
     register_mission_task,
+    run_store,
     sub_store,
     thread_config,
     user_from,
@@ -33,7 +35,7 @@ from core.runtime.event_bus import event_bus
 from core.runtime.missions.finalize import finalize_session_status
 from core.runtime.missions.models import MissionStatus
 from core.runtime.runner import stream_mission_graph
-from core.runtime.runs.models import RunTrigger
+from core.runtime.runs.models import Run, RunStatus, RunTrigger
 from pipelines.coordinator_board.graph import ensure_graph
 
 router = APIRouter()
@@ -77,6 +79,44 @@ async def _publish_turn(mission_id: str, conversation_id: str, event: dict[str, 
     await event_bus.publish(conversation_id, stamped)
 
 
+def _duplicate_stream(run: Run, conversation_id: str) -> StreamingResponse:
+    """Attach to the run already started for this client message. Do not start another."""
+    mission_id = run.mission_id or run.id
+    thread_id = run.thread_id or conversation_id
+
+    async def stream() -> AsyncIterator[str]:
+        yield sse_line(
+            {
+                "event": "session_created",
+                "session_id": mission_id,
+                "mission_id": mission_id,
+                "thread_id": thread_id,
+                "conversation_id": conversation_id,
+                "duplicate": True,
+            }
+        )
+        if not mission_task_active(mission_id):
+            yield sse_line(
+                {
+                    "event": "done",
+                    "thread_id": thread_id,
+                    "run_id": mission_id,
+                    "duplicate": True,
+                }
+            )
+            return
+        queue = event_bus.attach(mission_id)
+        try:
+            async for event in event_bus.drain(queue):
+                yield sse_line(event)
+        finally:
+            event_bus.detach(mission_id, queue)
+
+    return sse_response(
+        stream(), extra_headers={"X-Session-Id": mission_id, "X-Mission-Id": mission_id}
+    )
+
+
 def _ui_items(result: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {"name": item["name"], "props": item.get("props") or {}}
@@ -108,6 +148,11 @@ async def chat_stream(request: Request) -> StreamingResponse:
         organization_id=org_id,
     )
     regenerating = bool(payload.get("regenerate")) and existing is not None
+    client_message_id = str(payload.get("client_message_id") or "").strip()
+    if client_message_id and not regenerating:
+        inflight = run_store.find_inflight_client_message(conversation_id, client_message_id)
+        if inflight is not None:
+            return _duplicate_stream(inflight, conversation_id)
     removed_id: int | None = None
     if regenerating:
         removed_id = conv_store.delete_last_assistant_message(conversation_id)
@@ -207,12 +252,21 @@ async def chat_stream(request: Request) -> StreamingResponse:
                 run_id=mission_id,
                 user_id=user_id,
                 organization_id=org_id,
+                client_message_id=client_message_id or None,
                 trigger=RunTrigger.MESSAGE,
             ):
                 current = mission_store.get_mission(mission_id)
                 if current and current.status == MissionStatus.CANCELLED:
                     break
             current = mission_store.get_mission(mission_id) or mission
+            stored = run_store.get_run(mission_id)
+            if stored and stored.status == RunStatus.WAITING_APPROVAL:
+                if current.status not in {
+                    MissionStatus.CANCELLED,
+                    MissionStatus.WAITING_APPROVAL,
+                }:
+                    mission_store.update_status(mission_id, MissionStatus.WAITING_APPROVAL)
+                return
             if current.status == MissionStatus.CANCELLED:
                 return
             finalize_session_status(
@@ -325,7 +379,11 @@ async def chat_stream_subscribe(
             ):
                 replay.append({**note, "event": "notification"})
             for mission in mission_store.list_missions_for_conversation(conversation_id, limit=20):
-                if mission.status not in {MissionStatus.RUNNING, MissionStatus.QUEUED}:
+                if mission.status not in {
+                    MissionStatus.RUNNING,
+                    MissionStatus.QUEUED,
+                    MissionStatus.WAITING_APPROVAL,
+                }:
                     continue
                 replay.extend(mission_store.list_events(mission.id))
             async for line in replay_then_live(replay, live()):

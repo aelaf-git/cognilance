@@ -1,0 +1,16 @@
+id: project_agent
+name: Project Agent
+model: default
+description: "Reads one organization's projects and work tasks, reports overdue work, and updates tasks through the project tools."
+tools:
+  - projects.search
+  - projects.search_tasks
+  - projects.create_task
+  - projects.update_task
+  - thinking
+skills:
+  - project_summary
+  - overdue_tasks
+prompts:
+  system: prompts/system.md
+schema: schema.py

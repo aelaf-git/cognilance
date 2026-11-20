@@ -9,6 +9,7 @@ from langchain_core.messages import BaseMessage
 from agents.loader import SPECIALISTS, RolePack, get_role
 from core.context.request import current_mission_id
 from core.models.gateway import get_structured_llm, to_chat_messages
+from core.runtime.board.models import BoardTaskStatus
 from core.runtime.board.store import BoardStore
 from core.runtime.runs.models import RunStatus
 from core.runtime.runs.store import RunStore
@@ -360,6 +361,19 @@ async def _run_task_loop(
         if held_write:
             text = f"{text}\nThe write was not applied. Call docx.write next, using this document."
         data = dict(out.get("data") or {})
+        if str(out.get("status") or "") == "error":
+            mission_id = str(current_mission_id.get() or "").strip()
+            if mission_id:
+                RunStore().append_step(
+                    mission_id,
+                    kind="tool_call",
+                    text=text,
+                    data={
+                        "tool": tool,
+                        "status": "error",
+                        "status_code": data.get("status_code"),
+                    },
+                )
         last_tool = tool
         last_risk = out.get("risk")
         for k, v in data.items():
@@ -406,6 +420,44 @@ async def _run_task_loop(
     }
 
 
+def _evidence_lines(data: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for task in data.get("tasks") or []:
+        if isinstance(task, dict) and task.get("id"):
+            lines.append(f"- task {task['id']}: {task.get('title') or ''}")
+    for item in data.get("items") or []:
+        if isinstance(item, dict) and item.get("url"):
+            lines.append(f"- {item.get('title') or 'GitHub'}: {item['url']}")
+    return lines
+
+
+def _with_dependency_results(board: BoardStore, task: Any) -> str:
+    """Give a dependent specialist the finished text, task ids, and GitHub URLs."""
+    if hasattr(task, "instruction"):
+        instruction = str(task.instruction or "")
+        depends = list(task.depends_on or [])
+    else:
+        instruction = str(task.get("instruction") or "")
+        depends = [str(item) for item in (task.get("depends_on") or [])]
+    blocks: list[str] = []
+    for dep_id in depends:
+        dep = board.get_task(str(dep_id))
+        if dep is None or dep.status != BoardTaskStatus.DONE:
+            continue
+        parts: list[str] = []
+        text = str(dep.result_text or "").strip()
+        if text:
+            parts.append(text)
+        evidence = _evidence_lines(dict(dep.result_json or {}))
+        if evidence:
+            parts.append("\n".join(evidence))
+        if parts:
+            blocks.append(f"[{dep.assignee_role}] {dep.title}\n" + "\n".join(parts))
+    if not blocks:
+        return instruction
+    return instruction + "\n\nEarlier results:\n" + "\n\n".join(blocks)
+
+
 async def _run_specialist(state: State, role_id: str) -> dict[str, Any]:
     pack = get_role(role_id)
     if pack is None:
@@ -449,12 +501,11 @@ async def _run_specialist(state: State, role_id: str) -> dict[str, Any]:
     for task in tasks:
         if hasattr(task, "id"):
             task_id = task.id
-            instruction = task.instruction
             title = task.title
         else:
             task_id = str(task.get("id"))
-            instruction = str(task.get("instruction") or "")
             title = str(task.get("title") or "")
+        instruction = _with_dependency_results(board, task)
 
         try:
             out = await _run_task_loop(pack, instruction=instruction, messages=messages)

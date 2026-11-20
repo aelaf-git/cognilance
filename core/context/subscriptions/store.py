@@ -107,10 +107,11 @@ class SubscriptionStore:
         poll_interval_seconds: int = 90,
         created_from_mission_id: str | None = None,
         organization_id: str | None = None,
+        next_check_at: datetime | None = None,
     ) -> Subscription:
         sub_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
-        next_check = now + timedelta(seconds=poll_interval_seconds)
+        next_check = next_check_at or (now + timedelta(seconds=poll_interval_seconds))
         now_iso = now.isoformat()
         with self._conn() as conn:
             conn.execute(
@@ -177,7 +178,7 @@ class SubscriptionStore:
 
     def stop_by_mission_id(self, mission_id: str) -> bool:
         sub = self.get_by_mission_id(mission_id)
-        if not sub or sub.status != SubscriptionStatus.ACTIVE:
+        if not sub or sub.status not in {SubscriptionStatus.ACTIVE, SubscriptionStatus.PAUSED}:
             return False
         self.set_status(sub.id, SubscriptionStatus.STOPPED)
         return True
@@ -189,12 +190,17 @@ class SubscriptionStore:
             return False
         if sub.status == SubscriptionStatus.ACTIVE:
             return True
-        interval = max(
-            30,
-            int(sub.config.get("poll_interval_seconds") or 90),
-        )
         now = datetime.now(timezone.utc)
-        next_check = now + timedelta(seconds=interval)
+        if sub.kind == "weekly_report":
+            next_check = sub.next_check_at
+            if next_check.tzinfo is None:
+                next_check = next_check.replace(tzinfo=timezone.utc)
+        else:
+            interval = max(
+                30,
+                int(sub.config.get("poll_interval_seconds") or 90),
+            )
+            next_check = now + timedelta(seconds=interval)
         with self._conn() as conn:
             conn.execute(
                 """
@@ -271,6 +277,31 @@ class SubscriptionStore:
                     now.isoformat(),
                     subscription_id,
                 ),
+            )
+
+    def set_error(self, subscription_id: str, error: str | None) -> None:
+        """Record a fire failure without changing status or the next due time."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                UPDATE subscriptions
+                SET error = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (error, now, subscription_id),
+            )
+
+    def reschedule(self, subscription_id: str, next_check_at: datetime) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                UPDATE subscriptions
+                SET next_check_at = ?, updated_at = ?, error = NULL
+                WHERE id = ?
+                """,
+                (next_check_at.isoformat(), now, subscription_id),
             )
 
     def set_status(

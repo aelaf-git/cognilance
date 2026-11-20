@@ -62,6 +62,7 @@ type IntegrationItem = {
   logo?: string
   connected?: boolean
   coming_soon?: boolean
+  manage?: boolean
 }
 
 type AccountProfile = {
@@ -139,6 +140,7 @@ function statusLabel(session: SessionItem) {
   const status = session.display_status || session.status || ""
   if (status === "done" || status === "completed") return "Done"
   if (status === "failed") return "Failed"
+  if (status === "paused") return "Paused"
   if (status === "aborted" || status === "cancelled") return "Stopped"
   return status || "Stopped"
 }
@@ -845,26 +847,32 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
                         <span className="size-1.5 rounded-full bg-foreground" />
                         Connected
                       </span>
-                      <button
-                        type="button"
-                        className="rounded-md border border-border bg-[hsl(var(--chat-canvas))] px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
-                        onClick={async () => {
-                          await cognilanceJson(
-                            `integrations/${item.id}/disconnect`,
-                            { method: "POST" }
-                          )
-                          setIntegrations(current =>
-                            current.map(entry =>
-                              entry.id === item.id
-                                ? { ...entry, connected: false }
-                                : entry
+                      {item.manage !== false ? (
+                        <button
+                          type="button"
+                          className="rounded-md border border-border bg-[hsl(var(--chat-canvas))] px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+                          onClick={async () => {
+                            await cognilanceJson(
+                              `integrations/${item.id}/disconnect`,
+                              { method: "POST" }
                             )
-                          )
-                        }}
-                      >
-                        Disconnect
-                      </button>
+                            setIntegrations(current =>
+                              current.map(entry =>
+                                entry.id === item.id
+                                  ? { ...entry, connected: false }
+                                  : entry
+                              )
+                            )
+                          }}
+                        >
+                          Disconnect
+                        </button>
+                      ) : null}
                     </div>
+                  ) : item.manage === false ? (
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      Not connected
+                    </span>
                   ) : (
                     <a
                       className="inline-flex items-center rounded-md border border-border bg-[hsl(var(--chat-canvas))] px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-foreground hover:bg-foreground hover:text-background"
@@ -890,6 +898,15 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
       if (!id) return
       const payload = await cognilanceJson(`conversations/${id}/sessions`)
       setSessions(payload.sessions || [])
+    }
+
+    const pauseSession = async (session: SessionItem) => {
+      try {
+        await cognilanceJson(`sessions/${session.id}/pause`, { method: "POST" })
+        await refreshSessions()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't pause that session.")
+      }
     }
 
     const stopSession = async (session: SessionItem) => {
@@ -956,23 +973,30 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
                           : ""}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      className={cn(
-                        "shrink-0 rounded-[6px] px-2 py-1 text-xs font-medium underline-offset-2 hover:underline",
-                        running
-                          ? "text-destructive"
-                          : "text-foreground"
-                      )}
-                      onClick={() =>
-                        void (running
-                          ? stopSession(session)
-                          : startSession(session))
-                      }
-                      disabled={!running && !session.subscription_id}
-                    >
-                      {running ? "Stop" : "Start"}
-                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {running ? (
+                        <button
+                          type="button"
+                          className="rounded-[6px] px-2 py-1 text-xs font-medium text-foreground underline-offset-2 hover:underline"
+                          onClick={() => void pauseSession(session)}
+                        >
+                          Pause
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={cn(
+                          "rounded-[6px] px-2 py-1 text-xs font-medium underline-offset-2 hover:underline",
+                          running ? "text-destructive" : "text-foreground"
+                        )}
+                        onClick={() =>
+                          void (running ? stopSession(session) : startSession(session))
+                        }
+                        disabled={!running && !session.subscription_id}
+                      >
+                        {running ? "Stop" : "Start"}
+                      </button>
+                    </div>
                   </div>
                 )
               })

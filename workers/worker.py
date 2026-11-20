@@ -11,7 +11,7 @@ import core.context.env  # noqa: F401
 from core.context.apps.store import init_all_stores
 from core.registry import validate_all
 from core.runtime.missions.store import MissionStore
-from core.runtime.runner import run_mission
+from core.runtime.runner import recover_interrupted_runs, run_mission
 from pipelines.coordinator_board.graph import init_graph
 from workers.schedulers.ticker import tick_subscriptions
 

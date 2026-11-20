@@ -1,0 +1,7 @@
+id: alerts
+name: Alerts
+description: Record an alert for the run's organization.
+actions:
+  create:
+    risk: reversible_write
+    description: Create an alert in the run's organization.

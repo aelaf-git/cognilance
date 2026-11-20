@@ -87,7 +87,7 @@ async def main() -> None:
     assert {"coordinator_board", "weekly_report", "concept_note", "email_followup"} <= set(
         available_pipelines()
     )
-    assert [t["assignee_role"] for t in preset("x")] == ["researcher", "report_writer"]
+    assert [t["assignee_role"] for t in preset("x")] == ["project_agent", "report_writer"]
     print(f"   {available_pipelines()}")
 
     print("3) Durable Run: coordinator board graph...")

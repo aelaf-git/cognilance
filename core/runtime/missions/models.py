@@ -14,6 +14,7 @@ from core.runtime.missions.session_type import SessionType
 class MissionStatus(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"
+    WAITING_APPROVAL = "waiting_approval"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"

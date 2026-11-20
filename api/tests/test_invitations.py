@@ -23,7 +23,7 @@ from core.runtime.runs.store import RunStore
 
 
 class _Connections:
-    def list_for_user(self, user_id: str) -> list:
+    def list_for_user(self, user_id: str, *, organization_id: str | None = None) -> list:
         return []
 
 
