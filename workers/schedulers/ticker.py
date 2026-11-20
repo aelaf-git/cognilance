@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from core.context.subscriptions.models import SubscriptionStatus
 from core.context.subscriptions.service import SubscriptionService
@@ -10,8 +11,19 @@ from core.context.subscriptions.store import SubscriptionStore
 
 logger = logging.getLogger(__name__)
 
+_last_success_at: str | None = None
 
-async def tick_subscriptions(*, limit: int = 20) -> int:
+
+def last_success_at() -> str | None:
+    """UTC time of the last tick that returned. A raised tick leaves this unchanged."""
+    return _last_success_at
+
+
+async def tick_subscriptions(
+    *,
+    limit: int = 20,
+    github_deliveries: list[dict] | None = None,
+) -> int:
     """Poll due subscriptions; deliver notifications for new items. Returns count checked."""
     store = SubscriptionStore()
     service = SubscriptionService(sub_store=store)
@@ -51,16 +63,16 @@ async def tick_subscriptions(*, limit: int = 20) -> int:
                     sub.id,
                     run_result,
                 )
-            elif sub.kind == "weekly_report" or sub.config.get("pipeline") == "weekly_report":
+            elif sub.integration == "schedule" or sub.kind in {"schedule", "weekly_report"}:
                 if sub.status == SubscriptionStatus.PAUSED:
                     continue
                 try:
-                    from workers.schedulers.weekly import fire_weekly_report
+                    from workers.schedulers.dispatch import fire_schedule
 
-                    report = await fire_weekly_report(sub, store=store)
-                    logger.info("Weekly report for subscription %s: %s", sub.id, report)
+                    report = await fire_schedule(sub, store=store)
+                    logger.info("Schedule for subscription %s: %s", sub.id, report)
                 except Exception as exc:
-                    logger.exception("Weekly report tick failed for %s", sub.id)
+                    logger.exception("Schedule tick failed for %s", sub.id)
                     store.set_error(sub.id, str(exc)[:500])
             else:
                 interval = int(sub.config.get("poll_interval_seconds") or 90)
@@ -68,4 +80,20 @@ async def tick_subscriptions(*, limit: int = 20) -> int:
         except Exception as exc:
             logger.exception("Subscription tick failed for %s", sub.id)
             store.set_status(sub.id, SubscriptionStatus.ERROR, error=str(exc)[:500])
+    from core.context.projects.store import ProjectStore
+    from workers.schedulers.github_events import note_github_delivery
+
+    ProjectStore().note_deadline_crossings()
+    for delivery in github_deliveries or []:
+        note_github_delivery(
+            str(delivery.get("organization_id") or ""),
+            str(delivery.get("delivery_id") or ""),
+            str(delivery.get("action") or ""),
+            delivery.get("payload") if isinstance(delivery.get("payload"), dict) else None,
+        )
+    from workers.schedulers.detection import detect_alerts
+
+    detect_alerts()
+    global _last_success_at
+    _last_success_at = datetime.now(timezone.utc).isoformat()
     return checked

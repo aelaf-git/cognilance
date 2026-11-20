@@ -66,7 +66,9 @@ def _sessions_for(conversation_id: str, request: Request) -> list[dict[str, Any]
             if mission.id in seen:
                 continue
             sub = sub_store.get_by_mission_id(mission.id)
-            if sub and sub.kind == "weekly_report" and not sub.conversation_id:
+            if sub and not sub.conversation_id and (
+                sub.integration == "schedule" or sub.kind == "weekly_report"
+            ):
                 missions.append(mission)
                 seen.add(mission.id)
     return [enrich_session_dict(mission, sub_store=sub_store) for mission in missions]

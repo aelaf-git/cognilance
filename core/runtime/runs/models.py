@@ -65,6 +65,17 @@ class Run:
 
 
 @dataclass
+class FeedbackSignal:
+    """One feedback step joined to the run it belongs to."""
+
+    run_id: str
+    organization_id: str
+    agent_id: str
+    revision: str
+    rating: int
+
+
+@dataclass
 class RunStep:
     id: str
     run_id: str

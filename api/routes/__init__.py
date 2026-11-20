@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.routes import (
+    alerts,
+    audit,
     auth,
     chat,
     conversations,
@@ -19,6 +21,8 @@ from api.routes import (
 
 ALL_ROUTERS: tuple[APIRouter, ...] = (
     health.router,
+    alerts.router,
+    audit.router,
     auth.router,
     runs.router,
     integrations.router,

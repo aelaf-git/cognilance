@@ -6,11 +6,11 @@ import json
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterator
 
 from core.context.db import ensure_db_dir
-from core.runtime.runs.models import Run, RunStatus, RunStep, RunTrigger
+from core.runtime.runs.models import FeedbackSignal, Run, RunStatus, RunStep, RunTrigger
 
 
 class RunStore:
@@ -219,6 +219,20 @@ class RunStore:
             ).fetchone()
         return self._row_to_run(row) if row else None
 
+    def count_failed(self, *, within_seconds: int = 3600) -> int:
+        """Count runs that failed inside the recent window."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=within_seconds)).isoformat()
+        self.init_db()
+        with self._conn() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) FROM runs
+                WHERE status = ? AND updated_at >= ?
+                """,
+                (RunStatus.FAILED.value, cutoff),
+            ).fetchone()
+        return int(row[0] if row else 0)
+
     def update_status(
         self,
         run_id: str,
@@ -252,6 +266,18 @@ class RunStore:
                     run_id,
                 ),
             )
+        if status == RunStatus.COMPLETED:
+            run = self.get_run(run_id)
+            if run is not None and run.organization_id:
+                from core.context.orgs.store import OrgStore
+
+                OrgStore(self._path).record_event(
+                    run.organization_id,
+                    "run.completed",
+                    source_id=run.id,
+                    payload={"instruction": run.instruction},
+                    idempotency_key=f"run:{run.id}:completed",
+                )
 
     def append_step(
         self,
@@ -299,6 +325,38 @@ class RunStore:
                 (organization_id, limit),
             ).fetchall()
         return [self._row_to_run(row) for row in rows]
+
+    def list_feedback(self) -> list[FeedbackSignal]:
+        """Feedback steps with the organization of the run that stored them."""
+        self.init_db()
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT run_steps.run_id, run_steps.data, runs.organization_id
+                FROM run_steps
+                JOIN runs ON runs.id = run_steps.run_id
+                WHERE run_steps.kind = 'feedback'
+                ORDER BY run_steps.created_at ASC, run_steps.rowid ASC
+                """
+            ).fetchall()
+        signals: list[FeedbackSignal] = []
+        for row in rows:
+            try:
+                data = json.loads(row["data"] or "{}")
+            except (TypeError, json.JSONDecodeError):
+                data = {}
+            if not isinstance(data, dict):
+                data = {}
+            signals.append(
+                FeedbackSignal(
+                    run_id=row["run_id"],
+                    organization_id=str(row["organization_id"] or ""),
+                    agent_id=str(data.get("agent_id") or ""),
+                    revision=str(data.get("revision") or ""),
+                    rating=int(data.get("rating") or 0),
+                )
+            )
+        return signals
 
     def list_steps(self, run_id: str) -> list[RunStep]:
         with self._conn() as conn:

@@ -17,6 +17,10 @@ function allowed(method: string, path: string) {
     (method === "GET" && path === "integrations/list") ||
     (method === "GET" && path === "integrations/github/repos") ||
     (method === "PUT" && path === "integrations/github/repos") ||
+    (method === "GET" && path === "alerts") ||
+    /^POST alerts\/[^/]+\/acknowledge$/.test(`${method} ${path}`) ||
+    /^POST alerts\/[^/]+\/dismiss$/.test(`${method} ${path}`) ||
+    /^GET runs\/[^/]+$/.test(`${method} ${path}`) ||
     (method === "GET" && path === "organizations") ||
     (method === "GET" && path === "invitations") ||
     /^POST organizations\/[^/]+\/invitations$/.test(`${method} ${path}`) ||

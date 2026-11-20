@@ -188,6 +188,7 @@ async def run_tool(
 
     tool_id = canonical_tool_id(tool)
     if not is_allowed(pack.tools, tool_id):
+        _record_tool_step(tool_id, risk_for(tool_id).value, "denied")
         raise RuntimeError(f"Role {pack.id} is not allowed to use tool {tool_id}")
 
     params = dict(params or {})

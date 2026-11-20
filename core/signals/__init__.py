@@ -28,11 +28,24 @@ def record_step(
         emit("trace", kind=kind, text=text, run_id=run_id, **payload)
 
 
-def record_feedback(run_id: str, *, rating: int, note: str = "") -> None:
+def record_feedback(
+    run_id: str,
+    *,
+    rating: int,
+    note: str = "",
+    message: str = "",
+    revision: str = "",
+    agent_id: str = "",
+) -> None:
     """Capture user feedback for a Run (consumed by improvement/ later)."""
     RunStore().append_step(
         run_id,
         kind="feedback",
         text=note,
-        data={"rating": int(rating)},
+        data={
+            "rating": int(rating),
+            "message": message,
+            "revision": revision,
+            "agent_id": agent_id,
+        },
     )

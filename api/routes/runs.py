@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from api.deps import (
     board_store,
     cancel_mission_task,
+    conv_store,
     mission_store,
     mission_task_active,
     organization_ids_for,
@@ -24,7 +25,9 @@ from core.runtime.event_bus import event_bus
 from core.runtime.missions.finalize import finalize_session_status
 from core.runtime.missions.models import MissionStatus
 from core.runtime.runner import stream_mission_graph
-from core.runtime.runs.models import Run, RunStatus
+from core.runtime.board.models import BoardTaskStatus
+from core.runtime.runs.models import Run, RunStatus, RunStep
+from core.signals import record_feedback
 
 router = APIRouter(prefix="/runs")
 
@@ -50,10 +53,37 @@ def _require_run(run_id: str, request: Request) -> Run:
     return run
 
 
+def _duration_ms(start, end) -> int:
+    return max(0, int((end - start).total_seconds() * 1000))
+
+
+def _trace(run: Run, steps: list[RunStep]) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]]]:
+    """Add each step's elapsed time. Sums stay on the response and are not stored."""
+    previous = run.created_at
+    payloads: list[dict[str, Any]] = []
+    specialists: dict[str, int] = {}
+    tools: dict[str, int] = {}
+    for step in steps:
+        duration = _duration_ms(previous, step.created_at)
+        payload = step.to_dict()
+        payload["duration_ms"] = duration
+        payloads.append(payload)
+        if step.kind == "task_claimed":
+            role = str(step.data.get("role") or "").strip()
+            if role:
+                specialists[role] = specialists.get(role, 0) + duration
+        elif step.kind == "tool_call":
+            tool = str(step.data.get("tool") or "").strip()
+            if tool:
+                tools[tool] = tools.get(tool, 0) + duration
+        previous = step.created_at
+    return payloads, {"specialists": specialists, "tools": tools}
+
+
 @router.get("/{run_id}")
 async def get_run(run_id: str, request: Request) -> JSONResponse:
     run = _require_run(run_id, request)
-    steps = [step.to_dict() for step in run_store.list_steps(run_id)]
+    steps, durations = _trace(run, run_store.list_steps(run_id))
     tasks = [
         task.to_dict()
         for task in board_store.list_for_run(
@@ -62,7 +92,66 @@ async def get_run(run_id: str, request: Request) -> JSONResponse:
             user_id=None if run.organization_id else run.user_id,
         )
     ]
-    return JSONResponse(content={"run": run.to_dict(), "steps": steps, "board_tasks": tasks})
+    return JSONResponse(
+        content={
+            "run": run.to_dict(),
+            "steps": steps,
+            "board_tasks": tasks,
+            "durations": durations,
+        }
+    )
+
+
+def _current_assistant_message(run: Run) -> str:
+    conversation_id = str(run.conversation_id or "").strip()
+    if conversation_id:
+        messages = conv_store.list_messages(conversation_id)
+        for message in reversed(messages):
+            if message.role == "assistant" and str(message.content or "").strip():
+                return str(message.content)
+    return str(run.result_text or "")
+
+
+def _producing_agent(run_id: str, message: str) -> str:
+    done = [
+        task
+        for task in board_store.list_for_run(run_id)
+        if task.status == BoardTaskStatus.DONE and str(task.result_text or "").strip()
+    ]
+    target = message.strip()
+    for task in reversed(done):
+        if task.result_text.strip() == target:
+            return task.assignee_role
+    if done:
+        return done[-1].assignee_role
+    return ""
+
+
+@router.post("/{run_id}/feedback")
+async def post_feedback(run_id: str, request: Request) -> JSONResponse:
+    run = _require_run(run_id, request)
+    raw = await request.body()
+    try:
+        payload = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid feedback") from None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid feedback")
+    rating = payload.get("rating")
+    if isinstance(rating, bool) or not isinstance(rating, int) or rating not in (-1, 1):
+        raise HTTPException(status_code=400, detail="Invalid feedback")
+    note = str(payload.get("note") or "")
+    revision = str(payload.get("revision") or "")
+    message = _current_assistant_message(run)
+    record_feedback(
+        run.id,
+        rating=rating,
+        note=note,
+        message=message,
+        revision=revision,
+        agent_id=_producing_agent(run.id, message),
+    )
+    return JSONResponse({"run_id": run.id, "recorded": True})
 
 
 @router.post("/{run_id}/resume")
@@ -77,6 +166,15 @@ async def resume_run(run_id: str, request: Request) -> Any:
     payload: dict[str, Any] = json.loads(raw) if raw else {}
     approved = True if not isinstance(payload, dict) else bool(payload.get("approved", True))
     resume = {"approved": approved} if run.status == RunStatus.WAITING_APPROVAL else None
+    if resume is not None:
+        from api import deps
+
+        deps.org_store.record_audit(
+            user_from(request),
+            run.organization_id or "",
+            "approval.approved" if approved else "approval.rejected",
+            run.id,
+        )
 
     async def drive() -> None:
         final_text: str | None = None

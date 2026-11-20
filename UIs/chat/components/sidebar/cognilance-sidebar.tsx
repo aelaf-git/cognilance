@@ -51,6 +51,36 @@ type SessionItem = {
   listener_integration?: string | null
 }
 
+type AlertLink = {
+  type?: string
+  task_id?: string
+  project_id?: string
+  conversation_id?: string
+  run_id?: string
+  url?: string
+}
+
+type AlertItem = {
+  id: string
+  summary: string
+  kind: string
+  priority?: string
+  assignee_account_id?: string | null
+  read?: boolean
+  suggested_next_step?: string | null
+  link?: AlertLink
+}
+
+type OpenedTask = {
+  title: string
+  status: string
+  deadline?: string | null
+}
+
+type OpenedRun = {
+  instruction: string
+}
+
 const rowDelay = (index: number) => ({
   animationDelay: `${Math.min(index, 8) * 30}ms`
 })
@@ -216,6 +246,9 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
   }, [snapshot.id, chatMessages.length, setChatMessages])
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [sessions, setSessions] = useState<SessionItem[]>([])
+  const [alerts, setAlerts] = useState<AlertItem[]>([])
+  const [openedTask, setOpenedTask] = useState<OpenedTask | null>(null)
+  const [openedRun, setOpenedRun] = useState<OpenedRun | null>(null)
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([])
   const { theme, setTheme } = useTheme()
   const [account, setAccount] = useState<AccountProfile | null>(null)
@@ -282,6 +315,8 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
           return
         }
         if (contentType === "sessions") {
+          const alertPayload = await cognilanceJson("alerts")
+          if (!cancelled) setAlerts(alertPayload.alerts || [])
           const id = snapshot.id
           if (!id) {
             if (!cancelled) setSessions([])
@@ -929,8 +964,79 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
       }
     }
 
+    const refreshAlerts = async () => {
+      const payload = await cognilanceJson("alerts")
+      setAlerts(payload.alerts || [])
+    }
+
+    const acknowledgeAlert = async (alert: AlertItem) => {
+      try {
+        await cognilanceJson(`alerts/${alert.id}/acknowledge`, { method: "POST" })
+        await refreshAlerts()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't acknowledge that alert.")
+      }
+    }
+
+    const dismissAlert = async (alert: AlertItem) => {
+      try {
+        await cognilanceJson(`alerts/${alert.id}/dismiss`, { method: "POST" })
+        await refreshAlerts()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't dismiss that alert.")
+      }
+    }
+
+    const openAlertLink = async (alert: AlertItem) => {
+      const link = alert.link || {}
+      try {
+        if (link.type === "conversation" && link.conversation_id) {
+          await openConversation({ id: link.conversation_id, title: "" })
+          return
+        }
+        if (link.type === "task" && link.project_id && link.task_id) {
+          const task = await cognilanceJson(
+            `projects/${link.project_id}/tasks/${link.task_id}`
+          )
+          setOpenedRun(null)
+          setOpenedTask({
+            title: String(task.title || "Work task"),
+            status: String(task.status || ""),
+            deadline: task.deadline ? String(task.deadline) : null
+          })
+          return
+        }
+        if (link.type === "run" && link.run_id) {
+          const payload = await cognilanceJson(`runs/${link.run_id}`)
+          const run = payload.run || payload
+          const conversationId = String(run.conversation_id || "")
+          if (conversationId && !conversationId.startsWith("schedule:")) {
+            await openConversation({ id: conversationId, title: "" })
+            return
+          }
+          setOpenedTask(null)
+          setOpenedRun({
+            instruction: String(run.instruction || "Background run")
+          })
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't open that alert.")
+      }
+    }
+
+    const useSuggestedStep = (alert: AlertItem) => {
+      const text = String(alert.suggested_next_step || "").trim()
+      if (!text) return
+      setUserInput(text)
+      const link = alert.link || {}
+      if (link.type === "conversation" && link.conversation_id) {
+        void openConversation({ id: link.conversation_id, title: "" })
+      }
+    }
+
     return (
-      <Panel title="Sessions" loading={loading} error={error}>
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto">
+      <Panel title="Sessions" loading={loading} error={error} fill={false}>
         {!snapshot.id ? (
           <p className="text-muted-foreground text-sm">
             Open a conversation to see its background sessions.
@@ -1004,6 +1110,92 @@ export const CognilanceSidebar: FC<{ contentType: string }> = ({
           </>
         )}
       </Panel>
+      <Panel title="Alerts" loading={loading} error="" fill={false}>
+        {alerts.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No open alerts.</p>
+        ) : (
+          alerts.map(alert => {
+            const link = alert.link || {}
+            const url = link.type === "url" ? String(link.url || "") : ""
+            return (
+              <div
+                key={alert.id}
+                className="chat-row mb-2 rounded-[12px] border border-border bg-[hsl(var(--chat-surface))] p-3"
+              >
+                <div className="text-sm">{alert.summary}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {alert.priority || "normal"}
+                  {alert.read ? " · Read" : " · Unread"}
+                  {alert.assignee_account_id ? " · Assigned" : ""}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {url ? (
+                    <a
+                      className="text-xs font-medium text-foreground underline-offset-2 hover:underline"
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open
+                    </a>
+                  ) : link.type ? (
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-foreground underline-offset-2 hover:underline"
+                      onClick={() => void openAlertLink(alert)}
+                    >
+                      Open
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-foreground underline-offset-2 hover:underline"
+                    onClick={() => void acknowledgeAlert(alert)}
+                  >
+                    Acknowledge
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-destructive underline-offset-2 hover:underline"
+                    onClick={() => void dismissAlert(alert)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+                {alert.suggested_next_step ? (
+                  <div className="mt-2">
+                    <p className="text-xs text-muted-foreground">
+                      {alert.suggested_next_step}
+                    </p>
+                    <button
+                      type="button"
+                      className="mt-1 text-xs font-medium text-foreground underline-offset-2 hover:underline"
+                      onClick={() => useSuggestedStep(alert)}
+                    >
+                      Use in chat
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )
+          })
+        )}
+        {openedTask ? (
+          <div className="mt-2 rounded-[12px] border border-border p-3 text-sm">
+            <div>{openedTask.title}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {openedTask.status}
+              {openedTask.deadline ? ` · ${openedTask.deadline}` : ""}
+            </div>
+          </div>
+        ) : null}
+        {openedRun ? (
+          <div className="mt-2 rounded-[12px] border border-border p-3 text-sm">
+            {openedRun.instruction}
+          </div>
+        ) : null}
+      </Panel>
+      </div>
     )
   }
 
@@ -1073,9 +1265,10 @@ const Panel: FC<{
   loading: boolean
   error: string
   action?: React.ReactNode
+  fill?: boolean
   children: React.ReactNode
-}> = ({ title, eyebrow, lead, loading, error, action, children }) => (
-  <div className="flex h-full min-h-0 flex-col px-1">
+}> = ({ title, eyebrow, lead, loading, error, action, fill = true, children }) => (
+  <div className={cn("min-h-0 flex-col px-1", fill ? "flex h-full" : "flex shrink-0")}>
     <div className="mb-2 border-b border-border/70 px-2 pb-3">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
@@ -1097,7 +1290,7 @@ const Panel: FC<{
       </div>
     </div>
     {error && <p className="text-destructive mb-2 px-2 text-xs">{error}</p>}
-    <div className="sidebar-panel-scroll min-h-0 flex-1 overflow-y-auto">
+    <div className={cn(fill && "sidebar-panel-scroll min-h-0 flex-1 overflow-y-auto")}>
       {loading ? (
         <p className="text-muted-foreground px-2 py-2 text-xs">Loading…</p>
       ) : (
