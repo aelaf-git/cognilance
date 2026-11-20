@@ -51,6 +51,17 @@ async def tick_subscriptions(*, limit: int = 20) -> int:
                     sub.id,
                     run_result,
                 )
+            elif sub.kind == "weekly_report" or sub.config.get("pipeline") == "weekly_report":
+                if sub.status == SubscriptionStatus.PAUSED:
+                    continue
+                try:
+                    from workers.schedulers.weekly import fire_weekly_report
+
+                    report = await fire_weekly_report(sub, store=store)
+                    logger.info("Weekly report for subscription %s: %s", sub.id, report)
+                except Exception as exc:
+                    logger.exception("Weekly report tick failed for %s", sub.id)
+                    store.set_error(sub.id, str(exc)[:500])
             else:
                 interval = int(sub.config.get("poll_interval_seconds") or 90)
                 store.update_cursor(sub.id, sub.cursor, poll_interval_seconds=interval)

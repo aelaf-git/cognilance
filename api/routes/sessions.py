@@ -20,6 +20,7 @@ from api.deps import (
 from api.sse import sse_line, sse_response
 from core.context.subscriptions.session_sync import (
     enrich_session_dict,
+    pause_listener_for_mission,
     start_listener_for_mission,
     stop_listener_for_mission,
 )
@@ -101,6 +102,28 @@ async def abort_session(session_id: str, request: Request) -> JSONResponse:
         mission_store.append_event(session_id, {"event": "session_aborted", "reason": "user"})
     return JSONResponse(
         content={"session_id": session_id, "status": "cancelled", "task_cancelled": cancelled_task}
+    )
+
+
+@router.post("/sessions/{session_id}/pause")
+async def pause_session(session_id: str, request: Request) -> JSONResponse:
+    mission = _require_mission(session_id, request)
+    if mission.session_type != SessionType.RECURRING:
+        raise HTTPException(
+            status_code=400, detail="Only long-running background sessions can be paused"
+        )
+    paused = pause_listener_for_mission(
+        session_id, sub_store=sub_store, mission_store=mission_store
+    )
+    if not paused:
+        raise HTTPException(
+            status_code=400, detail="No active background subscription found for this session"
+        )
+    return JSONResponse(
+        content=enrich_session_dict(
+            mission_store.get_mission(session_id, **owner_filter(user_from(request))) or mission,
+            sub_store=sub_store,
+        )
     )
 
 
@@ -206,7 +229,10 @@ async def mission_events(mission_id: str, request: Request) -> StreamingResponse
                     after_id = int(event_id)
                 yield sse_line(event)
             current = mission_store.get_mission(mission_id)
-            terminal = bool(current and current.status in _TERMINAL)
+            terminal = bool(
+                current
+                and current.status in _TERMINAL | {MissionStatus.WAITING_APPROVAL}
+            )
             if current and current.session_type == SessionType.RECURRING:
                 terminal = current.status == MissionStatus.CANCELLED
             if terminal:

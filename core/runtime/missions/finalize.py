@@ -21,7 +21,7 @@ def finalize_session_status(
 ) -> None:
     # User abort wins: never overwrite a cancelled session with completed/failed.
     current = store.get_mission(mission.id) or mission
-    if current.status == MissionStatus.CANCELLED:
+    if current.status in {MissionStatus.CANCELLED, MissionStatus.WAITING_APPROVAL}:
         return
 
     subs = sub_store or SubscriptionStore()

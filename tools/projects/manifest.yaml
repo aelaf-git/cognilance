@@ -1,0 +1,16 @@
+id: projects
+name: Projects
+description: Search and update one organization's projects and work tasks.
+actions:
+  search:
+    risk: read
+    description: Search projects in the run's organization.
+  search_tasks:
+    risk: read
+    description: Search work tasks. Overdue means a past deadline and a status other than done.
+  create_task:
+    risk: reversible_write
+    description: Create a work task in the run's organization.
+  update_task:
+    risk: reversible_write
+    description: Update a work task in the run's organization.

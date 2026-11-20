@@ -15,6 +15,8 @@ function allowed(method: string, path: string) {
     (method === "GET" && path === "conversations") ||
     (method === "POST" && path === "conversations") ||
     (method === "GET" && path === "integrations/list") ||
+    (method === "GET" && path === "integrations/github/repos") ||
+    (method === "PUT" && path === "integrations/github/repos") ||
     (method === "GET" && path === "organizations") ||
     (method === "GET" && path === "invitations") ||
     /^POST organizations\/[^/]+\/invitations$/.test(`${method} ${path}`) ||
@@ -40,7 +42,9 @@ function allowed(method: string, path: string) {
     /^GET integrations\/logos\/[^/]+$/.test(`${method} ${path}`) ||
     /^GET integrations\/[^/]+\/connect$/.test(`${method} ${path}`) ||
     /^POST integrations\/[^/]+\/disconnect$/.test(`${method} ${path}`) ||
+    /^POST organizations\/[^/]+\/schedules$/.test(`${method} ${path}`) ||
     /^POST sessions\/[^/]+\/abort$/.test(`${method} ${path}`) ||
+    /^POST sessions\/[^/]+\/pause$/.test(`${method} ${path}`) ||
     /^POST sessions\/[^/]+\/start$/.test(`${method} ${path}`)
   )
 }

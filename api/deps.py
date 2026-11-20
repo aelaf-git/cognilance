@@ -63,6 +63,29 @@ def owner_filter(account_id: str) -> dict[str, str]:
     return {"user_id": account_id}
 
 
+def organization_ids_for(account_id: str) -> list[str]:
+    return [membership.organization_id for membership in org_store.memberships_for(account_id)]
+
+
+def can_read_conversation(account_id: str, conversation) -> bool:
+    """An organization conversation is shared with every membership. A private one stays with its user."""
+    if conversation is None or not account_id:
+        return False
+    organization_id = getattr(conversation, "organization_id", None)
+    if organization_id:
+        return org_store.membership_for(account_id, organization_id) is not None
+    owner = getattr(conversation, "user_id", None)
+    return bool(owner) and owner == account_id
+
+
+def account_display_name(account_id: str) -> str | None:
+    account = account_store.get_by_id(account_id)
+    if account is None:
+        return None
+    name = str(account.display_name or "").strip()
+    return name or None
+
+
 def require_membership(
     account_id: str,
     organization_id: str,
@@ -95,6 +118,11 @@ def register_mission_task(mission_id: str, task: asyncio.Task[Any]) -> None:
             _running_mission_tasks.pop(mission_id, None)
 
     task.add_done_callback(_cleanup)
+
+
+def mission_task_active(mission_id: str) -> bool:
+    task = _running_mission_tasks.get(mission_id)
+    return task is not None and not task.done()
 
 
 def cancel_mission_task(mission_id: str) -> bool:

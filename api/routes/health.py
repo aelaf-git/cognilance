@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from cognilance.assets import integration_logo_media_type, integration_logo_path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from agents.loader import SPECIALISTS
-from api.deps import STATIC_DIR
+from api.deps import STATIC_DIR, active_organization_id, org_store
 from core.broker.policy import policy_snapshot
 from pipelines import available_pipelines
 
@@ -25,8 +25,14 @@ async def health() -> dict[str, str]:
 
 
 @router.get("/skills/online")
-async def skills_online() -> JSONResponse:
-    """In-process specialist roles (no registry)."""
+async def skills_online(request: Request) -> JSONResponse:
+    """In-process specialist roles, hiding agents this caller's organization disabled."""
+    user_id = getattr(request.state, "user_id", None) or ""
+    disabled: set[str] = set()
+    if user_id:
+        organization_id = active_organization_id(str(user_id))
+        if organization_id:
+            disabled = org_store.disabled_agent_ids(organization_id)
     rows = [
         {
             "id": role.id,
@@ -38,6 +44,7 @@ async def skills_online() -> JSONResponse:
             "description": role.description or role.instructions,
         }
         for role in SPECIALISTS
+        if role.id not in disabled
     ]
     return JSONResponse(
         content={
@@ -50,9 +57,9 @@ async def skills_online() -> JSONResponse:
 
 
 @router.get("/marketplace/agents")
-async def marketplace_agents_legacy() -> JSONResponse:
+async def marketplace_agents_legacy(request: Request) -> JSONResponse:
     """Legacy alias for /skills/online."""
-    return await skills_online()
+    return await skills_online(request)
 
 
 def _static_png(name: str) -> FileResponse:

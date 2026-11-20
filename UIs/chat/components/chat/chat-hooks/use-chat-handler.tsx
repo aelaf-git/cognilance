@@ -221,7 +221,7 @@ export const useChatHandler = () => {
           throw new Error("Chat settings not found")
         }
         setFirstTokenReceived(false)
-        const { tempAssistantChatMessage } = createTempMessages(
+        const { tempUserChatMessage, tempAssistantChatMessage } = createTempMessages(
           messageContent,
           chatMessages,
           chatSettings,

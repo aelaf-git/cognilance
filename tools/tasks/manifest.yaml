@@ -1,0 +1,13 @@
+id: tasks
+name: Tasks
+description: Search and update work tasks in the run's organization.
+actions:
+  search:
+    risk: read
+    description: Search work tasks in the run's organization.
+  create:
+    risk: reversible_write
+    description: Create a work task in the run's organization.
+  update:
+    risk: reversible_write
+    description: Update a work task in the run's organization.

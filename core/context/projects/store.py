@@ -158,6 +158,13 @@ class ProjectStore:
             ).fetchall()
         return [_project_from_row(row) for row in rows]
 
+    def search_projects(self, organization_id: str, *, query: str = "") -> list[Project]:
+        needle = query.strip().lower()
+        projects = self.list_projects(organization_id)
+        if not needle:
+            return projects
+        return [item for item in projects if needle in item.title.lower()]
+
     def get_project(self, project_id: str, *, organization_id: str | None = None) -> Project | None:
         with self._conn() as conn:
             row = conn.execute(
@@ -277,6 +284,38 @@ class ProjectStore:
                 (project_id, organization_id),
             ).fetchall()
         return [_task_from_row(row) for row in rows]
+
+    def search_tasks(
+        self,
+        organization_id: str,
+        *,
+        query: str = "",
+        status: str | None = None,
+        overdue: bool = False,
+        now: datetime | None = None,
+    ) -> list[WorkTask]:
+        if not organization_id:
+            return []
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM work_tasks
+                WHERE organization_id = ?
+                ORDER BY created_at ASC
+                """,
+                (organization_id,),
+            ).fetchall()
+        tasks = [_task_from_row(row) for row in rows]
+        needle = query.strip().lower()
+        if needle:
+            tasks = [item for item in tasks if needle in item.title.lower()]
+        if status:
+            cleaned = _choice(str(status), STATUSES, "status")
+            tasks = [item for item in tasks if item.status == cleaned]
+        if overdue:
+            moment = now or datetime.now(timezone.utc)
+            tasks = [item for item in tasks if is_overdue(item, moment)]
+        return tasks
 
     def get_task(self, task_id: str, *, organization_id: str | None = None) -> WorkTask | None:
         with self._conn() as conn:
@@ -434,6 +473,51 @@ class ProjectStore:
             ).fetchall()
         return [_activity_from_row(row) for row in rows]
 
+    def open_tasks(self, project_id: str, *, organization_id: str) -> list[WorkTask]:
+        return [
+            task
+            for task in self.list_tasks(project_id, organization_id=organization_id)
+            if task.status != "done"
+        ]
+
+    def recent_decisions(
+        self,
+        organization_id: str,
+        *,
+        project_id: str,
+        limit: int = 3,
+    ) -> list[WorkTaskActivity]:
+        if not organization_id or not project_id:
+            return []
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT activity.* FROM work_task_activity AS activity
+                JOIN work_tasks AS task ON task.id = activity.task_id
+                WHERE task.organization_id = ?
+                  AND task.project_id = ?
+                  AND activity.action = 'decision'
+                ORDER BY activity.created_at DESC, activity.rowid DESC
+                LIMIT ?
+                """,
+                (organization_id, project_id, max(0, int(limit))),
+            ).fetchall()
+        return [_activity_from_row(row) for row in rows]
+
+    def get_activity(self, activity_id: str, *, organization_id: str) -> WorkTaskActivity | None:
+        if not organization_id or not activity_id:
+            return None
+        with self._conn() as conn:
+            row = conn.execute(
+                """
+                SELECT activity.* FROM work_task_activity AS activity
+                JOIN work_tasks AS task ON task.id = activity.task_id
+                WHERE activity.id = ? AND task.organization_id = ?
+                """,
+                (activity_id, organization_id),
+            ).fetchone()
+        return _activity_from_row(row) if row else None
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -451,6 +535,29 @@ def _choice(value: str, allowed: tuple[str, ...], label: str) -> str:
     if cleaned not in allowed:
         raise ValueError(f"Unknown {label}")
     return cleaned
+
+
+def is_overdue(task: WorkTask, now: datetime | None = None) -> bool:
+    """A task is overdue when its deadline has passed and it is not done."""
+    if task.status == "done" or not task.deadline:
+        return False
+    due = _parse_time(task.deadline)
+    if due is None:
+        return False
+    moment = now or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return due < moment.astimezone(timezone.utc)
+
+
+def _parse_time(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _deadline(value: str | None) -> str | None:

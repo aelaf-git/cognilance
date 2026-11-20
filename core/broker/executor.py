@@ -1040,6 +1040,27 @@ class IntegrationExecutor:
                     headers=headers,
                     params={"state": "open", "per_page": int(params.get("per_page", 20))},
                 )
+            elif action == "list_commits":
+                owner = str(params.get("owner", "")).strip()
+                repo = str(params.get("repo", "")).strip()
+                if not owner or not repo:
+                    raise RuntimeError("owner and repo are required")
+                response = await client.get(
+                    f"https://api.github.com/repos/{owner}/{repo}/commits",
+                    headers=headers,
+                    params={"per_page": int(params.get("per_page", 20))},
+                )
+            elif action == "get_repo":
+                repo_id = str(params.get("repo_id") or params.get("id") or "").strip()
+                owner = str(params.get("owner", "")).strip()
+                repo = str(params.get("repo", "")).strip()
+                if repo_id:
+                    repo_url = f"https://api.github.com/repositories/{repo_id}"
+                elif owner and repo:
+                    repo_url = f"https://api.github.com/repos/{owner}/{repo}"
+                else:
+                    raise RuntimeError("owner and repo are required")
+                response = await client.get(repo_url, headers=headers)
             elif action == "read_file":
                 owner = str(params.get("owner", "")).strip()
                 repo = str(params.get("repo", "")).strip()
@@ -1053,6 +1074,8 @@ class IntegrationExecutor:
             else:
                 raise RuntimeError(f"Unhandled action: {action}")
             if response.status_code >= 400:
+                if action in {"list_commits", "list_pull_requests", "list_issues", "get_repo"}:
+                    return {"http_status": response.status_code}
                 raise RuntimeError(f"GitHub API error {response.status_code}: {response.text}")
             data = response.json()
             if action == "read_file" and isinstance(data, dict) and data.get("content"):

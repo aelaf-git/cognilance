@@ -33,6 +33,7 @@ interface MessageProps {
   fileItems: Tables<"file_items">[]
   activity?: ActivityStep[]
   docx?: DocxDocument
+  authorName?: string
   isEditing: boolean
   isLast: boolean
   onStartEdit: (message: Tables<"messages">) => void
@@ -45,6 +46,7 @@ export const Message: FC<MessageProps> = ({
   fileItems,
   activity,
   docx,
+  authorName,
   isEditing,
   isLast,
   onStartEdit,
@@ -283,6 +285,9 @@ export const Message: FC<MessageProps> = ({
           {message.role === "assistant" && thinkingSteps.length > 0 && (
             <ActivityTrace steps={thinkingSteps} />
           )}
+          {message.role === "user" && authorName ? (
+            <div className="px-1 text-xs text-muted-foreground">{authorName}</div>
+          ) : null}
           <div
             className={cn(
               "min-w-0 text-[14px] leading-6",

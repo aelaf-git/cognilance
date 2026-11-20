@@ -13,13 +13,14 @@ from fastapi.responses import JSONResponse
 
 from api.auth.guard import is_public_request
 from api.auth.session import get_user_id
-from api.deps import init_stores, mission_store
+from api.deps import init_stores
 from api.routes import ALL_ROUTERS
 from core.broker.proxy import docs_router, gmail_router
 from core.context.request import current_user_id, current_user_timezone
 from core.context.users.timezone import activate_user_timezone, client_timezone_from_request
 from core.registry import validate_all
 from core.runtime.checkpointer import close_checkpointer
+from core.runtime.runner import recover_interrupted_runs
 from pipelines.coordinator_board.graph import init_graph
 from workers.schedulers.ticker import tick_subscriptions
 

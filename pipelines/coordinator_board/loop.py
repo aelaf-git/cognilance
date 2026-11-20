@@ -416,19 +416,49 @@ async def act(state: State) -> dict[str, Any]:
         update["delegation_count"] = count + len(accepted)
     if approvals:
         exc = approvals[0]["approval"]
+        role = str(approvals[0].get("agent_id") or "")
         pending_approval = {
             "tool": exc.tool,
             "action": exc.action,
             "params": exc.params,
             "risk": exc.risk,
-            "role": approvals[0].get("agent_id") or "",
+            "role": role,
             "task_id": None,
         }
         emit("approval_required", **pending_approval)
-        update["waiting_approval"] = True
-        update["pending_approval"] = pending_approval
-        update["halt"] = True
-        update["loop_status"] = "finish"
+        from langgraph.types import interrupt
+
+        decision_value = interrupt(pending_approval)
+        approved = isinstance(decision_value, dict) and bool(decision_value.get("approved"))
+        if not approved:
+            update["pending_observations"] = [
+                _pending(role or "orchestrator", "ok", {"text": "Not sent.", "kind": "finish"})
+            ]
+            update["halt"] = True
+            update["loop_status"] = "finish"
+            update["proposed_answer"] = "Not sent."
+            update["waiting_approval"] = False
+            return update
+        from tools.registry import run_role_tool
+
+        out = await run_role_tool(
+            role,
+            exc.tool,
+            instruction="",
+            params=dict(exc.params or {}),
+            skip_approval_check=True,
+        )
+        payload = {
+            "text": str(out.get("text") or ""),
+            "data": dict(out.get("data") or {}),
+            "tool": exc.tool,
+        }
+        update["pending_observations"] = [
+            *pending,
+            _pending(role, classify_payload(role, payload), payload),
+        ]
+        update["waiting_approval"] = False
+        return update
     return update
 
 

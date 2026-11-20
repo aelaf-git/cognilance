@@ -34,6 +34,7 @@ class Run:
     conversation_id: str | None = None
     user_id: str | None = None
     organization_id: str | None = None
+    client_message_id: str | None = None
     mission_id: str | None = None  # legacy session alias when bridged
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -52,6 +53,7 @@ class Run:
             "conversation_id": self.conversation_id or self.thread_id,
             "user_id": self.user_id,
             "organization_id": self.organization_id,
+            "client_message_id": self.client_message_id,
             "mission_id": self.mission_id or self.id,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),

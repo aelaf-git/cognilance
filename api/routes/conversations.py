@@ -6,13 +6,16 @@ import asyncio
 import json
 from typing import Any, AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from api.deps import (
+    account_display_name,
     active_organization_id,
+    can_read_conversation,
     conv_store,
     mission_store,
+    organization_ids_for,
     owner_filter,
     sub_store,
     user_from,
@@ -36,27 +39,49 @@ def _parse_message_ui(raw: str | None) -> dict[str, Any] | None:
 
 
 def _require_conversation(conversation_id: str, request: Request):
-    conversation = conv_store.get_conversation(
-        conversation_id, **owner_filter(user_from(request))
-    )
-    if not conversation:
+    account_id = user_from(request)
+    conversation = conv_store.get_conversation(conversation_id)
+    if conversation is None or not can_read_conversation(account_id, conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
 
+def _author_name(role: str, author_id: str | None) -> str | None:
+    if role == "assistant":
+        return "Cognilance"
+    if not author_id:
+        return None
+    return account_display_name(author_id)
+
+
 def _sessions_for(conversation_id: str, request: Request) -> list[dict[str, Any]]:
-    return [
-        enrich_session_dict(m, sub_store=sub_store)
-        for m in mission_store.list_missions_for_conversation(
-            conversation_id, limit=50, **owner_filter(user_from(request))
-        )
-    ]
+    scope = owner_filter(user_from(request))
+    missions = mission_store.list_missions_for_conversation(
+        conversation_id, limit=50, **scope
+    )
+    seen = {mission.id for mission in missions}
+    organization_id = scope.get("organization_id")
+    if organization_id:
+        for mission in mission_store.list_missions(limit=50, organization_id=organization_id):
+            if mission.id in seen:
+                continue
+            sub = sub_store.get_by_mission_id(mission.id)
+            if sub and sub.kind == "weekly_report" and not sub.conversation_id:
+                missions.append(mission)
+                seen.add(mission.id)
+    return [enrich_session_dict(mission, sub_store=sub_store) for mission in missions]
 
 
 @router.get("/conversations")
 async def list_conversations(request: Request) -> JSONResponse:
+    account_id = user_from(request)
+    organization_ids = organization_ids_for(account_id)
+    if organization_ids:
+        listed = conv_store.list_conversations(limit=50, organization_ids=organization_ids)
+    else:
+        listed = conv_store.list_conversations(limit=50, user_id=account_id)
     conversations = []
-    for c in conv_store.list_conversations(limit=50, **owner_filter(user_from(request))):
+    for c in listed:
         stats = conv_store.session_stats(c.id)
         conversations.append(
             {
@@ -94,7 +119,11 @@ async def create_conversation(request: Request) -> JSONResponse:
 
 
 @router.get("/conversations/{conversation_id}")
-async def get_conversation(conversation_id: str, request: Request) -> JSONResponse:
+async def get_conversation(
+    conversation_id: str,
+    request: Request,
+    before: int | None = Query(default=None),
+) -> JSONResponse:
     conversation = _require_conversation(conversation_id, request)
     messages = [
         {
@@ -103,8 +132,10 @@ async def get_conversation(conversation_id: str, request: Request) -> JSONRespon
             "content": m.content,
             "created_at": m.created_at.isoformat(),
             "ui": _parse_message_ui(m.ui),
+            "author_id": m.author_id,
+            "author_name": _author_name(m.role, m.author_id),
         }
-        for m in conv_store.list_messages(conversation_id, limit=200)
+        for m in conv_store.list_messages(conversation_id, limit=200, before=before)
     ]
     return JSONResponse(
         content={

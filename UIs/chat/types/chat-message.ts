@@ -7,4 +7,5 @@ export interface ChatMessage {
   fileItems: string[]
   activity?: ActivityStep[]
   document?: DocxDocument
+  authorName?: string
 }

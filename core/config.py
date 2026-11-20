@@ -48,6 +48,8 @@ class Settings:
     gemini_api_key: str
     approval_grades: str
     coordinator_db: Path
+    github_client_id: str
+    github_client_secret: str
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -72,6 +74,8 @@ class Settings:
             gemini_api_key=_env("GEMINI_API_KEY", "GOOGLE_API_KEY").strip(),
             approval_grades=_env("COGNILANCE_APPROVAL_GRADES", default="irreversible"),
             coordinator_db=_coordinator_db_from_env(),
+            github_client_id=_env("GITHUB_CLIENT_ID").strip(),
+            github_client_secret=_env("GITHUB_CLIENT_SECRET").strip(),
         )
 
 

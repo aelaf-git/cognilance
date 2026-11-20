@@ -1,0 +1,17 @@
+id: github
+name: GitHub
+description: Read commits, pull requests, issues, and one repository for a connected GitHub account.
+integration: github
+actions:
+  list_commits:
+    risk: read
+    description: List commits in one repository.
+  list_pull_requests:
+    risk: read
+    description: List pull requests in one repository.
+  list_issues:
+    risk: read
+    description: List issues in one repository.
+  get_repo:
+    risk: read
+    description: Read one repository.

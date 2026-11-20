@@ -8,7 +8,11 @@ from core.runtime.missions.session_type import SessionType
 
 def can_hide_session(mission: Mission) -> bool:
     """Active / unaborted sessions cannot be dismissed from the sidebar."""
-    if mission.status in {MissionStatus.RUNNING, MissionStatus.QUEUED}:
+    if mission.status in {
+        MissionStatus.RUNNING,
+        MissionStatus.QUEUED,
+        MissionStatus.WAITING_APPROVAL,
+    }:
         return False
     if mission.session_type == SessionType.RECURRING:
         return mission.status in {MissionStatus.CANCELLED, MissionStatus.FAILED}

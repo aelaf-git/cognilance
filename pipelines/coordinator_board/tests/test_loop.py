@@ -140,6 +140,5 @@ async def test_approval_pauses_without_claiming_success():
         "Send the note to Ada",
         execute,
     )
-    assert result["waiting_approval"] is True
-    assert "gmail.send" in result["final_text"]
-    assert "sent the" not in result["final_text"].lower()
+    assert "gmail.send" in str(result.get("__interrupt__"))
+    assert "sent the" not in str(result.get("final_text") or "").lower()

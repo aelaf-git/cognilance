@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from agents.loader import RolePack, coordinator
@@ -27,6 +28,11 @@ _RESEARCH_HINTS = (
 )
 
 _GENERIC_CLARIFY = "I couldn't verify this result—what should I prioritize?"
+_TASK_ID = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+_GITHUB_URL = re.compile(r"https://github\.com/\S+")
+_NO_RECOMMENDATION = re.compile(r"^(no recommendations?\.?|none\.?)$", re.IGNORECASE)
 
 
 def format_clarification_message(clarification: dict[str, Any]) -> str:
@@ -70,6 +76,51 @@ def _heuristic_fail(text: str, data: dict[str, Any]) -> VerificationResult | Non
                 "How would you like me to proceed given that error?",
             ],
             reasoning="data_error",
+        )
+    return None
+
+
+def _recommendation_lines(text: str) -> list[str]:
+    lines = text.splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        heading = line.strip().lstrip("#").strip().lower().rstrip(":")
+        if heading == "recommendations":
+            start = index + 1
+            break
+    if start is None:
+        return []
+    collected: list[str] = []
+    for line in lines[start:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            break
+        collected.append(re.sub(r"^(?:[-*]|\d+[.)])\s*", "", stripped).strip())
+    return [line for line in collected if line]
+
+
+def _uncited_recommendation(
+    *,
+    role_id: str,
+    instruction: str,
+    text: str,
+) -> VerificationResult | None:
+    if role_id != "report_writer" or "recommendation" not in (instruction or "").lower():
+        return None
+    for line in _recommendation_lines(text):
+        if _NO_RECOMMENDATION.match(line):
+            continue
+        if _TASK_ID.search(line) or _GITHUB_URL.search(line):
+            continue
+        return VerificationResult(
+            passed=False,
+            issues=["A recommendation needs a work-task id or a GitHub URL."],
+            clarifying_questions=[
+                "Which task or pull request should this recommendation cite?",
+            ],
+            reasoning="uncited_recommendation",
         )
     return None
 
@@ -152,6 +203,11 @@ async def verify_task_output(
     if heuristic is not None:
         emit("verify", passed=False, reason=heuristic.reasoning, issues=heuristic.issues)
         return heuristic
+
+    uncited = _uncited_recommendation(role_id=pack.id, instruction=instruction, text=text)
+    if uncited is not None:
+        emit("verify", passed=False, reason=uncited.reasoning, issues=uncited.issues)
+        return uncited
 
     link_fail = await _check_researcher_links(
         role_id=pack.id,
